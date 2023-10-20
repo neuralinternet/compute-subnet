@@ -17,6 +17,7 @@
 # Step 1: Import necessary libraries and modules
 import time
 import bcrypt
+import bittensor as bt
 
 #The following function is responsible for hashing strings given in the input_list
 def hash_str(input):
@@ -30,11 +31,18 @@ def hash_str(input):
     #The list of hashed string
     result = []
 
+    #Estimate the time frame
+    start_time = time.time()
+    
     #Hash strings with bcrypt
     for string in input_list:
         hashed = string.encode('utf-8')
         for index in range(count):
             hashed = bcrypt.hashpw(hashed, bcrypt.gensalt())
         result.append(hashed)
+
+    elapsed_time = time.time() - start_time
+
+    bt.logging.info(f"Clarify elapsed: {elapsed_time}")
 
     return result

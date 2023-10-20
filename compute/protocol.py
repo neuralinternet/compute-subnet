@@ -155,4 +155,4 @@ class Clarify( bt.Synapse ):
         >>> clarify_instance.deserialize()
         A
         """
-        return self.clarify_output
+        return {'output':self.clarify_output, 'timeout': self.dendrite.process_time}

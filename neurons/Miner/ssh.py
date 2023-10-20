@@ -20,6 +20,7 @@ import os
 import datetime
 import threading
 import time
+import bittensor as bt
 
 file_path = []
 desired_timestamp = 0
