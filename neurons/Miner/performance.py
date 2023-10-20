@@ -55,26 +55,35 @@ def cpu_info():
         bt.logging.info(f"An error occurred: {e}")
         return {"count":0}
 
-#The following function is responsible for providing ram information on windows
-def ram_info_windows():
-    try:
-        ram_speed = get_ram_speed_windows()
-        memory_info = psutil.virtual_memory()
-        capacity_gb = memory_info.total / (1024**3)  # Convert to gigabytes
-        used_gb = memory_info.used / (1024**3)
-        return {capacity_gb, used_gb, ram_speed}
-    except Exception as e:
-        bt.logging.info(f"Error: {e}")
-    return None
-
 #The following function is responsible for providing hard disk information on windows
 def hard_disk_info_windows():
     try:
         w = wmi.WMI()
         result = []
         for disk in w.Win32_DiskDrive():
-            result.append({'capacity_gb':int(disk.Size) * 1.0 / (1024**3), 'model': disk.Model})
+            result.append({'capacity_gb':int(disk.Size) * 1.0 / (1024**3), 'model': disk.Model, 'status' : disk.Status})
         return result
+    except Exception as e:
+        bt.logging.info(f"Error: {e}")
+    return None
+
+
+#The following function is responsible for providing hard disk info on linux
+def get_hard_disk_info_linux(device):
+    try:
+        result = subprocess.run(['smartctl', '-i', device], capture_output=True, text=True, check=True)
+        return result.stdout
+    except subprocess.CalledProcessError:
+        bt.logging.info(f"Could not retrieve information for {device}")
+
+#The following function is responsible for providing ram information on windows
+def get_ram_info_windows():
+    try:
+        ram_speed = get_ram_speed_windows()
+        memory_info = psutil.virtual_memory()
+        capacity_gb = memory_info.total / (1024**3)  # Convert to gigabytes
+        used_gb = memory_info.used / (1024**3)
+        return {capacity_gb, used_gb, ram_speed}
     except Exception as e:
         bt.logging.info(f"Error: {e}")
     return None
@@ -89,10 +98,10 @@ def get_ram_speed_windows():
         bt.logging.info(f"Error: {e}")
     return None
 
-#The following function is responsible for providing hard disk info on linux
-def get_hard_disk_info_linux(device):
+#The following function is responsible for providing ram speed on windows
+def get_ram_info_linux():
     try:
-        result = subprocess.run(['smartctl', '-i', device], capture_output=True, text=True, check=True)
+        result = subprocess.run(['free', '-m'], capture_output=True, text=True, check=True)
         return result.stdout
     except subprocess.CalledProcessError:
-        bt.logging.info(f"Could not retrieve information for {device}")
+        bt.logging.info("Could not retrieve RAM information.")
