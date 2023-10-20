@@ -161,7 +161,7 @@ def main(config):
         cpu_info = pf.cpu_info()
         gpu_info = pf.gpu_info()
 
-        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info}
+        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info, 'id': my_subnet_uid}
         return synapse
 
         # The blacklist function decides if a request should be ignored.
@@ -324,11 +324,11 @@ def main(config):
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        clarify_input = synapse.clarify_input
+        clarify_input = synapse.clarify_input[my_subnet_uid]
 
         result = calc.hash_str(clarify_input)
 
-        synapse.clarify_output = result
+        synapse.clarify_output = {'id' : my_subnet_uid, result}
 
         return synapse
 
