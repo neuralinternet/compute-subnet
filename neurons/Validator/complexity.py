@@ -19,14 +19,13 @@ import bittensor as bt
 
 # This function is responsible for estimating the complexity of benchmark based on the performance information
 def calculate_complexity(performance):
-    # The detailed information of GPU
-    bt.logging.info(f"Performance:{performance}")
     
     default = 5
 
     if(performance == {}):
         return default
 
+    # The detailed information of GPU
     gpu_info = performance['gpu']
 
     #The detailed information of CPU
