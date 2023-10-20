@@ -17,9 +17,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Bittensor Miner Template:
-# TODO(developer): Rewrite based on protocol and validator defintion.
-
 # Step 1: Import necessary libraries and modules
 import os
 import time
@@ -30,9 +27,7 @@ import bittensor as bt
 import Miner.performance as pf
 import Miner.ssh as ssh
 import Miner.calculate as calc
-
-# import this repo
-import template
+import compute
 
 
 def get_config():
@@ -55,7 +50,7 @@ def get_config():
     # Adds axon specific arguments i.e. --axon.port ...
     bt.axon.add_args(parser)
     # Activating the parser to read any command-line inputs.
-    # To print help message, run python3 template/miner.py --help
+    # To print help message, run python3 compute/miner.py --help
     config = bt.config(parser)
 
     # Step 3: Set up logging directory
@@ -116,7 +111,7 @@ def main(config):
     # The following functions control the miner's response to incoming requests.
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_perfInfo(synapse: template.protocol.PerfInfo) -> typing.Tuple[bool, str]:
+    def blacklist_perfInfo(synapse: compute.protocol.PerfInfo) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -140,7 +135,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_perfInfo(synapse: template.protocol.PerfInfo) -> float:
+    def priority_perfInfo(synapse: compute.protocol.PerfInfo) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -157,20 +152,20 @@ def main(config):
         return prirority
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def perfInfo(synapse: template.protocol.PerfInfo) -> template.protocol.PerfInfo:
+    def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
-        # Below: simple template logic: return the input value multiplied by 2.
+        # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
         cpu_info = pf.cpu_info()
         gpu_info = pf.gpu_info()
 
-        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info}
+        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info, 'id': my_subnet_uid}
         return synapse
 
         # The blacklist function decides if a request should be ignored.
-    def blacklist_sshRegister(synapse: template.protocol.SSHRegister) -> typing.Tuple[bool, str]:
+    def blacklist_sshRegister(synapse: compute.protocol.SSHRegister) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -194,7 +189,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_sshRegister(synapse: template.protocol.SSHRegister) -> float:
+    def priority_sshRegister(synapse: compute.protocol.SSHRegister) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -211,11 +206,11 @@ def main(config):
         return prirority
 
     # This is the SSHRegister function, which decides the miner's response to a valid, high-priority request.
-    def sshRegister(synapse: template.protocol.SSHRegister) -> template.protocol.SSHRegister:
+    def sshRegister(synapse: compute.protocol.SSHRegister) -> compute.protocol.SSHRegister:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
-        # Below: simple template logic: return the input value multiplied by 2.
+        # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
         timeline = synapse.sshkey_timeline
 
@@ -226,7 +221,7 @@ def main(config):
         return synapse
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_sshDeregister(synapse: template.protocol.SSHDeregister) -> typing.Tuple[bool, str]:
+    def blacklist_sshDeregister(synapse: compute.protocol.SSHDeregister) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -250,7 +245,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_sshDeregister(synapse: template.protocol.SSHDeregister) -> float:
+    def priority_sshDeregister(synapse: compute.protocol.SSHDeregister) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -267,11 +262,11 @@ def main(config):
         return prirority
 
     # This is the SSHDeregister function, which decides the miner's response to a valid, high-priority request.
-    def sshDeregister(synapse: template.protocol.SSHDeregister) -> template.protocol.SSHDeregister:
+    def sshDeregister(synapse: compute.protocol.SSHDeregister) -> compute.protocol.SSHDeregister:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
-        # Below: simple template logic: return the input value multiplied by 2.
+        # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
         sshkey_input = synapse.sshkey_input
 
@@ -282,7 +277,7 @@ def main(config):
         return synapse
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_clarify(synapse: template.protocol.Clarify) -> typing.Tuple[bool, str]:
+    def blacklist_clarify(synapse: compute.protocol.Clarify) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -306,7 +301,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_clarify(synapse: template.protocol.Clarify) -> float:
+    def priority_clarify(synapse: compute.protocol.Clarify) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -323,17 +318,17 @@ def main(config):
         return prirority
 
     # This is the Clarify function, which decides the miner's response to a valid, high-priority request.
-    def clarify(synapse: template.protocol.Clarify) -> template.protocol.Clarify:
+    def clarify(synapse: compute.protocol.Clarify) -> compute.protocol.Clarify:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
-        # Below: simple template logic: return the input value multiplied by 2.
+        # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        clarify_input = synapse.clarify_input
+        clarify_input = synapse.clarify_input[my_subnet_uid]
 
         result = calc.hash_str(clarify_input)
 
-        synapse.clarify_output = result
+        synapse.clarify_output = {'id' : my_subnet_uid, result}
 
         return synapse
 

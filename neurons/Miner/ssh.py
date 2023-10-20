@@ -20,6 +20,7 @@ import os
 import datetime
 import threading
 import time
+import bittensor as bt
 
 file_path = []
 desired_timestamp = 0
@@ -34,9 +35,8 @@ def delete_file_at_timestamp():
                     os.remove(file_path[0])
                     os.remove(file_path[1])
                 break
-                print(f"Deleted")
             except OSError as e:
-                print(f"Error deleting file: {e}")
+                bt.logging.info(f"Error deleting file: {e}")
         time.sleep(10)
 
 deletion_thread = threading.Thread(target=delete_file_at_timestamp)
@@ -52,7 +52,6 @@ def register(timeline, passphrase=None):
     pub_path = os.path.join(ssh_directory, key_filename + ".pub")
 
     path = [private_path, pub_path]
-    print(f"TimeStamp:{datetime.datetime.now().timestamp()}")
     desired_timestamp = datetime.datetime.now().timestamp() + timeline
     deletion_thread.start()
     #If the private key is existed, return it
