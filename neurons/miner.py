@@ -27,6 +27,9 @@ import argparse
 import typing
 import traceback
 import bittensor as bt
+import Miner.performance as pf
+import Miner.ssh as ssh
+import Miner.calculate as calc
 
 # import this repo
 import template
@@ -111,8 +114,9 @@ def main(config):
 
     # Step 5: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
+
     # The blacklist function decides if a request should be ignored.
-    def blacklist_fn(synapse: template.protocol.Dummy) -> typing.Tuple[bool, str]:
+    def blacklist_perfInfo(synapse: template.protocol.PerfInfo) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -136,7 +140,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_fn(synapse: template.protocol.Dummy) -> float:
+    def priority_perfInfo(synapse: template.protocol.PerfInfo) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -152,14 +156,185 @@ def main(config):
         )
         return prirority
 
-    # This is the core miner function, which decides the miner's response to a valid, high-priority request.
-    def dummy(synapse: template.protocol.Dummy) -> template.protocol.Dummy:
+    # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
+    def perfInfo(synapse: template.protocol.PerfInfo) -> template.protocol.PerfInfo:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple template logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        synapse.dummy_output = synapse.dummy_input * 2
+        cpu_info = pf.cpu_info()
+        gpu_info = pf.gpu_info()
+
+        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info}
+        return synapse
+
+        # The blacklist function decides if a request should be ignored.
+    def blacklist_sshRegister(synapse: template.protocol.SSHRegister) -> typing.Tuple[bool, str]:
+        # TODO(developer): Define how miners should blacklist requests. This Function
+        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
+        # The synapse is instead contructed via the headers of the request. It is important to blacklist
+        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
+        # Below: Check that the hotkey is a registered entity in the metagraph.
+        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+        # TODO(developer): In practice it would be wise to blacklist requests from entities that
+        # are not validators, or do not have enough stake. This can be checked via metagraph.S
+        # and metagraph.validator_permit. You can always attain the uid of the sender via a
+        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
+        # Otherwise, allow the request to be processed further.
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        return False, "Hotkey recognized!"
+
+    # The priority function determines the order in which requests are handled.
+    # More valuable or higher-priority requests are processed before others.
+    def priority_sshRegister(synapse: template.protocol.SSHRegister) -> float:
+        # TODO(developer): Define how miners should prioritize requests.
+        # Miners may recieve messages from multiple entities at once. This function
+        # determines which request should be processed first. Higher values indicate
+        # that the request should be processed first. Lower values indicate that the
+        # request should be processed later.
+        # Below: simple logic, prioritize requests from entities with more stake.
+        caller_uid = metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
+        )
+        return prirority
+
+    # This is the SSHRegister function, which decides the miner's response to a valid, high-priority request.
+    def sshRegister(synapse: template.protocol.SSHRegister) -> template.protocol.SSHRegister:
+        # TODO(developer): Define how miners should process requests.
+        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
+        # This function runs after the blacklist and priority functions have been called.
+        # Below: simple template logic: return the input value multiplied by 2.
+        # If you change this, your miner will lose emission in the network incentive landscape.
+        timeline = synapse.sshkey_timeline
+
+        result = ssh.register(timeline)
+
+        synapse.sshkey_output = result
+
+        return synapse
+
+    # The blacklist function decides if a request should be ignored.
+    def blacklist_sshDeregister(synapse: template.protocol.SSHDeregister) -> typing.Tuple[bool, str]:
+        # TODO(developer): Define how miners should blacklist requests. This Function
+        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
+        # The synapse is instead contructed via the headers of the request. It is important to blacklist
+        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
+        # Below: Check that the hotkey is a registered entity in the metagraph.
+        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+        # TODO(developer): In practice it would be wise to blacklist requests from entities that
+        # are not validators, or do not have enough stake. This can be checked via metagraph.S
+        # and metagraph.validator_permit. You can always attain the uid of the sender via a
+        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
+        # Otherwise, allow the request to be processed further.
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        return False, "Hotkey recognized!"
+
+    # The priority function determines the order in which requests are handled.
+    # More valuable or higher-priority requests are processed before others.
+    def priority_sshDeregister(synapse: template.protocol.SSHDeregister) -> float:
+        # TODO(developer): Define how miners should prioritize requests.
+        # Miners may recieve messages from multiple entities at once. This function
+        # determines which request should be processed first. Higher values indicate
+        # that the request should be processed first. Lower values indicate that the
+        # request should be processed later.
+        # Below: simple logic, prioritize requests from entities with more stake.
+        caller_uid = metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
+        )
+        return prirority
+
+    # This is the SSHDeregister function, which decides the miner's response to a valid, high-priority request.
+    def sshDeregister(synapse: template.protocol.SSHDeregister) -> template.protocol.SSHDeregister:
+        # TODO(developer): Define how miners should process requests.
+        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
+        # This function runs after the blacklist and priority functions have been called.
+        # Below: simple template logic: return the input value multiplied by 2.
+        # If you change this, your miner will lose emission in the network incentive landscape.
+        sshkey_input = synapse.sshkey_input
+
+        result = ssh.deregister(sshkey_input)
+
+        synapse.status_flag = result
+
+        return synapse
+
+    # The blacklist function decides if a request should be ignored.
+    def blacklist_clarify(synapse: template.protocol.Clarify) -> typing.Tuple[bool, str]:
+        # TODO(developer): Define how miners should blacklist requests. This Function
+        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
+        # The synapse is instead contructed via the headers of the request. It is important to blacklist
+        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
+        # Below: Check that the hotkey is a registered entity in the metagraph.
+        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+            # Ignore requests from unrecognized entities.
+            bt.logging.trace(
+                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
+            )
+            return True, "Unrecognized hotkey"
+        # TODO(developer): In practice it would be wise to blacklist requests from entities that
+        # are not validators, or do not have enough stake. This can be checked via metagraph.S
+        # and metagraph.validator_permit. You can always attain the uid of the sender via a
+        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
+        # Otherwise, allow the request to be processed further.
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
+        return False, "Hotkey recognized!"
+
+    # The priority function determines the order in which requests are handled.
+    # More valuable or higher-priority requests are processed before others.
+    def priority_clarify(synapse: template.protocol.Clarify) -> float:
+        # TODO(developer): Define how miners should prioritize requests.
+        # Miners may recieve messages from multiple entities at once. This function
+        # determines which request should be processed first. Higher values indicate
+        # that the request should be processed first. Lower values indicate that the
+        # request should be processed later.
+        # Below: simple logic, prioritize requests from entities with more stake.
+        caller_uid = metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
+        )
+        return prirority
+
+    # This is the Clarify function, which decides the miner's response to a valid, high-priority request.
+    def clarify(synapse: template.protocol.Clarify) -> template.protocol.Clarify:
+        # TODO(developer): Define how miners should process requests.
+        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
+        # This function runs after the blacklist and priority functions have been called.
+        # Below: simple template logic: return the input value multiplied by 2.
+        # If you change this, your miner will lose emission in the network incentive landscape.
+        clarify_input = synapse.clarify_input
+
+        result = calc.hash_str(clarify_input)
+
+        synapse.clarify_output = result
+
         return synapse
 
     # Step 6: Build and link miner functions to the axon.
@@ -170,15 +345,27 @@ def main(config):
     # Attach determiners which functions are called when servicing a request.
     bt.logging.info(f"Attaching forward function to axon.")
     axon.attach(
-        forward_fn=dummy,
-        blacklist_fn=blacklist_fn,
-        priority_fn=priority_fn,
+        forward_fn=perfInfo,
+        blacklist_fn=blacklist_perfInfo,
+        priority_fn=priority_perfInfo,
+    ).attach(
+        forward_fn=sshRegister,
+        blacklist_fn=blacklist_sshRegister,
+        priority_fn=priority_sshRegister,
+    ).attach(
+        forward_fn=sshDeregister,
+        blacklist_fn=blacklist_sshDeregister,
+        priority_fn=priority_sshDeregister,
+    ).attach(
+        forward_fn=clarify,
+        blacklist_fn=blacklist_clarify,
+        priority_fn=priority_clarify,
     )
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
     bt.logging.info(
-        f"Serving axon {dummy} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
+        f"Serving axon {perfInfo, sshRegister, sshDeregister, clarify} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
     )
     axon.serve(netuid=config.netuid, subtensor=subtensor)
 
