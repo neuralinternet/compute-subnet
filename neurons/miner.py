@@ -328,7 +328,7 @@ def main(config):
 
         result = calc.hash_str(clarify_input)
 
-        synapse.clarify_output = {'id' : my_subnet_uid, result}
+        synapse.clarify_output = {'id' : my_subnet_uid, 'result' : result}
 
         return synapse
 
