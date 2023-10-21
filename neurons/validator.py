@@ -64,6 +64,28 @@ def get_config():
     # Return the parsed config.
     return config
 
+#This is the API that is responsible for registering ssh key
+def ssh_register( id, timeline ):
+    sshRegister_responses = dendrite.query(
+        metagraph.axons[id],
+        compute.protocol.SSHRegister(sshkey_timeline = timeline),
+        deserialize = True,
+    )
+    sshkey = sshRegister_responses[0].sshkey_output
+
+    return sshkey
+
+#This is the API that is responsible for registering ssh key
+def ssh_Deregister( id, timeline ):
+    sshDeregister_responses = dendrite.query(
+        metagraph.axons[id],
+        compute.protocol.SSHDeregister(sshkey_input = ""),
+        deserialize = True,
+    )
+    status_flag = sshDeregister_responses[0].status_flag
+
+    return status_flag
+    
 def main( config ):
     # Set up logging with the provided configuration and directory.
     bt.logging(config=config, logging_dir=config.full_path)
@@ -115,47 +137,59 @@ def main( config ):
             # Broadcast a query to all miners on the network.
             bt.logging.info(step)
 
-            if(step % 10):
+            if step % 2 == 0:
                             
                 #The respond for PerfInfo request
                 perfInfo_responses = dendrite.query(
                     metagraph.axons,
                     compute.protocol.PerfInfo(),
-                    deserialize = True,
-                    timeout = 5,
+                    deserialize = True
                 )
+                perfInfo_responses = [obj for obj in perfInfo_responses if any(obj.values())]
+                if len(perfInfo_responses) == 0:
+                    continue
 
                 #The count of string that will be sent to miner
-                str_count = 2
+                str_count = 5
 
                 clarify_origin_dict = {}
                 clarify_hashed_dict = {}
+                complexity_dict = {}
                 
+                #Make test data for clarify
                 for perfInfo in perfInfo_responses:
-                #Calculate complexity based on the perfInfo
                     complexity = cx.calculate_complexity(perfInfo)
                     str_list = db.select_str_list(str_count, complexity)
-                    clarify_origin_dict[perfInfo['id']] = {complexity, str_list['origin']}
-                    clarify_hashed_dict[perfInfo['id']] = {complexity, str_list['hashed']}
+                    clarify_origin_dict[perfInfo['id']] = {'complexity': complexity, 'str_list': str_list['origin']}
+                    clarify_hashed_dict[perfInfo['id']] = {'complexity': complexity, 'str_list': str_list['hashed']}
+                    complexity_dict[perfInfo['id']] = complexity
 
+                #The respond for Clarify request
                 clarify_responses = dendrite.query(
                     metagraph.axons,
                     compute.protocol.Clarify(clarify_input=clarify_origin_dict),
                     deserialize = True,
                     timeout = 30,
                 )
+                clarify_responses = [obj for obj in clarify_responses if any(obj.values())]
 
-                for i, resp_i in enumerate(clarify_responses):
+                #Score list of miners
+                score_list = []
+                for resp_i in enumerate(clarify_responses):
                     #Miner's ID
                     id = resp_i['id']
+                    timeline = resp_i['timeout']
 
                     # Initialize the score for the current miner's response.
                     score = db.evaluate(clarify_hashed_dict[id]['str_list'], resp_i['result'])
+                    score_list.append(score / timeline * complexity)
 
+                max_score = max(score_list)
+                for i in enumerate(clarify_responses):
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
-                    scores[i] = alpha * scores[i] + (1 - alpha) * score
+                    scores[i] = alpha * scores[i] + (1 - alpha) * score_list[i] / max_score
 
             # Periodically update the weights on the Bittensor blockchain.
             if (step + 1) % 2 == 0:
