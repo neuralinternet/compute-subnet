@@ -126,18 +126,21 @@ def main( config ):
                 )
 
                 #The count of string that will be sent to miner
-                str_count = 2
+                str_count = 5
 
                 clarify_origin_dict = {}
                 clarify_hashed_dict = {}
+                complexity_dict = {}
                 
+                #Make test data for clarify
                 for perfInfo in perfInfo_responses:
-                #Calculate complexity based on the perfInfo
                     complexity = cx.calculate_complexity(perfInfo)
                     str_list = db.select_str_list(str_count, complexity)
                     clarify_origin_dict[perfInfo['id']] = {complexity, str_list['origin']}
                     clarify_hashed_dict[perfInfo['id']] = {complexity, str_list['hashed']}
+                    complexity_dict[perfInfo['id']] = complexity
 
+                #The respond for Clarify request
                 clarify_responses = dendrite.query(
                     metagraph.axons,
                     compute.protocol.Clarify(clarify_input=clarify_origin_dict),
@@ -145,17 +148,23 @@ def main( config ):
                     timeout = 30,
                 )
 
-                for i, resp_i in enumerate(clarify_responses):
+                #Score list of miners
+                score_list = []
+                for resp_i in enumerate(clarify_responses):
                     #Miner's ID
                     id = resp_i['id']
+                    timeline = resp_i['timeout']
 
                     # Initialize the score for the current miner's response.
                     score = db.evaluate(clarify_hashed_dict[id]['str_list'], resp_i['result'])
+                    score_list.append(score / timeline * complexity)
 
+                max_score = max(score_list)
+                for i in enumerate(clarify_responses):
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
-                    scores[i] = alpha * scores[i] + (1 - alpha) * score
+                    scores[i] = alpha * scores[i] + (1 - alpha) * score_list[i] / max_score
 
             # Periodically update the weights on the Bittensor blockchain.
             if (step + 1) % 2 == 0:

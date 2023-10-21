@@ -30,25 +30,35 @@ cursor = conn.cursor()
 # Create a table
 cursor.execute('CREATE TABLE IF NOT EXISTS hash_tb (id INTEGER PRIMARY KEY, origin_str TEXT, hashed_str TEXT, hash_count INTEGER)')
 
-# This function is responsible for generating the str randomly.
+# This function is responsible for generating string randomly.
 def generate_random_str(hash_count, str_length):
-    alphabet = string.ascii_letters + string.digits  # You can customize this as needed
+    #Generate letters
+    alphabet = string.ascii_letters + string.digits
+
+    #Make new random string with the above generated letters
     random_str = ''.join(secrets.choice(alphabet) for _ in range(str_length))
 
+    #Hash this random string hash_count times
     hashed_str = random_str.encode('utf-8')
     for index in range(hash_count):
         hashed_str = bcrypt.hashpw(hashed_str, bcrypt.gensalt())
 
+    #Insert this data to database
     insert_str_to_db(random_str, hashed_str, hash_count)
+
     return {origin_str: random_str, hashed_str}
 
-
-# This function is responsible for generating the str.
+# This function is responsible for fetching string from database.
 def select_str_list(str_count, complexity):
+    #Fetch hash_count strings from database
     cursor.execute("SELECT * FROM hash_tb where hash_count = ? limit ?", (complexity, str_count))
     rows = cursor.fetchall()
-    missing_count = max(str_count - len(rows), 0)
+    row_count = len(rows)
 
+    #Calculate missing count of string compared with str_count
+    missing_count = max(str_count - row_count, 0)
+
+    #Generate strings with generate_random_str
     origin_str_list = []
     hashed_str_list = []
 
@@ -57,14 +67,15 @@ def select_str_list(str_count, complexity):
     if random.random() >= 0.7:
         new_count += random.randint(0, 3)
 
-    for index in range(missing_count + new_count):
+    count_new_generation = min(missing_count + new_count, str_count)
+    for index in range(count_new_generation):
         pair_str = generate_random_str(complexity, 10)
         origin_str_list.append(pair_str['origin_str'])
         hashed_str_list.append(pair_str['hashed_str'])
     
-    for row_i in rows:
-        if len(origin_str_list) > str_count:
-            break
+    #Fetch strings from database and add them to selected string list
+    while len(origin_str_list) < str_count:
+        row_i = rows[random.randint(0, row_count - 1)]
         origin_str_list.append(row_i['origin_str'])
         hashed_str_list.append(row_i['hashed_str'])
 
@@ -72,7 +83,7 @@ def select_str_list(str_count, complexity):
 
 # This function is responsible for inserting the str to db.
 def insert_str_to_db(origin_str, hashed_str, hash_count):
-    # Insert data
+    # Insert data to database
     cursor.execute("INSERT INTO hash_tb (origin_str, hashed_str, hash_count) VALUES (?, ?)", (origin_str, hashed_str, hash_count))
 
 
@@ -84,4 +95,3 @@ def evaluate(answer_str_list, result_str_list):
         if answer_i == result_str_list[i]:
             right_count += 1
     return right_count / count
-

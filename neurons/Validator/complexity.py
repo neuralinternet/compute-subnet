@@ -20,7 +20,7 @@ import bittensor as bt
 # This function is responsible for estimating the complexity of benchmark based on the performance information
 def calculate_complexity(performance):
     
-    default = 5
+    default = 1
 
     if(performance == {}):
         return default
@@ -31,6 +31,42 @@ def calculate_complexity(performance):
     #The detailed information of CPU
     cpu_info = performance['cpu']
 
+    #In case of CPU
     if gpu_info['count'] == 0:
-        return 10
-    return 20
+        #Count of CPU that miner has
+        cpu_count = cpu_info['count']
+
+        #Speed of each cpu
+        clock_speed = float(cpu_info['hz_advertised_friendly'].replace("GHz", ""))
+
+        #Performance of this cpu
+        performance = cpu_count * clock_speed
+
+        #Ideal CPU Performance
+        maximum_value = 28
+
+        #Calculate complexity
+        complexity = 5 + int(5 * min(maximum_value, performance) / maximum_value)
+
+        return complexity
+    
+    #In case of GPU
+
+    #Count of GPU that miner has
+    gpu_count = gpu_info['count']
+
+    #Detailed info for each GPU
+    gpu_details = gpu_info['details']
+
+    #Total capacity of GPU
+    total_gpu_capacity = 0
+    for detail in gpu_details:
+        total_gpu_capacity += detail['capacity']
+
+    #Ideal GPU Capacity
+    maximum_capacity = 200
+
+    #Calculate complexity
+    complexity = 10 + int(10 * min(maximum_capacity, total_gpu_capacity) / maximum_capacity)
+
+    return complexity
