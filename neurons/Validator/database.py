@@ -20,7 +20,7 @@ import secrets
 import bcrypt
 import sqlite3
 import random
-
+import bittensor as bt
 # Connect to the database (or create it if it doesn't exist)
 conn = sqlite3.connect('database.db')
 
@@ -46,7 +46,7 @@ def generate_random_str(hash_count, str_length):
     #Insert this data to database
     insert_str_to_db(random_str, hashed_str, hash_count)
 
-    return {origin_str: random_str, hashed_str}
+    return {'origin_str': random_str, 'hashed_str': hashed_str}
 
 # This function is responsible for fetching string from database.
 def select_str_list(str_count, complexity):
@@ -84,7 +84,7 @@ def select_str_list(str_count, complexity):
 # This function is responsible for inserting the str to db.
 def insert_str_to_db(origin_str, hashed_str, hash_count):
     # Insert data to database
-    cursor.execute("INSERT INTO hash_tb (origin_str, hashed_str, hash_count) VALUES (?, ?)", (origin_str, hashed_str, hash_count))
+    cursor.execute("INSERT INTO hash_tb (origin_str, hashed_str, hash_count) VALUES (?, ?, ?)", (origin_str, hashed_str, hash_count))
 
 
 # This function is responsible for evaluating the hashed_str with the database
