@@ -79,7 +79,7 @@ def main(config):
     )
 
     # This logs the active configuration to the specified logging directory for review.
-    bt.logging.info(config)
+    #bt.logging.info(config)
 
     # Step 4: Initialize Bittensor miner objects
     # These classes are vital to interact and function within the Bittensor network.
@@ -324,8 +324,7 @@ def main(config):
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        clarify_input = synapse.clarify_input[my_subnet_uid]
-
+        clarify_input = synapse.clarify_input[str(my_subnet_uid)]
         result = calc.hash_str(clarify_input)
 
         synapse.clarify_output = {'id' : my_subnet_uid, 'result' : result}
@@ -383,7 +382,7 @@ def main(config):
                     f"Block:{metagraph.block.item()} | "
                     f"Stake:{metagraph.S[my_subnet_uid]} | "
                     f"Rank:{metagraph.R[my_subnet_uid]} | "
-                    f"Trust:{metagraph.T[my_subnet_uid]} | "
+                    f"Trust:{metagraph.T[my_subnet_uid]} | "            
                     f"Consensus:{metagraph.C[my_subnet_uid] } | "
                     f"Incentive:{metagraph.I[my_subnet_uid]} | "
                     f"Emission:{metagraph.E[my_subnet_uid]}"
