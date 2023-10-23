@@ -113,7 +113,6 @@ def main( config ):
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
             axons_list = metagraph.axons
-            axons_list = [obj for obj in axons_list if obj.port != 8091]
 
             if(step % 10 == 1):
                             
