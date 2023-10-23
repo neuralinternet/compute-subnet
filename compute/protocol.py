@@ -129,15 +129,15 @@ class Clarify( bt.Synapse ):
     the miner and the validator.
 
     Attributes:
-    - clarify_input: A list of problems.
-    - clarify_output: A list of miner's result.
+    - clarify_input: A dict of clarify problems.
+    - clarify_output: A dict of miner's result.
     """
 
     # Required request input, filled by sending dendrite caller.
     clarify_input: dict = {}
 
     # Request output, filled by recieving axon.
-    clarify_output: list = []
+    clarify_output: dict = {}
 
     def deserialize(self) -> list:
         """
