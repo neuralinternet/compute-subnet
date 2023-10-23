@@ -31,8 +31,6 @@ def calculate_complexity(performance):
     #The detailed information of CPU
     cpu_info = performance['cpu']
 
-    bt.logging.info(f"GPU :{gpu_info} CPU: {cpu_info}")
-
     if gpu_info['count'] == 0:
         return 10
     return 20
