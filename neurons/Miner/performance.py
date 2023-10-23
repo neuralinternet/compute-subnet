@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 import igpu
+import GPUtil
 import cpuinfo as cpuinfo
 import bittensor as bt
 
@@ -24,15 +25,16 @@ def gpu_info():
     try:
         #Count of existing gpus
         gpu_count = igpu.count_devices()
-        
+
         #Get the detailed information for each gpu (name, capacity)
         gpu_details = []
-        for index in range(gpu_count):
-            gpu = igpu.get_device(0)
-            gpu_details.append({"capacity": gpu.memory.total})
+        if gpu_count != 0:
+            gpus = GPUtil.getGPUs()
+            for i, gpu in enumerate(gpus):
+                gpu_details.append({"name" : gpu['name'], "memoryTotal" : gpu['memoryTotal'], "memoryUsed" : gpu['memoryUsed'], "load" : gpu['load']})
         return {"count":gpu_count, "details": gpu_details}
     except Exception as e:
-        bt.logging.info(f"An error occurred: {e}")
+        #bt.logging.info(f"An error occurred: {e}")
         return {"count":0}
 
 #The following function is responsible for providing cpu information
@@ -52,7 +54,7 @@ def cpu_info():
         info["count"] = cpu_info["count"]
         return info
     except Exception as e:
-        bt.logging.info(f"An error occurred: {e}")
+        #bt.logging.info(f"An error occurred: {e}")
         return {"count":0}
 
 #The following function is responsible for providing hard disk information on windows
