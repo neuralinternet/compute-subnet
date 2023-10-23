@@ -31,7 +31,7 @@ def gpu_info():
         if gpu_count != 0:
             gpus = GPUtil.getGPUs()
             for i, gpu in enumerate(gpus):
-                gpu_details.append({"name" : gpu['name'], "memoryTotal" : gpu['memoryTotal'], "memoryUsed" : gpu['memoryUsed'], "load" : gpu['load']})
+                gpu_details.append({"name" : gpu.name, "memoryTotal" : gpu.memoryTotal, "memoryUsed" : gpu.memoryUsed, "load" : gpu.load})
         return {"count":gpu_count, "details": gpu_details}
     except Exception as e:
         #bt.logging.info(f"An error occurred: {e}")
