@@ -164,7 +164,7 @@ def main( config ):
                     deserialize = True,
                     timeout = 30,
                 )
-                clarify_responses = [obj for obj in clarify_responses if any(obj['output'].values())]
+                clarify_responses = [obj for obj in clarify_responses if obj['output']]
                 
                 for i, response_i in enumerate(clarify_responses):
                     resp_i = response_i['output']
