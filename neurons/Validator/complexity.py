@@ -44,7 +44,7 @@ def calculate_complexity(performance):
     #In case of GPU
     gpu_count = gpu_info['count']
     gpu_details= gpu_info['details']
-    gpu_value = sum(float(obj['capacity']) for obj in gpu_details)
+    gpu_value = sum(float(obj['memoryTotal']) for obj in gpu_details)
     gpu_per_complexity = 1024.0 * 2
     gpu_only_complexity = gpu_value / gpu_per_complexity
 
