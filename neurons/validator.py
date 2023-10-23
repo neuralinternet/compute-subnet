@@ -63,28 +63,6 @@ def get_config():
 
     # Return the parsed config.
     return config
-    
-#This is the API that is responsible for registering ssh key
-def ssh_register( id, timeline ):
-    sshRegister_responses = dendrite.query(
-        metagraph.axons[id],
-        compute.protocol.SSHRegister(sshkey_timeline = timeline),
-        deserialize = True,
-    )
-    sshkey = sshRegister_responses[0].sshkey_output
-
-    return sshkey
-
-#This is the API that is responsible for registering ssh key
-def ssh_Deregister( id, timeline ):
-    sshDeregister_responses = dendrite.query(
-        metagraph.axons[id],
-        compute.protocol.SSHDeregister(sshkey_input = ""),
-        deserialize = True,
-    )
-    status_flag = sshDeregister_responses[0].status_flag
-
-    return status_flag
 
 def main( config ):
     # Set up logging with the provided configuration and directory.
@@ -134,16 +112,21 @@ def main( config ):
         try:
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
-            if(step % 10):
+            axons_list = metagraph.axons
+            axons_list = [obj for obj in axons_list if obj.port != 8091]
+
+            if(step % 10 == 1):
                             
                 #The respond for PerfInfo request
                 perfInfo_responses = dendrite.query(
-                    metagraph.axons,
+                    axons_list,
                     compute.protocol.PerfInfo(),
                     deserialize = True,
                     timeout = 5,
                 )
                 perfInfo_responses = [obj for obj in perfInfo_responses if any(obj.values())]
+                for i, perfInfo_i in enumerate(perfInfo_responses):
+                    bt.logging.info(f"PerfInfo Response of Miner {i + 1} : {perfInfo_i}")
                 
                 #The count of string that will be sent to miner
                 str_count = 2
@@ -159,7 +142,7 @@ def main( config ):
                     clarify_hashed_dict[perfInfo['id']] = {'complexity': complexity, 'str_list': str_list['hashed']}
 
                 clarify_responses = dendrite.query(
-                    metagraph.axons,
+                    axons_list,
                     compute.protocol.Clarify(clarify_input=clarify_origin_dict),
                     deserialize = True,
                     timeout = 30,
@@ -170,6 +153,7 @@ def main( config ):
                     resp_i = response_i['output']
                     #Miner's ID
                     id = resp_i['id']
+                    bt.logging.info(f"Miner{i + 1} : Clarify elapsed {response_i['timeout']}s")
 
                     # Initialize the score for the current miner's response.
                     score = db.evaluate(clarify_hashed_dict[id]['str_list'], resp_i['result'])
@@ -180,9 +164,11 @@ def main( config ):
                     scores[i] = alpha * scores[i] + (1 - alpha) * score
 
             # Periodically update the weights on the Bittensor blockchain.
-            if (step + 1) % 2 == 0:
+            if step > 1 and step % 50 == 1:
                 # TODO(developer): Define how the validator normalizes scores before setting weights.
                 weights = torch.nn.functional.normalize(scores, p=1.0, dim=0)
+                for i, weight_i in enumerate(weights):
+                    bt.logging.info(f"Weight of Miner{i + 1} : {weights[i]}")
                 # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
                 # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
                 result = subtensor.set_weights(
