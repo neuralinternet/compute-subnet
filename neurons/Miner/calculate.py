@@ -21,12 +21,11 @@ import bittensor as bt
 
 #The following function is responsible for hashing strings given in the input_list
 def hash_str(input):
-
     #Encode count
-    count = input['count']
+    encode_count = input['complexity']
 
     #The list of input string
-    input_list = input['str']
+    input_list = input['str_list']
 
     #The list of hashed string
     result = []
@@ -37,7 +36,7 @@ def hash_str(input):
     #Hash strings with bcrypt
     for string in input_list:
         hashed = string.encode('utf-8')
-        for index in range(count):
+        for index in range(encode_count):
             hashed = bcrypt.hashpw(hashed, bcrypt.gensalt())
         result.append(hashed)
 
