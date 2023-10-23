@@ -21,6 +21,7 @@ import bcrypt
 import sqlite3
 import random
 import bittensor as bt
+
 # Connect to the database (or create it if it doesn't exist)
 conn = sqlite3.connect('database.db')
 
@@ -30,25 +31,20 @@ cursor = conn.cursor()
 # Create a table
 cursor.execute('CREATE TABLE IF NOT EXISTS hash_tb (id INTEGER PRIMARY KEY, origin_str TEXT, hashed_str TEXT, hash_count INTEGER)')
 
-# This function is responsible for generating string randomly.
+# This function is responsible for generating the str randomly.
 def generate_random_str(hash_count, str_length):
-    #Generate letters
-    alphabet = string.ascii_letters + string.digits
-
-    #Make new random string with the above generated letters
+    alphabet = string.ascii_letters + string.digits  # You can customize this as needed
     random_str = ''.join(secrets.choice(alphabet) for _ in range(str_length))
 
-    #Hash this random string hash_count times
     hashed_str = random_str.encode('utf-8')
     for index in range(hash_count):
         hashed_str = bcrypt.hashpw(hashed_str, bcrypt.gensalt())
 
-    #Insert this data to database
     insert_str_to_db(random_str, hashed_str, hash_count)
-
     return {'origin_str': random_str, 'hashed_str': hashed_str}
 
-# This function is responsible for fetching string from database.
+
+# This function is responsible for generating the str.
 def select_str_list(str_count, complexity):
     #Fetch hash_count strings from database
     cursor.execute("SELECT * FROM hash_tb where hash_count = ? limit ?", (complexity, str_count))
@@ -76,22 +72,22 @@ def select_str_list(str_count, complexity):
     #Fetch strings from database and add them to selected string list
     while len(origin_str_list) < str_count:
         row_i = rows[random.randint(0, row_count - 1)]
-        origin_str_list.append(row_i['origin_str'])
-        hashed_str_list.append(row_i['hashed_str'])
+        origin_str_list.append(row_i[1])
+        hashed_str_list.append(row_i[2])
 
     return {'origin' : origin_str_list, 'hashed' : hashed_str_list}
 
 # This function is responsible for inserting the str to db.
 def insert_str_to_db(origin_str, hashed_str, hash_count):
-    # Insert data to database
+    # Insert data
     cursor.execute("INSERT INTO hash_tb (origin_str, hashed_str, hash_count) VALUES (?, ?, ?)", (origin_str, hashed_str, hash_count))
 
 
 # This function is responsible for evaluating the hashed_str with the database
 def evaluate(answer_str_list, result_str_list):
     right_count = 0.0
-    count = len(answer_str_list)
-    for i, answer_i in answer_str_list:
+    total_count = len(answer_str_list)
+    for i, answer_i in enumerate(answer_str_list):
         if answer_i == result_str_list[i]:
             right_count += 1
-    return right_count / count
+    return right_count / total_count
