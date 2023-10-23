@@ -32,8 +32,8 @@ def calculate_complexity(performance):
     cpu_count = cpu_info['count']
     cpu_speed = float(cpu_info['hz_advertised_friendly'].split()[0])
     cpu_value = cpu_count * cpu_speed
-    complexity_cpu_per_value = 10
-    cpu_only_complexity = cpu_value * complexity_cpu_per_value
+    cpu_per_complexity = 10
+    cpu_only_complexity = cpu_value / cpu_per_complexity
 
     if gpu_info['count'] == 0:
         return int(cpu_only_complexity)
