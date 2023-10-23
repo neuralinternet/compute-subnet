@@ -1,2 +1,6 @@
 bittensor
 torch
+igpu
+GPUtil
+py-cpuinfo
+paramiko
