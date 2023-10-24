@@ -130,7 +130,7 @@ def main( config ):
                     bt.logging.info(f"PerfInfo Response of Miner {perfInfo_i['id']} : {perfInfo_i}")
                 
                 #The count of string that will be sent to miner
-                str_count = 5
+                str_count = 4
 
                 clarify_origin_dict = {}
                 clarify_hashed_dict = {}
