@@ -113,54 +113,93 @@ def main( config ):
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
             # Broadcast a query to all miners on the network.
             axons_list = metagraph.axons
-
+            uid_list = [param.data.item() for param in metagraph.uids]
             if(step % 10 == 1):
                             
-                #The respond for PerfInfo request
+                #The responses of PerfInfo request
                 perfInfo_responses = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(),
                     deserialize = True,
                     timeout = 5,
                 )
+                #Filter perfInfo_responses - remove empty responses
                 perfInfo_responses = [obj for obj in perfInfo_responses if any(obj.values())]
+
                 for i, perfInfo_i in enumerate(perfInfo_responses):
-                    bt.logging.info(f"PerfInfo Response of Miner {i + 1} : {perfInfo_i}")
+                    bt.logging.info(f"PerfInfo Response of Miner {perfInfo_i['id']} : {perfInfo_i}")
                 
                 #The count of string that will be sent to miner
-                str_count = 2
+                str_count = 5
 
                 clarify_origin_dict = {}
                 clarify_hashed_dict = {}
                 
                 for perfInfo in perfInfo_responses:
-                #Calculate complexity based on the perfInfo
-                    complexity = cx.calculate_complexity(perfInfo)
-                    str_list = db.select_str_list(str_count, complexity)
-                    clarify_origin_dict[perfInfo['id']] = {'complexity': complexity, 'str_list': str_list['origin']}
-                    clarify_hashed_dict[perfInfo['id']] = {'complexity': complexity, 'str_list': str_list['hashed']}
+                    #Miner's id
+                    miner_id = perfInfo['id']
 
+                    #Calculate complexity based on the perfInfo
+                    complexity = cx.calculate_complexity(perfInfo)
+
+                    #Select str_count of strings with given complexity
+                    str_list = db.select_str_list(str_count, complexity)
+
+                    #Save the pair of given string and hashed string
+                    clarify_origin_dict[miner_id] = {'complexity': complexity, 'str_list': str_list['origin']}
+                    clarify_hashed_dict[miner_id] = {'complexity': complexity, 'str_list': str_list['hashed']}
+
+                #The responses of clarify request
                 clarify_responses = dendrite.query(
                     axons_list,
                     compute.protocol.Clarify(clarify_input=clarify_origin_dict),
                     deserialize = True,
-                    timeout = 30,
+                    timeout = 30, #Deadline
                 )
+                #Filter clarify_responses - remove empty respnoses
                 clarify_responses = [obj for obj in clarify_responses if any(obj['output'].values())]
+                for i, clarify_i in enumerate(clarify_responses):
+                    bt.logging.info(f"Clarify Response of Miner {clarify_i['output']['id']} : {clarify_i}")
                 
-                for i, response_i in enumerate(clarify_responses):
-                    resp_i = response_i['output']
+                #Calculate score based on the responses of perfInfo and clarify
+                score_list = {}
+                for clarify_i in clarify_responses:
+                    #Calculation result of clarifying
+                    output_i = clarify_i['output']
+
+                    #Timmeout of clarify response
+                    timeout = clarify_i['timeout']
+
                     #Miner's ID
-                    id = resp_i['id']
-                    bt.logging.info(f"Miner{i + 1} : Clarify elapsed {response_i['timeout']}s")
+                    id = output_i['id']
+
+                    complexity = clarify_hashed_dict[id]['complexity']
+
+                    bt.logging.info(f"Miner{id} : Clarify elapsed {timeout}s Complexity : {complexity}")
 
                     # Initialize the score for the current miner's response.
-                    score = db.evaluate(clarify_hashed_dict[id]['str_list'], resp_i['result'])
+                    score = db.evaluate(clarify_hashed_dict[id], output_i['result'])
 
+                    score_list[id] = score
+
+                #Find the maximum score
+                max_score = max(score_list)
+
+                #Fill the score_list with 0 for no response miners
+                for id in uid_list:
+                    if id in score_list:
+                        continue
+                    score_list[id] = 0
+
+                bt.logging.info(f"ScoreList:{score_list}")
+
+                # Calculate score
+                for id, score in enumerate(score_list):
+                    index = uid_list.index(id)
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
-                    scores[i] = alpha * scores[i] + (1 - alpha) * score
+                    scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
 
             # Periodically update the weights on the Bittensor blockchain.
             if step > 1 and step % 50 == 1:
