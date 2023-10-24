@@ -32,8 +32,14 @@ This repository is a compute-composable subnet. This subnet has integrated vario
 
 # Installation
 This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements.
+
+## Install Bittensor
 ```bash
-git clone https://github.com/neuralinternet/Compute-Subnet
+$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)"
+```
+## Install Dependencies
+```bash
+git clone https://github.com/neuralinternet/Compute-Subnet.git
 cd Compute-Subnet
 python -m pip install -r requirements.txt
 python -m pip install -e .
@@ -42,23 +48,23 @@ python -m pip install -e .
 </div>
 
 ---
-
+# Running
 Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md) and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). Once you have done so, you can run the miner and validator with the following commands.
 ```bash
-# To run the miner
+## To run the miner
 python -m neurons/miner.py 
-    --netuid 15  
-    --subtensor.network test 
-    --wallet.name <your miner wallet> # Must be created using the bittensor-cli
-    --wallet.hotkey <your validator hotkey> # Must be created using the bittensor-cli
+    --netuid <your netuid>  # The subnet id you want to connect to
+    --subtensor.network <your chain url>  # blockchain endpoint you want to connect
+    --wallet.name <your miner wallet> # name of your wallet
+    --wallet.hotkey <your miner hotkey> # hotkey name of your wallet
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
 
-# To run the validator
-python -m neurons/validator.py
-    --netuid 15
-    --subtensor.network test 
-    --wallet.name <your validator wallet>  # Must be created using the bittensor-cli
-    --wallet.hotkey <your validator hotkey> # Must be created using the bittensor-cli
+## To run the validator
+python -m neurons/validator.py 
+    --netuid <your netuid> # The subnet id you want to connect to
+    --subtensor.network <your chain url> # blockchain endpoint you want to connect
+    --wallet.name <your validator wallet>  # name of your wallet
+    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
 ```
 
