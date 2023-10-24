@@ -37,7 +37,7 @@ def hash_str(input):
     for string in input_list:
         hashed = string.encode('utf-8')
         for index in range(encode_count):
-            hashed = bcrypt.hashpw(hashed, bcrypt.gensalt())
+            hashed = bcrypt.hashpw(hashed, b'$2b$12$9/zKmaaYPld3zfuC.Kb.Qe')
         result.append(hashed)
 
     elapsed_time = time.time() - start_time
