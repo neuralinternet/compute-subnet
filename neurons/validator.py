@@ -158,8 +158,8 @@ def main( config ):
                 )
                 #Filter clarify_responses - remove empty respnoses
                 clarify_responses = [obj for obj in clarify_responses if any(obj['output'].values())]
-                for i, clarify_i in enumerate(clarify_responses):
-                    bt.logging.info(f"Clarify Response of Miner {clarify_i['output']['id']} : {clarify_i}")
+                """for i, clarify_i in enumerate(clarify_responses):
+                    bt.logging.info(f"Clarify Response of Miner {clarify_i['output']['id']} : {clarify_i}")"""
                 
                 #Calculate score based on the responses of perfInfo and clarify
                 score_list = {}
@@ -191,7 +191,7 @@ def main( config ):
                         continue
                     score_list[id] = 0
 
-                bt.logging.info(f"ScoreList:{score_list}")
+                #bt.logging.info(f"ScoreList:{score_list}")
 
                 # Calculate score
                 for id, score in enumerate(score_list):
