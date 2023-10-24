@@ -38,7 +38,8 @@ def generate_random_str(hash_count, str_length):
 
     hashed_str = random_str.encode('utf-8')
     for index in range(hash_count):
-        hashed_str = bcrypt.hashpw(hashed_str, bcrypt.gensalt())
+        hashed_str = bcrypt.hashpw(hashed_str, b'$2b$12$9/zKmaaYPld3zfuC.Kb.Qe')
+    hashed_str = hashed_str.decode('utf-8')
 
     insert_str_to_db(random_str, hashed_str, hash_count)
     return {'origin_str': random_str, 'hashed_str': hashed_str}
@@ -84,10 +85,12 @@ def insert_str_to_db(origin_str, hashed_str, hash_count):
 
 
 # This function is responsible for evaluating the hashed_str with the database
-def evaluate(answer_str_list, result_str_list):
+def evaluate(original_list, result_str_list):
+    answer_str_list = original_list['str_list']
+    complexity = original_list['complexity']
+
     right_count = 0.0
-    total_count = len(answer_str_list)
     for i, answer_i in enumerate(answer_str_list):
         if answer_i == result_str_list[i]:
-            right_count += 1
-    return right_count / total_count
+            right_count += complexity
+    return right_count

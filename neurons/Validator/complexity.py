@@ -19,6 +19,8 @@ import bittensor as bt
 
 # This function is responsible for estimating the complexity of benchmark based on the performance information
 def calculate_complexity(performance):
+    
+    base_value = 5
     if(performance == {}):
         return 10
 
@@ -33,7 +35,7 @@ def calculate_complexity(performance):
     cpu_speed = float(cpu_info['hz_advertised_friendly'].split()[0])
     cpu_value = cpu_count * cpu_speed
     cpu_per_complexity = 10
-    cpu_only_complexity = cpu_value / cpu_per_complexity
+    cpu_only_complexity = base_value + cpu_value / cpu_per_complexity
 
     if gpu_info['count'] == 0:
         return int(cpu_only_complexity)
@@ -42,7 +44,7 @@ def calculate_complexity(performance):
     gpu_count = gpu_info['count']
     gpu_details= gpu_info['details']
     gpu_value = sum(float(obj['memoryTotal']) for obj in gpu_details)
-    gpu_per_complexity = 1024.0 * 2
+    gpu_per_complexity = 1024.0
     gpu_only_complexity = gpu_value / gpu_per_complexity
 
-    return int(cpu_only_complexity + gpu_only_complexity)
+    return int(gpu_only_complexity)
