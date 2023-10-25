@@ -1,7 +1,7 @@
 
 <div align="center">
 
-# **Bittensor Subnet Template** <!-- omit in toc -->
+# **Bittensor Compute Subnet** <!-- omit in toc -->
 [![Discord Chat](https://img.shields.io/discord/308323056592486420.svg)](https://discord.gg/bittensor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) 
 
@@ -15,37 +15,32 @@
 
 ---
 
-This template contains all the necessary files and functions to define Bittensor subnet incentive mechanisms. You can run this template in three ways,
-on Bittensor's main-network (real TAO, to be released), Bittensor's test-network (fake TAO), or with your own staging-network. This repo includes instructions for doing all three.
+This template contains all the necessary files and functions to define Bittensor's Compute Subnet. You can try running miners on netuid 15 in Bittensor's test network.
 
 # Introduction
 The Bittensor blockchain hosts multiple self-contained incentive mechanisms 'subnets'. Subnets are playing fields through which miners (those producing value) and validators (those producing consensus) determine together the proper distribution of TAO for the purpose of incentivizing the creation of value, i.e. generating digital commodities, such as intelligence, or data. Each consists of a wire protocol through which miners and validators interact and their method of interacting with Bittensor's chain consensus engine [Yuma Consensus](https://bittensor.com/documentation/validating/yuma-consensus) which is designed to drive these actors into agreement about who is creating value.
 
-This repository is a template for writing such mechanisms, preloaded with all needed files to run a very simple mechanism. The template is designed to be simple (rewards miners for responding with the multiple of the value sent by vaidators) and can act as a starting point for those who want to write their own mechanism. It is split into 3 primary files which you should rewrite. 
-These files are:
-- `template/protocol.py`: The file where the wire-protocol used by miners and validators is defined.
+![Alt text](docs/diagram.jpg)
+
+This repository is a compute-composable subnet. This subnet has integrated various cloud platforms (e.g., Runpod, Lambda, AWS) into a cohesive unit, enabling higher-level cloud platforms to offer seamless compute composability across different underlying platforms. With the proliferation of cloud platforms, there's a need for a subnet that can seamlessly integrate these platforms, allowing for efficient resource sharing and allocation. This compute-composable subnet will enable nodes to contribute computational power, with validators ensuring the integrity and efficiency of the shared resources.
+
+- `compute/protocol.py`: The file where the wire-protocol used by miners and validators is defined.
 - `neurons/miner.py`: This script which defines the miner's behavior, i.e., how the miner responds to requests from validators.
 - `neurons/validator.py`: This script which defines the validator's behavior, i.e., how the validator requests information from miners and determines scores.
-
-</div>
-
----
-
-# Running the template
-Before running the template you will need to attain a subnetwork on either Bittensor's main network, test network, or your own staging network. To create subnetworks on each of these subnets follow the instructions in files below:
-- `docs/running_on_staging.md`
-- `docs/running_on_testnet.md`
-- `docs/running_on_mainnet.md`
-
-</div>
 
 ---
 
 # Installation
 This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements.
+
+## Install Bittensor
 ```bash
-git clone https://github.com/opentensor/bittensor-subnet-template.git
-cd bittensor-subnet-template
+$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)"
+```
+## Install Dependencies
+```bash
+git clone https://github.com/neuralinternet/Compute-Subnet.git
+cd Compute-Subnet
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
@@ -53,32 +48,38 @@ python -m pip install -e .
 </div>
 
 ---
+# Running
+Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md) and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). Once you have done so, you can run the miner and validator with the following commands.
 
-Once you have installed this repo and attained your subnet via the instructions in the nested docs (staging, testing, or main) you can run the miner and validator with the following commands.
+## Running Miner
+
+The miners offer computing services such as GPU and CPU instances, delivering the best user experience in core GPU and CPU computing. Depending on their performance, they can earn greater rewards. The better the device's performance, the higher the reward they receive. Importantly, miners should include GPU instances because a significant amount of computational power is required. GPU miners will receive greater rewards compared to CPU miners.
+
 ```bash
 # To run the miner
-python -m neurons/miner.py 
-    --netuid <your netuid>  # Must be attained by following the instructions in the docs/running_on_*.md files
-    --subtensor.chain_endpoint <your chain url>  # Must be attained by following the instructions in the docs/running_on_*.md files
-    --wallet.name <your miner wallet> # Must be created using the bittensor-cli
-    --wallet.hotkey <your validator hotkey> # Must be created using the bittensor-cli
-    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
-
-# To run the validator
-python -m neurons/validator.py 
-    --netuid <your netuid> # Must be attained by following the instructions in the docs/running_on_*.md files
-    --subtensor.chain_endpoint <your chain url> # Must be attained by following the instructions in the docs/running_on_*.md files
-    --wallet.name <your validator wallet>  # Must be created using the bittensor-cli
-    --wallet.hotkey <your validator hotkey> # Must be created using the bittensor-cli
+cd neurons
+python -m miner.py 
+    --netuid <your netuid>  # The subnet id you want to connect to
+    --subtensor.network <your chain url>  # blockchain endpoint you want to connect
+    --wallet.name <your miner wallet> # name of your wallet
+    --wallet.hotkey <your miner hotkey> # hotkey name of your wallet
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
 ```
 
-</div>
+## Running Validator
 
----
+The validators are responsible for evaluating a miner's capabilities. They request miners to send performance information and verify its trustworthiness by presenting hashing problems. They calculate the complexity of these problems based on the miner's performance, measure the response time of the miner, and verify the correctness of the answers. They update the score with this data and determine the miner's weight. Importantly, the score depends on various factors, not only the capacity but also the quality of the device. Validators don't have to include GPU instances since they have minimal traffic and require only a low amount of computational power.
 
-# Updating the template
-The code contains detailed documentation on how to update the template. Please read the documentation in each of the files to understand how to update the template. There are multiple TODOs in each of the files which you should read and update.
+```bash
+# To run the validator
+cd neurons
+python -m validator.py 
+    --netuid <your netuid> # The subnet id you want to connect to
+    --subtensor.network <your chain url> # blockchain endpoint you want to connect
+    --wallet.name <your validator wallet>  # name of your wallet
+    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
+    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
+```
 
 </div>
 
@@ -88,7 +89,7 @@ The code contains detailed documentation on how to update the template. Please r
 This repository is licensed under the MIT License.
 ```text
 # The MIT License (MIT)
-# Copyright © 2023 Yuma Rao
+# Copyright © 2023 Neural Internet
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
