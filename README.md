@@ -50,17 +50,30 @@ python -m pip install -e .
 ---
 # Running
 Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md) and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). Once you have done so, you can run the miner and validator with the following commands.
+
+## Running Mine
+
+The miners offer computing services such as GPU and CPU instances, delivering the best user experience in core GPU and CPU computing. Depending on their performance, they can earn greater rewards. The better the device's performance, the higher the reward they receive. Importantly, miners should include GPU instances because a significant amount of computational power is required. GPU miners will receive greater rewards compared to CPU miners.
+
 ```bash
-## To run the miner
-python -m neurons/miner.py 
+# To run the miner
+cd neurons
+python -m miner.py 
     --netuid <your netuid>  # The subnet id you want to connect to
     --subtensor.network <your chain url>  # blockchain endpoint you want to connect
     --wallet.name <your miner wallet> # name of your wallet
     --wallet.hotkey <your miner hotkey> # hotkey name of your wallet
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
+```
 
-## To run the validator
-python -m neurons/validator.py 
+## Running Validator
+
+The validators are responsible for evaluating a miner's capabilities. They request miners to send performance information and verify its trustworthiness by presenting hashing problems. They calculate the complexity of these problems based on the miner's performance, measure the response time of the miner, and verify the correctness of the answers. They update the score with this data and determine the miner's weight. Importantly, the score depends on various factors, not only the capacity but also the quality of the device. Validators don't have to include GPU instances since they have minimal traffic and require only a low amount of computational power.
+
+```bash
+# To run the validator
+cd neurons
+python -m validator.py 
     --netuid <your netuid> # The subnet id you want to connect to
     --subtensor.network <your chain url> # blockchain endpoint you want to connect
     --wallet.name <your validator wallet>  # name of your wallet
