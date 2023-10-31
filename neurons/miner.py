@@ -1,7 +1,5 @@
 # The MIT License (MIT)
-# Copyright © 2023 Yuma Rao
-# TODO(developer): Set your name
-# Copyright © 2023 <your name>
+# Copyright © 2023 GitPhantomman
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -24,11 +22,9 @@ import argparse
 import typing
 import traceback
 import bittensor as bt
+import compute
 import Miner.performance as pf
 import Miner.ssh as ssh
-import Miner.calculate as calc
-import compute
-
 
 def get_config():
     # Step 2: Set up the configuration parser
@@ -158,10 +154,9 @@ def main(config):
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        cpu_info = pf.cpu_info()
-        gpu_info = pf.gpu_info()
 
-        synapse.perf_output = {'cpu' : cpu_info, 'gpu' : gpu_info, 'id': my_subnet_uid}
+        app_data = synapse.perf_input
+        synapse.perf_output = {"id":my_subnet_uid, "data": pf.get_respond(app_data)}
         return synapse
 
         # The blacklist function decides if a request should be ignored.
@@ -276,61 +271,6 @@ def main(config):
 
         return synapse
 
-    # The blacklist function decides if a request should be ignored.
-    def blacklist_clarify(synapse: compute.protocol.Clarify) -> typing.Tuple[bool, str]:
-        # TODO(developer): Define how miners should blacklist requests. This Function
-        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
-        # The synapse is instead contructed via the headers of the request. It is important to blacklist
-        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
-        # Below: Check that the hotkey is a registered entity in the metagraph.
-        if synapse.dendrite.hotkey not in metagraph.hotkeys:
-            # Ignore requests from unrecognized entities.
-            bt.logging.trace(
-                f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
-            )
-            return True, "Unrecognized hotkey"
-        # TODO(developer): In practice it would be wise to blacklist requests from entities that
-        # are not validators, or do not have enough stake. This can be checked via metagraph.S
-        # and metagraph.validator_permit. You can always attain the uid of the sender via a
-        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
-        # Otherwise, allow the request to be processed further.
-        bt.logging.trace(
-            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
-        )
-        return False, "Hotkey recognized!"
-
-    # The priority function determines the order in which requests are handled.
-    # More valuable or higher-priority requests are processed before others.
-    def priority_clarify(synapse: compute.protocol.Clarify) -> float:
-        # TODO(developer): Define how miners should prioritize requests.
-        # Miners may recieve messages from multiple entities at once. This function
-        # determines which request should be processed first. Higher values indicate
-        # that the request should be processed first. Lower values indicate that the
-        # request should be processed later.
-        # Below: simple logic, prioritize requests from entities with more stake.
-        caller_uid = metagraph.hotkeys.index(
-            synapse.dendrite.hotkey
-        )  # Get the caller index.
-        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
-        bt.logging.trace(
-            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
-        )
-        return prirority
-
-    # This is the Clarify function, which decides the miner's response to a valid, high-priority request.
-    def clarify(synapse: compute.protocol.Clarify) -> compute.protocol.Clarify:
-        # TODO(developer): Define how miners should process requests.
-        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
-        # This function runs after the blacklist and priority functions have been called.
-        # Below: simple compute logic: return the input value multiplied by 2.
-        # If you change this, your miner will lose emission in the network incentive landscape.
-        clarify_input = synapse.clarify_input[str(my_subnet_uid)]
-        result = calc.hash_str(clarify_input)
-
-        synapse.clarify_output = {'id' : my_subnet_uid, 'result' : result}
-
-        return synapse
-
     # Step 6: Build and link miner functions to the axon.
     # The axon handles request processing, allowing validators to send this process requests.
     axon = bt.axon(wallet=wallet, config=config)
@@ -350,16 +290,12 @@ def main(config):
         forward_fn=sshDeregister,
         blacklist_fn=blacklist_sshDeregister,
         priority_fn=priority_sshDeregister,
-    ).attach(
-        forward_fn=clarify,
-        blacklist_fn=blacklist_clarify,
-        priority_fn=priority_clarify,
     )
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
     bt.logging.info(
-        f"Serving axon {perfInfo, sshRegister, sshDeregister, clarify} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
+        f"Serving axon {perfInfo, sshRegister, sshDeregister} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
     )
     axon.serve(netuid=config.netuid, subtensor=subtensor)
 

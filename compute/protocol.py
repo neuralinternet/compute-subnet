@@ -15,7 +15,6 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import typing
 import bittensor as bt
 
 class PerfInfo( bt.Synapse ):
@@ -25,13 +24,16 @@ class PerfInfo( bt.Synapse ):
     the miner and the validator.
 
     Attributes:
-    - perf_output: A dictionary with the detailed information of GPU and CPU performance.
+    - perf_input: The byte data of application that will be sent.
+    - perf_output: A dictionary with the detailed information of cpu, gpu, hard disk and ram.
     """
+
+    perf_input: str = ''
 
     perf_output: dict = {}
     """
     Request output, filled by recieving axon.
-    Example: {"GPU":{'count': 1, "details": [{"capacity":'20GB'}]}, "CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
+    Example: {"CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
     """
 
     def deserialize(self) -> dict:
@@ -121,38 +123,3 @@ class SSHDeregister( bt.Synapse ):
         A
         """
         return self.status_flag
-        
-class Clarify( bt.Synapse ):
-    """
-    A simple Clarify protocol representation which uses bt.Synapse as its base.
-    This protocol helps in handling Clarify request and response communication between
-    the miner and the validator.
-
-    Attributes:
-    - clarify_input: A dict of clarify problems.
-    - clarify_output: A dict of miner's result.
-    """
-
-    # Required request input, filled by sending dendrite caller.
-    clarify_input: dict = {}
-
-    # Request output, filled by recieving axon.
-    clarify_output: dict = {}
-
-    def deserialize(self) -> list:
-        """
-        Deserialize the Clarify output. This method retrieves the response from
-        the miner in the form of clarify_output, deserializes it and returns it
-        as the output of the dendrite.query() call.
-
-        Returns:
-        - dict: The deserialized response, which in this case is the value of clarify_output.
-
-        Example:
-        Assuming a Clarify instance has a sshkey_output value of A:
-        >>> clarify_instance = Clarify()
-        >>> clarify_instance.clarify_output = A
-        >>> clarify_instance.deserialize()
-        A
-        """
-        return {'output':self.clarify_output, 'timeout': self.dendrite.process_time}
