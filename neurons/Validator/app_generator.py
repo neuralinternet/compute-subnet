@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright © 2023 GitPhantom
+# Copyright © 2023 Crazydevlegend
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -15,36 +15,16 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
+import subprocess
 import bittensor as bt
 
-# This function is responsible for estimating the complexity of benchmark based on the performance information
-def calculate_complexity(performance):
-    
-    base_value = 5
-    if(performance == {}):
-        return 10
+def run():
+    script_name = 'script.py'
 
-    # The detailed information of GPU
-    gpu_info = performance['gpu']
-
-    #The detailed information of CPU
-    cpu_info = performance['cpu']
-
-    #Valuate cpu's ability
-    cpu_count = cpu_info['count']
-    cpu_speed = float(cpu_info['hz_advertised_friendly'].split()[0])
-    cpu_value = cpu_count * cpu_speed
-    cpu_per_complexity = 10
-    cpu_only_complexity = base_value + cpu_value / cpu_per_complexity
-
-    if gpu_info['count'] == 0:
-        return int(cpu_only_complexity)
-    
-    #In case of GPU
-    gpu_count = gpu_info['count']
-    gpu_details= gpu_info['details']
-    gpu_value = sum(float(obj['memoryTotal']) for obj in gpu_details)
-    gpu_per_complexity = 1024.0
-    gpu_only_complexity = gpu_value / gpu_per_complexity
-
-    return int(gpu_only_complexity)
+    # Run the pyinstaller command
+    command = f'cd neurons\ncd Validator\npyinstaller --onefile {script_name}'
+    try:
+        subprocess.run(command, shell=True, check=True)
+        bt.logging.info("PyInstaller completed successfully.")
+    except subprocess.CalledProcessError:
+        bt.logging.info("PyInstaller encountered an error.")

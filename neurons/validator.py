@@ -1,5 +1,5 @@
 # The MIT License (MIT)
-# Copyright © 2023
+# Copyright © 2023 Crazydevlegend
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -22,11 +22,10 @@ import torch
 import argparse
 import traceback
 import bittensor as bt
-import time
-import tensorflow as tf
 import compute
-import Validator.complexity as cx
 import Validator.database as db
+import Validator.app_generator as ag
+import Validator.calculate_score as cs
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -115,81 +114,40 @@ def main( config ):
             axons_list = metagraph.axons
             uid_list = [param.data.item() for param in metagraph.uids]
             if(step % 10 == 1):
-                            
+                
+                #Compile the script and generate an exe
+                ag.run()
+                
+                #Read the exe file and save it to app_data
+                with open('neurons//Validator//dist//script', 'rb') as file:
+                    # Read the entire content of the EXE file
+                    app_data = file.read()
+                
                 #The responses of PerfInfo request
                 perfInfo_responses = dendrite.query(
                     axons_list,
-                    compute.protocol.PerfInfo(),
-                    deserialize = True,
-                    timeout = 5,
+                    compute.protocol.PerfInfo(perf_input = repr(app_data)),
                 )
-                #Filter perfInfo_responses - remove empty responses
-                perfInfo_responses = [obj for obj in perfInfo_responses if any(obj.values())]
-
-                for i, perfInfo_i in enumerate(perfInfo_responses):
-                    bt.logging.info(f"PerfInfo Response of Miner {perfInfo_i['id']} : {perfInfo_i}")
                 
-                #The count of string that will be sent to miner
-                str_count = 5
+                bt.logging.info(f"PerfInfo{perfInfo_responses}")
 
-                clarify_origin_dict = {}
-                clarify_hashed_dict = {}
-                
-                for perfInfo in perfInfo_responses:
-                    #Miner's id
-                    miner_id = perfInfo['id']
-
-                    #Calculate complexity based on the perfInfo
-                    complexity = cx.calculate_complexity(perfInfo)
-
-                    #Select str_count of strings with given complexity
-                    str_list = db.select_str_list(str_count, complexity)
-
-                    #Save the pair of given string and hashed string
-                    clarify_origin_dict[miner_id] = {'complexity': complexity, 'str_list': str_list['origin']}
-                    clarify_hashed_dict[miner_id] = {'complexity': complexity, 'str_list': str_list['hashed']}
-
-                #The responses of clarify request
-                clarify_responses = dendrite.query(
-                    axons_list,
-                    compute.protocol.Clarify(clarify_input=clarify_origin_dict),
-                    deserialize = True,
-                    timeout = 30, #Deadline
-                )
-                #Filter clarify_responses - remove empty respnoses
-                clarify_responses = [obj for obj in clarify_responses if any(obj['output'].values())]
-                for i, clarify_i in enumerate(clarify_responses):
-                    bt.logging.info(f"Clarify Response of Miner {clarify_i['output']['id']} : {clarify_i}")
-                
-                #Calculate score based on the responses of perfInfo and clarify
+                #Make score_list based on the perf_info
                 score_list = {}
-                for clarify_i in clarify_responses:
-                    #Calculation result of clarifying
-                    output_i = clarify_i['output']
 
-                    #Timmeout of clarify response
-                    timeout = clarify_i['timeout']
-
-                    #Miner's ID
-                    id = output_i['id']
-
-                    complexity = clarify_hashed_dict[id]['complexity']
-
-                    bt.logging.info(f"Miner{id} : Clarify elapsed {timeout}s Complexity : {complexity}")
-
-                    # Initialize the score for the current miner's response.
-                    score = db.evaluate(clarify_hashed_dict[id], output_i['result'])
-
-                    score_list[id] = score
-
-                #Find the maximum score
-                max_score = max(score_list)
-
+                for perfInfo in perfInfo_responses:
+                    if "data" in perfInfo:
+                        id = perfInfo['id']
+                        data = perfInfo['data']
+                        score_list[id] = cs.score(data)
+                
                 #Fill the score_list with 0 for no response miners
                 for id in uid_list:
                     if id in score_list:
                         continue
                     score_list[id] = 0
+
+                #Find the maximum score
+                max_score = max(score_list)
 
                 bt.logging.info(f"ScoreList:{score_list}")
 
