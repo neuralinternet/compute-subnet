@@ -90,38 +90,3 @@ class Allocate( bt.Synapse ):
         {}
         """
         return self.output
-
-class SSHDeregister( bt.Synapse ):
-    """
-    A simple SSHDeregister protocol representation which uses bt.Synapse as its base.
-    This protocol helps in handling SSHDeregister request and response communication between
-    the miner and the validator.
-
-    Attributes:
-    - sshkey_input: A string of registered private key.
-    - status_flag: A number that represents the flag indicating a successful status.
-    """
-
-    # Required request input, filled by sending dendrite caller.
-    sshkey_input: str = ""
-    
-    # Request output, filled by recieving axon.
-    status_flag: str = ""
-
-    def deserialize(self) -> str:
-        """
-        Deserialize the ssh connection information output. This method retrieves the response from
-        the miner in the form of status_flag, deserializes it and returns it
-        as the output of the dendrite.query() call.
-
-        Returns:
-        - str: The deserialized response, which in this case is the value of status_flag.
-
-        Example:
-        Assuming a SSHRegister instance has a sshkey_output value of A:
-        >>> sshDeregister_instance = SSHDeregister()
-        >>> sshDeregister_instance.status_flag = A
-        >>> sshDeregister_instance.deserialize()
-        A
-        """
-        return self.status_flag
