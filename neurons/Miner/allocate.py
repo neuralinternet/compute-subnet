@@ -15,19 +15,30 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
+
+import Miner.container as ctn
 import bittensor as bt
-import subprocess
-import ast
-import json
 
-#Respond the execution of the application
-def get_respond(app_data):
-    app_data = ast.literal_eval(app_data)
-    file_path = './neurons/Miner/app'  # Change the file name and extension as needed
+#Register for given timeline and device_requirement
+def register(timeline, device_requirement):
+    kill_status = ctn.kill_container()
 
-    # Write the bytes data to a file
-    with open(file_path, 'wb') as file:
-        file.write(app_data)
-    subprocess.run('chmod +x ' + file_path, shell=True, check=True)
-    result = subprocess.check_output(file_path, shell=True, text=True)
-    return result
+    bt.logging.info(f"Killed container : {kill_status}")
+
+    #Extract requirements from device_requirement and format them
+    cpu_usage = {'assignment' : '0-1'}
+    gpu_usage = {'capabilities' : 'all,capabilities=utility'}
+    ram_usage = {'capacity' : '1g'}
+    volume_usage = {'capacity' : 1073741824}
+
+    run_status = ctn.run_container(cpu_usage, ram_usage, volume_usage, gpu_usage)
+
+    bt.logging.info(f"Runned containers: {run_status}")
+
+    return run_status
+
+#Check if miner is acceptable
+def check(timeline, device_requirement):
+    #Check if miner is already allocated
+    #Check if there is enough device
+    return True

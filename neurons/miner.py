@@ -24,7 +24,7 @@ import traceback
 import bittensor as bt
 import compute
 import Miner.performance as pf
-import Miner.ssh as ssh
+import Miner.allocate as al
 
 def get_config():
     # Step 2: Set up the configuration parser
@@ -160,7 +160,7 @@ def main(config):
         return synapse
 
         # The blacklist function decides if a request should be ignored.
-    def blacklist_sshRegister(synapse: compute.protocol.SSHRegister) -> typing.Tuple[bool, str]:
+    def blacklist_allocate(synapse: compute.protocol.Allocate) -> typing.Tuple[bool, str]:
         # TODO(developer): Define how miners should blacklist requests. This Function
         # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
         # The synapse is instead contructed via the headers of the request. It is important to blacklist
@@ -184,7 +184,7 @@ def main(config):
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_sshRegister(synapse: compute.protocol.SSHRegister) -> float:
+    def priority_allocate(synapse: compute.protocol.Allocate) -> float:
         # TODO(developer): Define how miners should prioritize requests.
         # Miners may recieve messages from multiple entities at once. This function
         # determines which request should be processed first. Higher values indicate
@@ -200,18 +200,25 @@ def main(config):
         )
         return prirority
 
-    # This is the SSHRegister function, which decides the miner's response to a valid, high-priority request.
-    def sshRegister(synapse: compute.protocol.SSHRegister) -> compute.protocol.SSHRegister:
+    # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
+    def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
         # TODO(developer): Define how miners should process requests.
         # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
         # This function runs after the blacklist and priority functions have been called.
         # Below: simple compute logic: return the input value multiplied by 2.
         # If you change this, your miner will lose emission in the network incentive landscape.
-        timeline = synapse.sshkey_timeline
+        
+        timeline = synapse.timeline
+        device_requirement = synapse.device_requirement
+        checking = synapse.checking
 
-        result = ssh.register(timeline)
+        result = True
+        if checking == True:
+            result = al.check(timeline, device_requirement)
+        else:
+            result = al.register(timeline, device_requirement)
 
-        synapse.sshkey_output = result
+        synapse.output = {"id":my_subnet_uid, "result": result}
 
         return synapse
 
@@ -283,9 +290,9 @@ def main(config):
         blacklist_fn=blacklist_perfInfo,
         priority_fn=priority_perfInfo,
     ).attach(
-        forward_fn=sshRegister,
-        blacklist_fn=blacklist_sshRegister,
-        priority_fn=priority_sshRegister,
+        forward_fn=allocate,
+        blacklist_fn=blacklist_allocate,
+        priority_fn=priority_allocate,
     ).attach(
         forward_fn=sshDeregister,
         blacklist_fn=blacklist_sshDeregister,
@@ -295,7 +302,7 @@ def main(config):
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
     bt.logging.info(
-        f"Serving axon {perfInfo, sshRegister, sshDeregister} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
+        f"Serving axon {perfInfo, allocate, sshDeregister} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}"
     )
     axon.serve(netuid=config.netuid, subtensor=subtensor)
 
