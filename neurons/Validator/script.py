@@ -17,7 +17,10 @@
 # Step 1: Import necessary libraries and modules
 import psutil
 import igpu
+import json
+from cryptography.fernet import Fernet
 
+secret_key = b'HZYqs8_MK2UD1jA2X83SDHithRvo-vn-H08JII9BbQk='#key
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
@@ -122,7 +125,14 @@ def get_perf_info():
     hard_disk_info = get_hard_disk_info()
     ram_info = get_ram_info()
 
-    return {"cpu" : cpu_info, "gpu" : gpu_info, "hard_disk" : hard_disk_info, "ram" : ram_info}
+    perf_info = {'cpu' : cpu_info, 'gpu' : gpu_info, 'hard_disk' : hard_disk_info, 'ram' : ram_info}
+    perf_str = json.dumps(perf_info)
+
+    cipher_suite = Fernet(secret_key)
+
+    encoded_str = cipher_suite.encrypt(perf_str.encode())
+
+    return encoded_str
 
 if __name__ == "__main__":
     print(f"{get_perf_info()}")
