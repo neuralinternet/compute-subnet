@@ -17,6 +17,7 @@
 # Step 1: Import necessary libraries and modules
 
 import Miner.container as ctn
+import Miner.schedule as sd
 import bittensor as bt
 
 #Register for given timeline and device_requirement
@@ -26,19 +27,30 @@ def register(timeline, device_requirement):
     bt.logging.info(f"Killed container : {kill_status}")
 
     #Extract requirements from device_requirement and format them
-    cpu_usage = {'assignment' : '0-1'}
-    gpu_usage = {'capabilities' : 'all,capabilities=utility'}
-    ram_usage = {'capacity' : '1g'}
-    volume_usage = {'capacity' : 1073741824}
+    cpu_count = device_requirement['cpu']['count'] #e.g 2
+    cpu_assignment = '0-' + str(cpu_count - 1) #e.g 0-1
+    ram_capacity = device_requirement['ram']['capacity'] #e.g 1g
+    volume_capacity = device_requirement['volume']['capacity'] #e.g 
+    gpu_capabilities = device_requirement['gpu']['capabilities']
+
+    cpu_usage = {'assignment' : cpu_assignment}
+    gpu_usage = {'capabilities' : gpu_capabilities}
+    ram_usage = {'capacity' : ram_capacity}
+    volume_usage = {'capacity' : volume_capacity}
 
     run_status = ctn.run_container(cpu_usage, ram_usage, volume_usage, gpu_usage)
 
     bt.logging.info(f"Runned containers: {run_status}")
+
+    #Kill container when it meets timeline
+    sd.start(timeline)
 
     return run_status
 
 #Check if miner is acceptable
 def check(timeline, device_requirement):
     #Check if miner is already allocated
+    if ctn.check_container() == True:
+        return False
     #Check if there is enough device
     return True

@@ -110,6 +110,13 @@ def run_container(cpu_usage, ram_usage, volume_usage, gpu_usage):
         bt.logging.info(f"Error running container {e}")
         return {'status' : False}
 
+# Check if the container exists
+def check_container():
+    for container in containers:
+        if container_name in container.name:
+            return True
+    return False
+
 # Randomly generate password for given length
 def password_generator(length):
     alphabet = string.ascii_letters + string.digits  # You can customize this as needed
