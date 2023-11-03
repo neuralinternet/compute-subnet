@@ -23,9 +23,13 @@ import argparse
 import traceback
 import bittensor as bt
 import compute
-import Validator.database as db
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
+from cryptography.fernet import Fernet
+import ast
+
+dendrite = None
+metagraph = None
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -62,6 +66,46 @@ def get_config():
 
     # Return the parsed config.
     return config
+
+#Generate ssh connection for given device requirements and timeline
+def allocate (device_requirement, timeline):
+    uid_list = [param.data.item() for param in metagraph.uids]
+    #Find out the candidates
+    allocate_responses = dendrite.query(
+        metagraph.axons,
+        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = True)
+    )
+    bt.logging.info(f"Allocate responses : {allocate_responses}")
+
+    candidates = []
+
+    for allocate_response in allocate_responses:
+        if allocate_response['result'] == True:
+            candidates.append(allocate_response['id'])
+    
+    #Check if there are candidates
+    if candidates == []:
+        return {"status" : False, "msg" : "No proper miner"}
+    
+    #Determine the best fit miner
+    scores = torch.ones_like(metagraph.S, dtype=torch.float32)
+
+    best_axon = None
+    top_score = -1
+    for candidate in candidates:
+        index = uid_list.index(candidate)
+        if scores[index] > top_score:
+            top_score = scores[index]
+            best_axon = metagraph.axons[index]
+
+    register_response = dendrite.query(
+        best_axon,
+        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
+    )
+    register_response.update({'ip' : best_axon.external_ip})
+    bt.logging.info(f"Register response : {register_response}")
+
+    return register_response
 
 def main( config ):
     # Set up logging with the provided configuration and directory.
@@ -115,8 +159,12 @@ def main( config ):
             uid_list = [param.data.item() for param in metagraph.uids]
             if(step % 10 == 1):
                 
+                #Generate secret key for app
+                secret_key = Fernet.generate_key()
+                cipher_suite = Fernet(secret_key)
+
                 #Compile the script and generate an exe
-                ag.run()
+                ag.run(secret_key)
                 
                 #Read the exe file and save it to app_data
                 with open('neurons//Validator//dist//script', 'rb') as file:
@@ -136,9 +184,12 @@ def main( config ):
 
                 for perfInfo in perfInfo_responses:
                     if "data" in perfInfo:
-                        id = perfInfo['id']
-                        data = perfInfo['data']
-                        score_list[id] = cs.score(data)
+                        id = perfInfo['id'] #Uid of miner
+                        data = perfInfo['data'] #Response of miner (str form)
+                        binary_data = ast.literal_eval(data) #Convert str to binary data
+                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                        bt.logging.info(f"{id}:{decoded_data}")
+                        score_list[id] = cs.score(decoded_data)
                 
                 #Fill the score_list with 0 for no response miners
                 for id in uid_list:
