@@ -46,48 +46,50 @@ class PerfInfo( bt.Synapse ):
         - dict: The deserialized response, which in this case is the value of perf_output.
 
         Example:
-        Assuming a Performance instance has a performance_output value of A:
+        Assuming a Performance instance has a perf_output value of {}:
         >>> perfinfo_instance = PerfInfo()
-        >>> perfinfo_instance.perf_output = A
+        >>> perfinfo_instance.perf_output = {}
         >>> perfinfo_instance.deserialize()
-        A
+        {}
         """
         return self.perf_output
 
-class SSHRegister( bt.Synapse ):
+class Allocate( bt.Synapse ):
     """
-    A simple SSHRegister protocol representation which uses bt.Synapse as its base.
-    This protocol helps in handling SSHRegister request and response communication between
+    A simple Allocate protocol representation which uses bt.Synapse as its base.
+    This protocol helps in handling Allocate request and response communication between
     the miner and the validator.
 
     Attributes:
-    - sshkey_timeline: A number of the timeline of ssh key.
-    - sshkey_output: A dictionary of the information of ssh connection.
+    - timeline: The living time of this allocation.
+    - device_requirement: Detailed information of device requirements.
+    - checking: Flag that indicates whether it is checking or allocating
+    - output: Respond of miner.
     """
 
-    # Required request input, filled by sending dendrite caller.
-    sshkey_timeline: int = 0
+    timeline: int = 0
+    device_requirement: dict = {}
+    checking: bool = True
+    output: dict = {}
 
-    # Request output, filled by recieving axon.
-    sshkey_output: str = ""
 
     def deserialize(self) -> str:
         """
-        Deserialize the ssh connection information output. This method retrieves the response from
-        the miner in the form of sshkey_output, deserializes it and returns it
+        Deserialize the output. This method retrieves the response from
+        the miner in the form of output, deserializes it and returns it
         as the output of the dendrite.query() call.
 
         Returns:
-        - str: The deserialized response, which in this case is the value of sshkey_output.
+        - dict: The deserialized response, which in this case is the value of output.
 
         Example:
-        Assuming a SSHRegister instance has a sshkey_output value of A:
-        >>> sshRegister_instance = SSHRegister()
-        >>> sshRegister_instance.sshkey_output = A
-        >>> sshRegister_instance.deserialize()
-        A
+        Assuming a Allocate instance has a output value of {}:
+        >>> allocate_instance = Allocate()
+        >>> allocate_instance.output = {}
+        >>> allocate_instance.deserialize()
+        {}
         """
-        return self.sshkey_output
+        return self.output
 
 class SSHDeregister( bt.Synapse ):
     """
