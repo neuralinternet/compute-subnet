@@ -87,25 +87,25 @@ def allocate (device_requirement, timeline):
     if candidates == []:
         return {"status" : False, "msg" : "No proper miner"}
     
-    #Determine the best fit miner
+    #Sort the candidates with their score
     scores = torch.ones_like(metagraph.S, dtype=torch.float32)
 
-    best_axon = None
-    top_score = -1
-    for candidate in candidates:
-        index = uid_list.index(candidate)
-        if scores[index] > top_score:
-            top_score = scores[index]
-            best_axon = metagraph.axons[index]
+    score_dict = {uid: score for uid, score in zip(uid_list, scores)}
+    sorted_candidates = sorted(candidates, key=lambda uid: score_dict.get(uid, 0), reverse=True)
 
-    register_response = dendrite.query(
-        best_axon,
-        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
-    )
-    register_response.update({'ip' : best_axon.external_ip})
-    bt.logging.info(f"Register response : {register_response}")
+    #Loop the sorted candidates and check if one can allocate the device
+    for candidate in sorted_candidates:
+        axon = metagraph.axons[candidate]
+        register_response = dendrite.query(
+            axon,
+            compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
+        )
+        if register_response['status'] == True:
+            register_response.update({'ip' : axon.external_ip})
+            bt.logging.info(f"Register response : {register_response}")
 
-    return register_response
+            return register_response
+    return {"status" : False, "msg" : "No proper miner"}
 
 def main( config ):
     # Set up logging with the provided configuration and directory.
