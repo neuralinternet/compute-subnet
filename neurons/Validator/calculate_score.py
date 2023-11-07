@@ -17,6 +17,7 @@
 # Step 1: Import necessary libraries and modules
 
 import numpy as np
+import bittensor as bt
 
 #Calculate score based on the performance information
 def score(data):
@@ -31,14 +32,14 @@ def score(data):
     score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
 
     #Define weights for devices
-    cpu_weight = 0.3
-    gpu_weight = 0.45
+    cpu_weight = 0.2
+    gpu_weight = 0.55
     hard_disk_weight = 0.1
     ram_weight = 0.15
 
     weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
 
-    return np.dot(score_list, weight_list).item()
+    return np.dot(score_list, weight_list).item() * 10
 
 #Score of cpu
 def get_cpu_score(cpu_info):
@@ -46,25 +47,33 @@ def get_cpu_score(cpu_info):
         return 0
     count = cpu_info['count']
     frequency = cpu_info['frequency']
-    return count * frequency / 1024
+    level = 50 #20, 2.5
+    return count * frequency / 1024 / level
 
 #Score of gpu
 def get_gpu_score(gpu_info):
     if not gpu_info:
         return 0
-    capacity = gpu_info['capacity'] / 1024
-    return capacity
+    level = 200000 #20GB, 2GHz
+    capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
+    speed = gpu_info['speed']
+    return capacity * speed / level
     
 #Score of hard disk
 def get_hard_disk_score(hard_disk_info):
     if not hard_disk_info:
         return 0
+    level = 1000000 #1TB, 1g/s
     capacity = hard_disk_info['free'] / 1024 / 1024 / 1024
-    return capacity
+    speed = (hard_disk_info['read_speed'] + hard_disk_info['write_speed']) / 2
+
+    return capacity * speed / level
 
 #Score of ram
 def get_ram_score(ram_info):
     if not ram_info:
         return 0
+    level = 200000 #100GB, 2g/s
     capacity = ram_info['available'] / 1024 / 1024 / 1024
-    return capacity
+    speed = ram_info['read_speed']
+    return capacity * speed / level

@@ -18,9 +18,10 @@
 import psutil
 import igpu
 import json
+import time
 from cryptography.fernet import Fernet
 
-secret_key = b'HZYqs8_MK2UD1jA2X83SDHithRvo-vn-H08JII9BbQk='#key
+secret_key = b'XFjR6U3K5I-aXUjXVG9QG_9tPEHSQ7JZtlcewxShOuA='#key
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
@@ -33,16 +34,6 @@ def get_cpu_info():
         info = {}
         info["count"] = physical_cores
         info["frequency"] = cpu_frequency.current
-
-        usage_info = {}
-
-        # Get CPU usage for each core
-        cpu_percent = psutil.cpu_percent(interval=1, percpu=True)
-
-        for core, usage in enumerate(cpu_percent):
-            usage_info[str(core)] = usage
-
-        info["usage"] = usage_info
 
         return info
     except Exception as e:
@@ -62,7 +53,16 @@ def get_gpu_info():
             gpu = igpu.get_device(i)
             gpu_details.append({"name" : gpu.name, "capacity" : gpu.memory.total, "utilization" : gpu.utilization.gpu})
             capacity += gpu.memory.total
-        return {"count":gpu_count, "capacity": capacity, "details": gpu_details}
+        
+        info = {"count":gpu_count, "capacity": capacity, "details": gpu_details}
+
+        #Measure speed
+        if gpu_count:
+            nvidia_smi_output = subprocess.check_output(["nvidia-smi", "--query-gpu=clock.graphics", "--format=csv,noheader,nounits"])
+            gpu_speed = int(nvidia_smi_output.decode("utf-8").strip())
+            info['speed'] = gpu_speed #unit : MHz
+        
+        return info
             
     except Exception as e:
         #print(f"Error getting cpu information : {e}")
@@ -72,6 +72,7 @@ def get_gpu_info():
 def get_hard_disk_info():
     try:
 
+        #Capacity-related information
         usage = psutil.disk_usage("/")
         info = {"total": usage.total, "free": usage.free, "used": usage.used}
 
@@ -92,6 +93,32 @@ def get_hard_disk_info():
                 continue
 
         info["partition"] = partition_info
+
+        # Measure write speed
+        size_mb = 100
+        file_size_bytes = size_mb * 1024 * 1024
+
+        data = bytearray(file_size_bytes)
+        file_path = 'test_speed_file.dat'
+
+        # Write data to a file
+        with open(file_path, 'wb') as file:
+            start_time = time.time()
+            file.write(data)
+            end_time = time.time()
+
+        write_speed = size_mb / (end_time - start_time)
+
+        # Measure read speed
+        with open(file_path, 'rb') as file:
+            start_time = time.time()
+            _ = file.read()
+            end_time = time.time()
+
+        read_speed = size_mb / (end_time - start_time)
+
+        info['write_speed'] = write_speed
+        info['read_speed'] = read_speed
         
         return info
     except Exception as e:
@@ -113,6 +140,26 @@ def get_ram_info():
             "swap_used": swap_memory.used,
             "swap_free": swap_memory.free
         }
+
+        #Measure read speed
+        size_mb = 100
+        data = bytearray(size_mb * 1024 * 1024)  # Create a byte array of the specified size (in MB)
+        start_time = time.time()
+        _ = data[0:size_mb * 1024 * 1024]  # Read the entire array from RAM
+        end_time = time.time()
+        read_time = end_time - start_time
+        read_speed = size_mb / read_time
+
+        #Measure write speed
+        data = bytearray(size_mb * 1024 * 1024)  # Create a byte array of the specified size (in MB)
+        start_time = time.time()
+        data[0:size_mb * 1024 * 1024] = b'\x00'  # Write zeros to the entire array in RAM
+        end_time = time.time()
+        write_time = end_time - start_time
+        write_speed = size_mb / write_time
+
+        info['read_speed'] = read_speed #unit : MB/s
+        info['write_speed'] = write_speed #unit : MB/s
 
         return info
     except Exception as e:

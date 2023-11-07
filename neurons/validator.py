@@ -21,15 +21,14 @@ import time
 import torch
 import argparse
 import traceback
+import json
 import bittensor as bt
 import compute
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
+import Validator.database as db
 from cryptography.fernet import Fernet
 import ast
-
-dendrite = None
-metagraph = None
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -68,44 +67,69 @@ def get_config():
     return config
 
 #Generate ssh connection for given device requirements and timeline
-def allocate (device_requirement, timeline):
-    uid_list = [param.data.item() for param in metagraph.uids]
+def allocate (metagraph, dendrite, device_requirement, timeline):
     #Find out the candidates
+    candidates_hotkey = db.select_miners_hotkey(device_requirement)
+
+    axon_candidates = []
+    for axon in metagraph.axons:
+        if axon.hotkey in candidates_hotkey:
+            axon_candidates.append(axon)
+
     allocate_responses = dendrite.query(
-        metagraph.axons,
+        axon_candidates,
         compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = True)
     )
-    bt.logging.info(f"Allocate responses : {allocate_responses}")
 
-    candidates = []
+    final_candidates_hotkey = []
 
-    for allocate_response in allocate_responses:
-        if allocate_response['result'] == True:
-            candidates.append(allocate_response['id'])
+    for index, allocate_response in enumerate(allocate_responses):
+        if allocate_response and allocate_response['status'] == True:
+            final_candidates_hotkey.append(axon_candidates[index].hotkey)
     
     #Check if there are candidates
-    if candidates == []:
+    if final_candidates_hotkey == []:
         return {"status" : False, "msg" : "No proper miner"}
     
-    #Determine the best fit miner
+    #Sort the candidates with their score
     scores = torch.ones_like(metagraph.S, dtype=torch.float32)
 
-    best_axon = None
-    top_score = -1
-    for candidate in candidates:
-        index = uid_list.index(candidate)
-        if scores[index] > top_score:
-            top_score = scores[index]
-            best_axon = metagraph.axons[index]
+    score_dict = {hotkey: score for hotkey, score in zip([axon.hotkey for axon in metagraph.axons], scores)}
+    sorted_hotkeys = sorted(final_candidates_hotkey, key=lambda hotkey: score_dict.get(hotkey, 0), reverse=True)
 
-    register_response = dendrite.query(
-        best_axon,
-        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
-    )
-    register_response.update({'ip' : best_axon.external_ip})
-    bt.logging.info(f"Register response : {register_response}")
+    #Loop the sorted candidates and check if one can allocate the device
+    for hotkey in sorted_hotkeys:
+        index = metagraph.hotkeys.index(hotkey)
+        axon = metagraph.axons[index]
+        register_response = dendrite.query(
+            axon,
+            compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
+            timeout = 120,
+        )
+        if register_response and register_response['status'] == True:
+            register_response.update({'ip' : axon.ip_str()})
+            bt.logging.info(f"Registered : {register_response}")
 
-    return register_response
+            return register_response
+        
+    return {"status" : False, "msg" : "No proper miner"}
+
+#Filter axons with ip address, remove axons with same ip address
+def filter_axons_with_ip(axons_list):
+    # Set to keep track of unique identifiers
+    unique_ip_addresses = set()
+
+    # List to store filtered axons
+    filtered_axons = []
+
+    for axon in axons_list:
+        ip_address = axon.ip_str()
+
+        if ip_address not in unique_ip_addresses:
+            unique_ip_addresses.add(ip_address)
+            filtered_axons.append(axon)
+
+    return filtered_axons
 
 def main( config ):
     # Set up logging with the provided configuration and directory.
@@ -154,15 +178,15 @@ def main( config ):
     while True:
         try:
             # TODO(developer): Define how the validator selects a miner to query, how often, etc.
-            # Broadcast a query to all miners on the network.
-            axons_list = metagraph.axons
-            uid_list = [param.data.item() for param in metagraph.uids]
-            if(step % 10 == 1):
+            if step % 10 == 1:
                 
+                #Filter axons, remove duplicated ip address
+                axons_list = metagraph.axons
+                axons_list = filter_axons_with_ip(axons_list)
+
                 #Generate secret key for app
                 secret_key = Fernet.generate_key()
                 cipher_suite = Fernet(secret_key)
-
                 #Compile the script and generate an exe
                 ag.run(secret_key)
                 
@@ -172,50 +196,65 @@ def main( config ):
                     app_data = file.read()
                 
                 #The responses of PerfInfo request
-                perfInfo_responses = dendrite.query(
+                ret_perfInfo_responses = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(perf_input = repr(app_data)),
+                    timeout = 30
                 )
-                
-                bt.logging.info(f"PerfInfo{perfInfo_responses}")
 
+                #Filter invalid responses
+                perfInfo_responses = []
+                hotkey_list = []
+                for index, perfInfo in enumerate(ret_perfInfo_responses):
+                    if perfInfo:
+                        binary_data = ast.literal_eval(perfInfo) #Convert str to binary data
+                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                        perfInfo_responses.append(decoded_data)
+                        hotkey_list.append(axons_list[index].hotkey)
+
+                bt.logging.info(f"PerfInfo : {perfInfo_responses}")
+
+                db.update(hotkey_list, perfInfo_responses)
+                
                 #Make score_list based on the perf_info
                 score_list = {}
 
-                for perfInfo in perfInfo_responses:
-                    if "data" in perfInfo:
-                        id = perfInfo['id'] #Uid of miner
-                        data = perfInfo['data'] #Response of miner (str form)
-                        binary_data = ast.literal_eval(data) #Convert str to binary data
-                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
-                        bt.logging.info(f"{id}:{decoded_data}")
-                        score_list[id] = cs.score(decoded_data)
+                for index, perfInfo in enumerate(perfInfo_responses):
+                    hotkey = hotkey_list[index] #hotkey of miner
+                    score_list[hotkey] = cs.score(perfInfo)
                 
                 #Fill the score_list with 0 for no response miners
-                for id in uid_list:
-                    if id in score_list:
+                for hotkey in metagraph.hotkeys:
+                    if hotkey in score_list:
                         continue
-                    score_list[id] = 0
+                    score_list[hotkey] = 0
 
                 #Find the maximum score
-                max_score = max(score_list)
+                max_score = score_list[max(score_list, key = score_list.get)]
+                if max_score == 0:
+                    max_score = 1
 
                 bt.logging.info(f"ScoreList:{score_list}")
 
                 # Calculate score
-                for id, score in enumerate(score_list):
-                    index = uid_list.index(id)
+                for index, axon in enumerate(metagraph.axons):
+                    score = score_list[axon.hotkey]
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
+
+            if step % 10 == 2:
+                device_requirement = {'cpu':{'count':3}, 'gpu':{'capacity':10737418240, 'capabilities':'all'}, 'hard_disk':{'capacity':32212254720}, 'ram':{'capacity':5368709120}}
+                timeline = 5
+                result = allocate(metagraph, dendrite, device_requirement, timeline)
 
             # Periodically update the weights on the Bittensor blockchain.
             if step > 1 and step % 50 == 1:
                 # TODO(developer): Define how the validator normalizes scores before setting weights.
                 weights = torch.nn.functional.normalize(scores, p=1.0, dim=0)
                 for i, weight_i in enumerate(weights):
-                    bt.logging.info(f"Weight of Miner{i + 1} : {weights[i]}")
+                    bt.logging.info(f"Weight of Miner{i + 1} : {weight_i}")
                 # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
                 # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
                 result = subtensor.set_weights(
