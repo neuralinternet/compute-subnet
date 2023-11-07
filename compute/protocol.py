@@ -30,27 +30,27 @@ class PerfInfo( bt.Synapse ):
 
     perf_input: str = ''
 
-    perf_output: dict = {}
+    perf_output: str = ''
     """
     Request output, filled by recieving axon.
     Example: {"CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
     """
 
-    def deserialize(self) -> dict:
+    def deserialize(self) -> str:
         """
         Deserialize the performance information output. This method retrieves the response from
         the miner in the form of perf_output, deserializes it and returns it
         as the output of the dendrite.query() call.
 
         Returns:
-        - dict: The deserialized response, which in this case is the value of perf_output.
+        - str: The deserialized response, which in this case is the value of perf_output.
 
         Example:
         Assuming a Performance instance has a perf_output value of {}:
         >>> perfinfo_instance = PerfInfo()
-        >>> perfinfo_instance.perf_output = {}
+        >>> perfinfo_instance.perf_output = ''
         >>> perfinfo_instance.deserialize()
-        {}
+        ''
         """
         return self.perf_output
 
@@ -72,8 +72,7 @@ class Allocate( bt.Synapse ):
     checking: bool = True
     output: dict = {}
 
-
-    def deserialize(self) -> str:
+    def deserialize(self) -> dict:
         """
         Deserialize the output. This method retrieves the response from
         the miner in the form of output, deserializes it and returns it
