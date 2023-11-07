@@ -22,6 +22,9 @@ import bittensor as bt
 
 #Register for given timeline and device_requirement
 def register(timeline, device_requirement):
+    if check(timeline, device_requirement)['status'] == False:
+        return {'status' : False}
+    
     kill_status = ctn.kill_container()
 
     bt.logging.info(f"Killed container : {kill_status}")
@@ -29,16 +32,19 @@ def register(timeline, device_requirement):
     #Extract requirements from device_requirement and format them
     cpu_count = device_requirement['cpu']['count'] #e.g 2
     cpu_assignment = '0-' + str(cpu_count - 1) #e.g 0-1
-    ram_capacity = device_requirement['ram']['capacity'] #e.g 1g
-    volume_capacity = device_requirement['volume']['capacity'] #e.g 
-    gpu_capabilities = device_requirement['gpu']['capabilities']
+    if cpu_count == 1:
+        cpu_assignment = '0'
+    ram_capacity = device_requirement['ram']['capacity'] #e.g 5g
+    hard_disk_capacity = device_requirement['hard_disk']['capacity'] #e.g 100g
+    gpu_capabilities = device_requirement['gpu']['capabilities'] #e.g all
 
     cpu_usage = {'assignment' : cpu_assignment}
     gpu_usage = {'capabilities' : gpu_capabilities}
-    ram_usage = {'capacity' : ram_capacity}
-    volume_usage = {'capacity' : volume_capacity}
+    ram_usage = {'capacity' : str(int(ram_capacity / 1073741824)) + 'g'}
+    hard_disk_usage = {'capacity' : str(int(hard_disk_capacity / 1073741824)) + 'g'}
 
-    run_status = ctn.run_container(cpu_usage, ram_usage, volume_usage, gpu_usage)
+    bt.logging.info(f"info:{cpu_usage, ram_usage, hard_disk_usage, gpu_usage}")
+    run_status = ctn.run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage)
 
     bt.logging.info(f"Runned containers: {run_status}")
 
@@ -51,6 +57,6 @@ def register(timeline, device_requirement):
 def check(timeline, device_requirement):
     #Check if miner is already allocated
     if ctn.check_container() == True:
-        return False
+        return {'status':False}
     #Check if there is enough device
-    return True
+    return {'status':True}

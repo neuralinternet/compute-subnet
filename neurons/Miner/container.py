@@ -17,7 +17,8 @@
 # Step 1: Import necessary libraries and modules
 
 import docker
-import paramiko
+import subprocess
+import json
 import os
 import string
 import secrets
@@ -55,14 +56,14 @@ def kill_container():
     
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, volume_usage, gpu_usage):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
     try:
         # Configuration
         password = password_generator(10)
-        cpu_assignment = cpu_usage['assignment'] #eg : 0-1
-        ram_limit = ram_usage['capacity'] # eg : 1g
-        volume_size = volume_usage['capacity'] # eg : 1073741824 ( 1GB )
-        gpu_capabilities = gpu_usage['capabilities'] # eg : all,capabilities=utility
+        cpu_assignment = cpu_usage['assignment'] #e.g : 0-1
+        ram_limit = ram_usage['capacity'] # e.g : 5g
+        hard_disk_capacity = hard_disk_usage['capacity'] # e.g : 100g
+        gpu_capabilities = gpu_usage['capabilities'] # e.g : all
 
         # Step 1: Build the Docker image with an SSH server
         dockerfile_content = '''
@@ -75,15 +76,16 @@ def run_container(cpu_usage, ram_usage, volume_usage, gpu_usage):
         RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
         CMD ["/usr/sbin/sshd", "-D"]
         '''
+
         dockerfile_path = "/tmp/dockerfile"
         with open(dockerfile_path, "w") as dockerfile:
             dockerfile.write(dockerfile_content)
 
         # Build the Docker image
         client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path), tag=image_name)
-
+        bt.logging.info("image build finished")
         # Create the Docker volume with the specified size
-        #client.volumes.create(volume_name, driver = 'local', driver_opts={'size': volume_size})
+        #client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
         # Step 2: Run the Docker container
         container = client.containers.run(
@@ -92,6 +94,7 @@ def run_container(cpu_usage, ram_usage, volume_usage, gpu_usage):
             detach=True,
             cpuset_cpus=cpu_assignment,
             mem_limit=ram_limit,
+            storage_opt={"size": hard_disk_capacity},
             #volumes={volume_name: {'bind': volume_path, 'mode': 'rw'}},
             #gpus=gpu_capabilities,
             environment = ["NVIDIA_VISIBLE_DEVICES=all"],
@@ -116,6 +119,24 @@ def check_container():
         if container_name in container.name:
             return True
     return False
+
+# Set the base size of docker, daemon
+def set_docker_base_size(base_size):#e.g 100g
+    docker_daemon_file = "/etc/docker/daemon.json"
+
+    # Modify the daemon.json file to set the new base size
+    storage_options = {
+        "storage-driver": "devicemapper",
+        "storage-opts": [
+            "dm.basesize=" + base_size
+        ]
+    }
+
+    with open(docker_daemon_file, "w") as json_file:
+        json.dump(storage_options, json_file, indent=4)
+
+    # Restart Docker
+    subprocess.run(["systemctl", "restart", "docker"])
 
 # Randomly generate password for given length
 def password_generator(length):

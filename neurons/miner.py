@@ -156,7 +156,7 @@ def main(config):
         # If you change this, your miner will lose emission in the network incentive landscape.
 
         app_data = synapse.perf_input
-        synapse.perf_output = {"id":my_subnet_uid, "data": pf.get_respond(app_data)}
+        synapse.perf_output = pf.get_respond(app_data)
         return synapse
 
         # The blacklist function decides if a request should be ignored.
@@ -215,7 +215,7 @@ def main(config):
         result = True
         if checking == True:
             result = al.check(timeline, device_requirement)
-            synapse.output = {"id":my_subnet_uid, "result": result}
+            synapse.output = result
         else:
             result = al.register(timeline, device_requirement)
             synapse.output = result
