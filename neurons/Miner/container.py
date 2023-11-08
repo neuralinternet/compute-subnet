@@ -94,10 +94,10 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
             detach=True,
             cpuset_cpus=cpu_assignment,
             mem_limit=ram_limit,
-            storage_opt={"size": hard_disk_capacity},
+            #storage_opt={"size": hard_disk_capacity},
             #volumes={volume_name: {'bind': volume_path, 'mode': 'rw'}},
             #gpus=gpu_capabilities,
-            environment = ["NVIDIA_VISIBLE_DEVICES=all"],
+            #environment = ["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port}
         )
         
