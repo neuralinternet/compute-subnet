@@ -17,18 +17,23 @@
 # Step 1: Import necessary libraries and modules
 
 import os
+import sys
 import time
 import torch
 import argparse
 import traceback
 import json
 import bittensor as bt
-import compute
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
 import Validator.database as db
 from cryptography.fernet import Fernet
 import ast
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
+
+import compute
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -107,7 +112,7 @@ def allocate (metagraph, dendrite, device_requirement, timeline):
             timeout = 120,
         )
         if register_response and register_response['status'] == True:
-            register_response.update({'ip' : axon.ip_str()})
+            register_response.update({'ip' : axon.ip})
             bt.logging.info(f"Registered : {register_response}")
 
             return register_response
@@ -123,7 +128,7 @@ def filter_axons_with_ip(axons_list):
     filtered_axons = []
 
     for axon in axons_list:
-        ip_address = axon.ip_str()
+        ip_address = axon.ip
 
         if ip_address not in unique_ip_addresses:
             unique_ip_addresses.add(ip_address)
@@ -244,10 +249,10 @@ def main( config ):
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
 
-            if step % 10 == 2:
+            '''if step % 10 == 2:
                 device_requirement = {'cpu':{'count':3}, 'gpu':{'capacity':10737418240, 'capabilities':'all'}, 'hard_disk':{'capacity':32212254720}, 'ram':{'capacity':5368709120}}
                 timeline = 5
-                result = allocate(metagraph, dendrite, device_requirement, timeline)
+                result = allocate(metagraph, dendrite, device_requirement, timeline)'''
 
             # Periodically update the weights on the Bittensor blockchain.
             if step > 1 and step % 50 == 1:
