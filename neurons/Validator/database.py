@@ -55,24 +55,23 @@ def check_if_miner_meet(details, required_details):
     cpu_miner = details['cpu']
     required_cpu = required_details['cpu']
     if cpu_miner['count'] < required_cpu['count']:
-        bt.logging.info('cpu')
         return False
     
     #GPU side
     gpu_miner = details['gpu']
     required_gpu = required_details['gpu']
+    if gpu_miner['capacity'] < required_gpu['capacity']:
+        return False
 
     #Hard disk side
     hard_disk_miner = details['hard_disk']
     required_hard_disk = required_details['hard_disk']
     if hard_disk_miner['free'] < required_hard_disk['capacity']:
-        bt.logging.info('hard')
         return False
 
     #Ram side
     ram_miner = details['ram']
     required_ram = required_details['ram']
     if ram_miner['available'] < required_ram['capacity']:
-        bt.logging.info('ram')
         return False
     return True

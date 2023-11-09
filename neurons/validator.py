@@ -250,7 +250,7 @@ def main( config ):
                     scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
 
             '''if step % 10 == 2:
-                device_requirement = {'cpu':{'count':3}, 'gpu':{'capacity':10737418240, 'capabilities':'all'}, 'hard_disk':{'capacity':32212254720}, 'ram':{'capacity':5368709120}}
+                device_requirement = {'cpu':{'count':3}, 'gpu':{'capacity':10737418240}, 'hard_disk':{'capacity':32212254720}, 'ram':{'capacity':5368709120}}
                 timeline = 5
                 result = allocate(metagraph, dendrite, device_requirement, timeline)'''
 
