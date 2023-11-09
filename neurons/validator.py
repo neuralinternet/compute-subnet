@@ -239,7 +239,7 @@ def main( config ):
                 if max_score == 0:
                     max_score = 1
 
-                bt.logging.info(f"ScoreList:{score_list}")
+                #bt.logging.info(f"ScoreList:{score_list}")
 
                 # Calculate score
                 for index, axon in enumerate(metagraph.axons):
@@ -249,10 +249,11 @@ def main( config ):
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
 
-            '''if step % 10 == 2:
-                device_requirement = {'cpu':{'count':3}, 'gpu':{'capacity':10737418240}, 'hard_disk':{'capacity':32212254720}, 'ram':{'capacity':5368709120}}
+            if step % 10 == 2:
+                device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
                 timeline = 5
-                result = allocate(metagraph, dendrite, device_requirement, timeline)'''
+                result = allocate(metagraph, dendrite, device_requirement, timeline)
+                bt.logging.info(f"Register result : {result}")
 
             # Periodically update the weights on the Bittensor blockchain.
             if step > 1 and step % 50 == 1:
