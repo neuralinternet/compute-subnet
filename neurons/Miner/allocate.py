@@ -36,7 +36,10 @@ def register(timeline, device_requirement):
         cpu_assignment = '0'
     ram_capacity = device_requirement['ram']['capacity'] #e.g 5g
     hard_disk_capacity = device_requirement['hard_disk']['capacity'] #e.g 100g
-    gpu_capacity = device_requirement['gpu']['capacity'] #e.g all
+    if not device_requirement['gpu']:
+        gpu_capacity = 0
+    else:
+        gpu_capacity = device_requirement['gpu']['capacity'] #e.g all
 
     cpu_usage = {'assignment' : cpu_assignment}
     gpu_usage = {'capacity' : gpu_capacity}

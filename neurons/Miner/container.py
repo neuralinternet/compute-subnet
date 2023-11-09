@@ -63,7 +63,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
         cpu_assignment = cpu_usage['assignment'] #e.g : 0-1
         ram_limit = ram_usage['capacity'] # e.g : 5g
         hard_disk_capacity = hard_disk_usage['capacity'] # e.g : 100g
-        gpu_capabilities = gpu_usage['capabilities'] # e.g : all
+        gpu_capacity = gpu_usage['capacity'] # e.g : all
 
         # Step 1: Build the Docker image with an SSH server
         dockerfile_content = '''
@@ -96,8 +96,8 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
             #mem_limit=ram_limit,
             #storage_opt={"size": hard_disk_capacity},
             #volumes={volume_name: {'bind': volume_path, 'mode': 'rw'}},
-            #gpus=gpu_capabilities,
-            environment = ["NVIDIA_VISIBLE_DEVICES=all"],
+            #gpus=gpu_capacity,
+            #environment = ["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port}
         )
         
