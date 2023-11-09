@@ -92,7 +92,7 @@ def get_hard_disk_info():
                 #print(f"Error getting disk information for {partition.device}: {e}")
                 continue
 
-        info["partition"] = partition_info
+        #info["partition"] = partition_info
 
         # Measure write speed
         size_mb = 100
