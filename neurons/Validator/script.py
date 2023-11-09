@@ -21,7 +21,7 @@ import json
 import time
 from cryptography.fernet import Fernet
 
-secret_key = b'XFjR6U3K5I-aXUjXVG9QG_9tPEHSQ7JZtlcewxShOuA='#key
+secret_key = b'gcjuW88j9AmPtoYuN-BHsrwuc0Nj9Hk0PbINU7HdMKw='#key
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
