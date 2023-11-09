@@ -36,10 +36,10 @@ def register(timeline, device_requirement):
         cpu_assignment = '0'
     ram_capacity = device_requirement['ram']['capacity'] #e.g 5g
     hard_disk_capacity = device_requirement['hard_disk']['capacity'] #e.g 100g
-    gpu_capabilities = device_requirement['gpu']['capabilities'] #e.g all
+    gpu_capacity = device_requirement['gpu']['capacity'] #e.g all
 
     cpu_usage = {'assignment' : cpu_assignment}
-    gpu_usage = {'capabilities' : gpu_capabilities}
+    gpu_usage = {'capacity' : gpu_capacity}
     ram_usage = {'capacity' : str(int(ram_capacity / 1073741824)) + 'g'}
     hard_disk_usage = {'capacity' : str(int(hard_disk_capacity / 1073741824)) + 'g'}
 
