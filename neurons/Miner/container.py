@@ -31,12 +31,14 @@ volume_path = '/tmp' #Path inside the container where the volume will be mounted
 ssh_port = 4444  # Port to map SSH service on the host
 
 # Initialize Docker client
-client = docker.from_env()
-containers = client.containers.list(all=True)
+def init_docker_client():
+    client = docker.from_env()
+    containers = client.containers.list(all=True)
 
 # Kill the currently running container
 def kill_container():
     try:
+        init_docker_client()
         running_container = None
         for container in containers:
             if container_name in container.name:
@@ -58,6 +60,7 @@ def kill_container():
 # Run a new docker container with the given docker_name, image_name and device information
 def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
     try:
+        init_docker_client()
         # Configuration
         password = password_generator(10)
         cpu_assignment = cpu_usage['assignment'] #e.g : 0-1
@@ -115,10 +118,15 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
 
 # Check if the container exists
 def check_container():
-    for container in containers:
-        if container_name in container.name:
-            return True
-    return False
+    try:
+        init_docker_client()
+        for container in containers:
+            if container_name in container.name:
+                return True
+        return False
+    except Exception as e:
+        bt.logging.info(f"Error checking container {e}")
+        return False
 
 # Set the base size of docker, daemon
 def set_docker_base_size(base_size):#e.g 100g
