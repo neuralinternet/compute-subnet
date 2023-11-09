@@ -92,9 +92,9 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
             image=image_name,
             name=container_name,
             detach=True,
-            cpuset_cpus=cpu_assignment,
-            mem_limit=ram_limit,
-            storage_opt={"size": hard_disk_capacity},
+            #cpuset_cpus=cpu_assignment,
+            #mem_limit=ram_limit,
+            #storage_opt={"size": hard_disk_capacity},
             #volumes={volume_name: {'bind': volume_path, 'mode': 'rw'}},
             #gpus=gpu_capabilities,
             environment = ["NVIDIA_VISIBLE_DEVICES=all"],
@@ -105,7 +105,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage):
 
         if container.status == "created":
             bt.logging.info("Container was created successfully")
-            return {'status' : True, 'username' : 'root', 'password' : password}
+            return {'status' : True, 'username' : 'root', 'password' : password, 'port': ssh_port}
         else:
             bt.logging.info(f"Container falied with status : {container.status}")
             return {'status' : False}

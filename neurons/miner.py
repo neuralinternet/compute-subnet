@@ -17,14 +17,19 @@
 
 # Step 1: Import necessary libraries and modules
 import os
+import sys
 import time
 import argparse
 import typing
 import traceback
 import bittensor as bt
-import compute
 import Miner.performance as pf
 import Miner.allocate as al
+
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(parent_dir)
+
+import compute
 
 def get_config():
     # Step 2: Set up the configuration parser
