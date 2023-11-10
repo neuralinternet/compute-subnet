@@ -29,6 +29,8 @@ import Validator.calculate_score as cs
 import Validator.database as db
 from cryptography.fernet import Fernet
 import ast
+import RSAEncryption as rsa
+import base64
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -72,7 +74,7 @@ def get_config():
     return config
 
 #Generate ssh connection for given device requirements and timeline
-def allocate (metagraph, dendrite, device_requirement, timeline):
+def allocate (metagraph, dendrite, device_requirement, timeline, public_key):
     #Find out the candidates
     candidates_hotkey = db.select_miners_hotkey(device_requirement)
 
@@ -108,13 +110,11 @@ def allocate (metagraph, dendrite, device_requirement, timeline):
         axon = metagraph.axons[index]
         register_response = dendrite.query(
             axon,
-            compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False),
+            compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False, public_key = public_key),
             timeout = 120,
         )
         if register_response and register_response['status'] == True:
-            register_response.update({'ip' : axon.ip})
-            bt.logging.info(f"Registered : {register_response}")
-
+            register_response['ip'] = axon.ip
             return register_response
         
     return {"status" : False, "msg" : "No proper miner"}
@@ -251,8 +251,15 @@ def main( config ):
 
             if step % 10 == 2:
                 device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
-                timeline = 5
-                result = allocate(metagraph, dendrite, device_requirement, timeline)
+                timeline = 60
+                private_key, public_key = rsa.generate_key_pair()
+                result = allocate(metagraph, dendrite, device_requirement, timeline, public_key)
+
+                if result['status'] == True:
+                    result_info = result['info']
+                    private_key = private_key.encode('utf-8')
+                    decrypted_info = rsa.decrypt_data(private_key, base64.b64decode(result_info))
+                    bt.logging.info(f"Registered successfully : {decrypted_info}, 'ip':{result['ip']}")
                 bt.logging.info(f"Register result : {result}")
 
             # Periodically update the weights on the Bittensor blockchain.

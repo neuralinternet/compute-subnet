@@ -19,10 +19,9 @@ import psutil
 import igpu
 import json
 import time
-import os
 from cryptography.fernet import Fernet
 
-secret_key = b'gcjuW88j9AmPtoYuN-BHsrwuc0Nj9Hk0PbINU7HdMKw='#key
+secret_key = b'sLxDISirUsaIJIIyezmrgWH0kUkI-wMKzSOzUz_tNVk='#key
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
@@ -59,12 +58,10 @@ def get_gpu_info():
 
         #Measure speed
         if gpu_count:
-            result = os.popen("nvidia-smi --query-gpu=clocks.mem,clocks.gr --format=csv,noheader,nounits").read().strip().split(',')
-            memory_clock = int(result[0])
-            graphics_clock = int(result[1])
-            info['memory_speed'] = memory_clock
-            info['graphics_speed'] = graphics_clock
-
+            nvidia_smi_output = subprocess.check_output(["nvidia-smi", "--query-gpu=clock.graphics", "--format=csv,noheader,nounits"])
+            gpu_speed = int(nvidia_smi_output.decode("utf-8").strip())
+            info['speed'] = gpu_speed #unit : MHz
+        
         return info
             
     except Exception as e:
