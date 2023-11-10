@@ -64,6 +64,7 @@ class Allocate( bt.Synapse ):
     - timeline: The living time of this allocation.
     - device_requirement: Detailed information of device requirements.
     - checking: Flag that indicates whether it is checking or allocating
+    - public_key: Public key for encryption of data.
     - output: Respond of miner.
     """
 
@@ -71,6 +72,7 @@ class Allocate( bt.Synapse ):
     device_requirement: dict = {}
     checking: bool = True
     output: dict = {}
+    public_key: str = ""
 
     def deserialize(self) -> dict:
         """

@@ -222,7 +222,8 @@ def main(config):
             result = al.check(timeline, device_requirement)
             synapse.output = result
         else:
-            result = al.register(timeline, device_requirement)
+            public_key = synapse.public_key
+            result = al.register(timeline, device_requirement, public_key)
             synapse.output = result
         return synapse
 
