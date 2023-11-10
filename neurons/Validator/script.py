@@ -22,9 +22,13 @@ import time
 from cryptography.fernet import Fernet
 
 <<<<<<< miner
+<<<<<<< miner
 secret_key = b'McsApfywDBryGx73K4-be-kzNlgp3JHJG8RPXPqCdpg='#key
 =======
 secret_key = b'rTRvFOoOI4iHFvW62LO4wJceT_IdJBX7llnvVpt_nQs='#key
+>>>>>>> local
+=======
+secret_key = b'sLxDISirUsaIJIIyezmrgWH0kUkI-wMKzSOzUz_tNVk='#key
 >>>>>>> local
 #Return the detailed information of cpu
 def get_cpu_info():

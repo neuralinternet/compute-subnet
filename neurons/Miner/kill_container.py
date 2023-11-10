@@ -35,6 +35,8 @@ def kill_container():
         if running_container:
             running_container.stop()
             running_container.remove()
+            return True
     except Exception as e:
-        bt.logging.info(f"Error killing container {e}")
+        #bt.logging.info(f"Error killing container {e}")
+        return False
 kill_container()
