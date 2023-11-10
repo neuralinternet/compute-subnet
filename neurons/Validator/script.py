@@ -21,7 +21,19 @@ import json
 import time
 from cryptography.fernet import Fernet
 
+<<<<<<< HEAD
 secret_key = b'sLxDISirUsaIJIIyezmrgWH0kUkI-wMKzSOzUz_tNVk='#key
+=======
+<<<<<<< miner
+<<<<<<< miner
+secret_key = b'McsApfywDBryGx73K4-be-kzNlgp3JHJG8RPXPqCdpg='#key
+=======
+secret_key = b'rTRvFOoOI4iHFvW62LO4wJceT_IdJBX7llnvVpt_nQs='#key
+>>>>>>> local
+=======
+secret_key = b'sLxDISirUsaIJIIyezmrgWH0kUkI-wMKzSOzUz_tNVk='#key
+>>>>>>> local
+>>>>>>> 5fda8b441dcbb6c370a23bff6b7abf8f34cbd9a6
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
