@@ -52,6 +52,7 @@ def register(timeline, device_requirement, public_key):
         return run_status
     except Exception as e:
         #bt.logging.info(f"Error registering container {e}")
+        return {'status' : False}
     return {'status' : False}
 
 
