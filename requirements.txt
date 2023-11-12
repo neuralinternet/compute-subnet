@@ -1,6 +1,7 @@
 bittensor
 torch
+psutil
 igpu
-GPUtil
-py-cpuinfo
-paramiko
+cryptography
+pyinstaller
+docker
