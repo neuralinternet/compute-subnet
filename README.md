@@ -44,6 +44,8 @@ cd Compute-Subnet
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
+## Setup docker for miner
+To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu)) and [start] the docker service by running [systemctl start docker].
 
 </div>
 
