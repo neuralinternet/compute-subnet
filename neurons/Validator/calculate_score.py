@@ -56,7 +56,7 @@ def get_gpu_score(gpu_info):
         return 0
     level = 200000 #20GB, 2GHz
     capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
-    speed = gpu_info['speed']
+    speed = (gpu_info['graphics_speed'] + gpu_info['memory_speed']) / 2
     return capacity * speed / level
     
 #Score of hard disk
