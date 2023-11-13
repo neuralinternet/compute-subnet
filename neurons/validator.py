@@ -249,7 +249,7 @@ def main( config ):
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
 
-            if step % 10 == 2:
+            '''if step % 10 == 2:
                 device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
                 timeline = 60
                 private_key, public_key = rsa.generate_key_pair()
@@ -260,7 +260,7 @@ def main( config ):
                     private_key = private_key.encode('utf-8')
                     decrypted_info = rsa.decrypt_data(private_key, base64.b64decode(result_info))
                     bt.logging.info(f"Registered successfully : {decrypted_info}, 'ip':{result['ip']}")
-                bt.logging.info(f"Register result : {result}")
+                bt.logging.info(f"Register result : {result}")'''
 
             # Periodically update the weights on the Bittensor blockchain.
             if step > 1 and step % 50 == 1:
