@@ -28,6 +28,7 @@ def score(data):
     gpu_score = get_gpu_score(data["gpu"])
     hard_disk_score = get_hard_disk_score(data["hard_disk"])
     ram_score = get_ram_score(data["ram"])
+    registered = int(data["registered"])
 
     score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
 
@@ -38,8 +39,9 @@ def score(data):
     ram_weight = 0.15
 
     weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
+    registration_bonus = registered * 10
 
-    return np.dot(score_list, weight_list).item() * 10
+    return np.dot(score_list, weight_list).item() * 10 + registration_bonus
 
 #Score of cpu
 def get_cpu_score(cpu_info):
