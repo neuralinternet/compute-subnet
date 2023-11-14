@@ -32,6 +32,7 @@ cursor.execute('CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY
 #Fetch hotkeys from database that meets device_requirement
 def select_miners_hotkey(device_requirement):
     #Fetch all records from miner_details table
+    cursor.execute('CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)')
     cursor.execute("SELECT * FROM miner_details")
     rows = cursor.fetchall()
 
@@ -48,13 +49,14 @@ def update(hotkey_list, perfInfo_responses):
     cursor.execute(f'DELETE FROM miner_details')
     for index, perfInfo in enumerate(perfInfo_responses):
         cursor.execute("INSERT INTO miner_details (hotkey, details) VALUES (?, ?)", (hotkey_list[index], json.dumps(perfInfo)))
+    conn.commit()
 
 #Check if the miner meets required details
 def check_if_miner_meet(details, required_details):
     #CPU side
     cpu_miner = details['cpu']
     required_cpu = required_details['cpu']
-    if cpu_miner['count'] < required_cpu['count']:
+    if required_cpu and cpu_miner['count'] < required_cpu['count']:
         return False
     
     #GPU side
@@ -66,12 +68,12 @@ def check_if_miner_meet(details, required_details):
     #Hard disk side
     hard_disk_miner = details['hard_disk']
     required_hard_disk = required_details['hard_disk']
-    if hard_disk_miner['free'] < required_hard_disk['capacity']:
+    if required_hard_disk and hard_disk_miner['free'] < required_hard_disk['capacity']:
         return False
 
     #Ram side
     ram_miner = details['ram']
     required_ram = required_details['ram']
-    if ram_miner['available'] < required_ram['capacity']:
+    if required_ram and ram_miner['available'] < required_ram['capacity']:
         return False
     return True
