@@ -177,6 +177,10 @@ def main( config ):
     alpha = 0.9
     scores = torch.ones_like(metagraph.S, dtype=torch.float32)
 
+    curr_block = subtensor.block
+    last_updated_block = curr_block - (curr_block % 100)
+    last_reset_weights_block = curr_block
+
     # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
@@ -242,8 +246,8 @@ def main( config ):
                 #bt.logging.info(f"ScoreList:{score_list}")
 
                 # Calculate score
-                for index, axon in enumerate(metagraph.axons):
-                    score = score_list[axon.hotkey]
+                for index, uid in enumerate(metagraph.uids):
+                    score = score_list[metagraph.neurons[uid].axon_info.hotkey]
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
@@ -263,7 +267,8 @@ def main( config ):
                 bt.logging.info(f"Register result : {result}")'''
 
             # Periodically update the weights on the Bittensor blockchain.
-            if step > 1 and step % 50 == 1:
+            current_block = subtensor.block
+            if current_block - last_updated_block > 100:
                 # TODO(developer): Define how the validator normalizes scores before setting weights.
                 weights = torch.nn.functional.normalize(scores, p=1.0, dim=0)
                 for i, weight_i in enumerate(weights):
@@ -277,6 +282,7 @@ def main( config ):
                     weights = weights, # Weights to set for the miners.
                     wait_for_inclusion = True
                 )
+                last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
                 else: bt.logging.error('Failed to set weights.') 
 
