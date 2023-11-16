@@ -180,24 +180,8 @@ def main( config ):
 
 def upload_wandb(hotkey):
     try:
-        run = wandb.init()
-        artifact = run.use_artifact('compute-team/registered-miners/experiment_v1:v0', type='dataset')
-        artifact_dir = artifact.download()
-        file_path = artifact_dir + "/shared_list.txt"
-        # Check if the downloaded path is a file
-        if os.path.isfile(file_path):
-            # Read the contents of the shared list
-            with open(file_path, 'r') as file:
-                current_list = file.read().splitlines()
-            bt.logging.info(f"Downloaded shared list:{current_list}")
-            current_list.append(hotkey)
-            with open(file_path, 'w') as file:
-                file.write("\n".join(current_list))
-        else:
-            bt.logging.info(f"Error: Downloaded path is not a file.")
-        run.save(file_path)
-
-        run.finish()
+        wandb.init(project="registered-miners", name="hotkeys")
+        wandb.log({"key":hotkey})
     except Exception as e:
         bt.logging.info(f"Error uploading to wandb : {e}")
         return

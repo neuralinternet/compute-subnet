@@ -84,20 +84,15 @@ def get_ram_score(ram_info):
 #Check if miner is registered
 def check_if_registered(hotkey):
     try:
-        run = wandb.init()
-        artifact = run.use_artifact('compute-team/registered-miners/experiment_v1:v0', type='dataset')
-        artifact_dir = artifact.download()
-        file_path = artifact_dir + "/shared_list.txt"
-        # Check if the downloaded path is a file
-        if os.path.isfile(file_path):
-            # Read the contents of the shared list
-            with open(file_path, 'r') as file:
-                current_list = file.read().splitlines()
-            
-        bt.logging.info(f"Current list :{current_list}")
-        if current_list.contains(hotkey):
+        runs = wandb.Api().runs("registered-miners")
+        values = []
+        for run in runs:
+            if 'key' in run.summary:
+                values.append(run.summary['key'])
+        if hotkey in values:
             return True
-        return False
+        else:
+            return False
     except Exception as e:
         #bt.logging.info(f"Error getting cpu information : {e}")
         return False
