@@ -226,7 +226,7 @@ def main( config ):
 
                 for index, perfInfo in enumerate(perfInfo_responses):
                     hotkey = hotkey_list[index] #hotkey of miner
-                    score_list[hotkey] = cs.score(perfInfo)
+                    score_list[hotkey] = cs.score(perfInfo, hotkey)
                 
                 #Fill the score_list with 0 for no response miners
                 for hotkey in metagraph.hotkeys:
