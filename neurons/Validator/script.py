@@ -20,10 +20,9 @@ import igpu
 import json
 import time
 import subprocess
-import docker
 from cryptography.fernet import Fernet
 
-secret_key = b'JFI148DorlL_QCVM7p-9vNo43mCUlT8GvR0BdYckZGk='#key
+secret_key = b'QNTPFs96EVtICOjALHVRS6-EGLAgA0hBEKPrFyGD5bM='#key
 #Return the detailed information of cpu
 def get_cpu_info():
     try:
@@ -172,28 +171,14 @@ def get_ram_info():
     except Exception as e:
         #print(f"Error getting ram information {e}")
         return {}
-#Check if the miner is registered or not
-def check_if_registered():
-    try:
-        container_name = "ssh-container"
-        client = docker.from_env()
-        containers = client.containers.list(all=True)
-        for container in containers:
-            if container_name in container.name:
-                return True
-        return False
-    except Exception as e:
-        #print(f"Error getting ram information {e}")
-        return False 
 
 def get_perf_info():
     cpu_info = get_cpu_info()
     gpu_info = get_gpu_info()
     hard_disk_info = get_hard_disk_info()
     ram_info = get_ram_info()
-    registered = int(check_if_registered())
 
-    perf_info = {'cpu' : cpu_info, 'gpu' : gpu_info, 'hard_disk' : hard_disk_info, 'ram' : ram_info, 'registered' : registered}
+    perf_info = {'cpu' : cpu_info, 'gpu' : gpu_info, 'hard_disk' : hard_disk_info, 'ram' : ram_info}
     perf_str = json.dumps(perf_info)
 
     cipher_suite = Fernet(secret_key)

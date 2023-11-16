@@ -31,6 +31,7 @@ from cryptography.fernet import Fernet
 import ast
 import RSAEncryption as rsa
 import base64
+import wandb
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -115,6 +116,7 @@ def allocate (metagraph, dendrite, device_requirement, timeline, public_key):
         )
         if register_response and register_response['status'] == True:
             register_response['ip'] = axon.ip
+            register_response['hotkey'] = axon.hotkey
             return register_response
         
     return {"status" : False, "msg" : "No proper miner"}
@@ -169,11 +171,20 @@ def main( config ):
     result = allocate(metagraph, dendrite, device_requirement, timeline, public_key)
 
     if result['status'] == True:
+        result_hotkey = result['hotkey']
         result_info = result['info']
         private_key = private_key.encode('utf-8')
         decrypted_info = rsa.decrypt_data(private_key, base64.b64decode(result_info))
+        upload_wandb(result_hotkey)
         bt.logging.info(f"Registered successfully : {decrypted_info}, 'ip':{result['ip']}")
 
+def upload_wandb(hotkey):
+    try:
+        wandb.init(project="registered-miners", name="hotkeys")
+        wandb.log({"key":hotkey})
+    except Exception as e:
+        bt.logging.info(f"Error uploading to wandb : {e}")
+        return
 # The main function parses the configuration and runs the validator.
 
 if __name__ == "__main__":
