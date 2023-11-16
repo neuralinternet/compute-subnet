@@ -48,7 +48,7 @@ To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu
 </div>
 
 ---
-# Running a Miner/Validator
+# Running a Miner / Validator
 Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md) and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). Once you have done so, you can run the miner and validator with the following commands.
 
 ## Running Miner
