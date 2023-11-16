@@ -20,8 +20,6 @@ This template contains all the necessary files and functions to define Bittensor
 # Introduction
 The Bittensor blockchain hosts multiple self-contained incentive mechanisms 'subnets'. Subnets are playing fields through which miners (those producing value) and validators (those producing consensus) determine together the proper distribution of TAO for the purpose of incentivizing the creation of value, i.e. generating digital commodities, such as intelligence, or data. Each consists of a wire protocol through which miners and validators interact and their method of interacting with Bittensor's chain consensus engine [Yuma Consensus](https://bittensor.com/documentation/validating/yuma-consensus) which is designed to drive these actors into agreement about who is creating value.
 
-![Alt text](docs/diagram.jpg)
-
 This repository is a compute-composable subnet. This subnet has integrated various cloud platforms (e.g., Runpod, Lambda, AWS) into a cohesive unit, enabling higher-level cloud platforms to offer seamless compute composability across different underlying platforms. With the proliferation of cloud platforms, there's a need for a subnet that can seamlessly integrate these platforms, allowing for efficient resource sharing and allocation. This compute-composable subnet will enable nodes to contribute computational power, with validators ensuring the integrity and efficiency of the shared resources.
 
 - `compute/protocol.py`: The file where the wire-protocol used by miners and validators is defined.
@@ -55,7 +53,7 @@ Prior to running a miner or validator, you must [create a wallet](https://github
 
 ## Running Miner
 
-The miners offer computing services such as GPU and CPU instances, delivering the best user experience in core GPU and CPU computing. Depending on their performance, they can earn greater rewards. The better the device's performance, the higher the reward they receive. Importantly, miners should include GPU instances because a significant amount of computational power is required. GPU miners will receive greater rewards compared to CPU miners.
+Miners contribute processing resources, notably GPU (Graphics Processing Unit) and CPU (Central Processing Unit) instances, to facilitate optimal performance in essential GPU and CPU-based computing tasks. The system operates on a performance-based reward mechanism, where miners are incentivized through a tiered reward structure correlated to the processing capability of their hardware. High-performance devices are eligible for increased compensation, reflecting their greater contribution to the network's computational throughput. Emphasizing the integration of GPU instances is critical due to their superior computational power, particularly in tasks demanding parallel processing capabilities. Consequently, miners utilizing GPU instances are positioned to receive substantially higher rewards compared to their CPU counterparts, in alignment with the greater processing power and efficiency GPUs bring to the network.
 
 ```bash
 # To run the miner
@@ -70,7 +68,17 @@ python -m miner.py
 
 ## Running Validator
 
-The validators are responsible for evaluating a miner's capabilities. They request miners to send performance information and verify its trustworthiness by presenting hashing problems. They calculate the complexity of these problems based on the miner's performance, measure the response time of the miner, and verify the correctness of the answers. They update the score with this data and determine the miner's weight. Importantly, the score depends on various factors, not only the capacity but also the quality of the device. Validators don't have to include GPU instances since they have minimal traffic and require only a low amount of computational power.
+Validators hold the critical responsibility of rigorously assessing and verifying the computational capabilities of miners. This multifaceted evaluation process commences with validators requesting miners to provide comprehensive performance data, which includes not only processing speeds and efficiencies but also critical metrics like Random Access Memory (RAM) capacity and disk space availability.
+
+The inclusion of RAM and disk space measurements is vital, as these components significantly impact the overall performance and reliability of the miners' hardware. RAM capacity influences the ability to handle large or multiple tasks simultaneously, while adequate disk space ensures sufficient storage.
+
+Following the receipt of this detailed hardware and performance information, validators proceed to test the miners' computational integrity. This is achieved by presenting them with complex hashing challenges, designed to evaluate the processing power and reliability of the miners' systems. Validators adjust the difficulty of these problems based on the comprehensive performance profile of each miner, including their RAM and disk space metrics.
+
+In addition to measuring the time taken by miners to resolve these problems, validators meticulously verify the accuracy of the responses. This thorough examination of both speed and precision, complemented by the assessment of RAM and disk space utilization, forms the crux of the evaluation process.
+
+Based on this extensive analysis, validators update the miners' scores, reflecting a holistic view of their computational capacity, efficiency, and hardware quality. This score then determines the miner's weight within the network, directly influencing their potential rewards and standing.
+
+It is important to note that the role of validators, in contrast to miners, does not require the integration of GPU instances. Their function revolves around data integrity and accuracy verification, involving relatively modest network traffic and lower computational demands. As a result, their hardware requirements are less intensive, focusing more on stability and reliability rather than high-performance computation.
 
 ```bash
 # To run the validator
