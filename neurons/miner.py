@@ -207,7 +207,6 @@ def main(config):
     bt.logging.info(f"Starting axon server on port: {config.axon.port}")
     axon.start()
 
-    # Step 7: Keep the miner alive
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
