@@ -34,12 +34,7 @@ import compute
 def get_config():
     # Step 2: Set up the configuration parser
     # This function initializes the necessary command-line arguments.
-    # Using command-line arguments allows users to customize various miner settings.
     parser = argparse.ArgumentParser()
-    # TODO(developer): Adds your custom miner arguments to the parser.
-    parser.add_argument(
-        "--custom", default="my_custom_value", help="Adds a custom value to the parser."
-    )
     # Adds override arguments for network and netuid.
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -51,7 +46,6 @@ def get_config():
     # Adds axon specific arguments i.e. --axon.port ...
     bt.axon.add_args(parser)
     # Activating the parser to read any command-line inputs.
-    # To print help message, run python3 compute/miner.py --help
     config = bt.config(parser)
 
     # Step 3: Set up logging directory
@@ -113,22 +107,12 @@ def main(config):
 
     # The blacklist function decides if a request should be ignored.
     def blacklist_perfInfo(synapse: compute.protocol.PerfInfo) -> typing.Tuple[bool, str]:
-        # TODO(developer): Define how miners should blacklist requests. This Function
-        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
-        # The synapse is instead contructed via the headers of the request. It is important to blacklist
-        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
-        # Below: Check that the hotkey is a registered entity in the metagraph.
         if synapse.dendrite.hotkey not in metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        # TODO(developer): In practice it would be wise to blacklist requests from entities that
-        # are not validators, or do not have enough stake. This can be checked via metagraph.S
-        # and metagraph.validator_permit. You can always attain the uid of the sender via a
-        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
-        # Otherwise, allow the request to be processed further.
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
@@ -137,12 +121,6 @@ def main(config):
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
     def priority_perfInfo(synapse: compute.protocol.PerfInfo) -> float:
-        # TODO(developer): Define how miners should prioritize requests.
-        # Miners may recieve messages from multiple entities at once. This function
-        # determines which request should be processed first. Higher values indicate
-        # that the request should be processed first. Lower values indicate that the
-        # request should be processed later.
-        # Below: simple logic, prioritize requests from entities with more stake.
         caller_uid = metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
@@ -154,11 +132,6 @@ def main(config):
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
-        # TODO(developer): Define how miners should process requests.
-        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
-        # This function runs after the blacklist and priority functions have been called.
-        # Below: simple compute logic: return the input value multiplied by 2.
-        # If you change this, your miner will lose emission in the network incentive landscape.
 
         app_data = synapse.perf_input
         synapse.perf_output = pf.get_respond(app_data)
@@ -166,22 +139,12 @@ def main(config):
 
         # The blacklist function decides if a request should be ignored.
     def blacklist_allocate(synapse: compute.protocol.Allocate) -> typing.Tuple[bool, str]:
-        # TODO(developer): Define how miners should blacklist requests. This Function
-        # Runs before the synapse data has been deserialized (i.e. before synapse.data is available).
-        # The synapse is instead contructed via the headers of the request. It is important to blacklist
-        # requests before they are deserialized to avoid wasting resources on requests that will be ignored.
-        # Below: Check that the hotkey is a registered entity in the metagraph.
         if synapse.dendrite.hotkey not in metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
-        # TODO(developer): In practice it would be wise to blacklist requests from entities that
-        # are not validators, or do not have enough stake. This can be checked via metagraph.S
-        # and metagraph.validator_permit. You can always attain the uid of the sender via a
-        # metagraph.hotkeys.index( synapse.dendrite.hotkey ) call.
-        # Otherwise, allow the request to be processed further.
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
@@ -190,12 +153,6 @@ def main(config):
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
     def priority_allocate(synapse: compute.protocol.Allocate) -> float:
-        # TODO(developer): Define how miners should prioritize requests.
-        # Miners may recieve messages from multiple entities at once. This function
-        # determines which request should be processed first. Higher values indicate
-        # that the request should be processed first. Lower values indicate that the
-        # request should be processed later.
-        # Below: simple logic, prioritize requests from entities with more stake.
         caller_uid = metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
@@ -207,11 +164,6 @@ def main(config):
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
     def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
-        # TODO(developer): Define how miners should process requests.
-        # This function runs after the synapse has been deserialized (i.e. after synapse.data is available).
-        # This function runs after the blacklist and priority functions have been called.
-        # Below: simple compute logic: return the input value multiplied by 2.
-        # If you change this, your miner will lose emission in the network incentive landscape.
         
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
@@ -261,8 +213,7 @@ def main(config):
     step = 0
     while True:
         try:
-            # TODO(developer): Define any additional operations to be performed by the miner.
-            # Below: Periodically update our knowledge of the network graph.
+            # Periodically update our knowledge of the network graph.
             if step % 5 == 0:
                 metagraph = subtensor.metagraph(config.netuid)
                 log = (
