@@ -280,7 +280,7 @@ def main( config ):
                     wallet = wallet, # Wallet to sign set weights using hotkey.
                     uids = metagraph.uids, # Uids of the miners to set weights for.
                     weights = weights, # Weights to set for the miners.
-                    wait_for_inclusion = True
+                    wait_for_inclusion = False
                 )
                 last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
