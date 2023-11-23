@@ -243,7 +243,7 @@ def main( config ):
                 if max_score == 0:
                     max_score = 1
 
-                #bt.logging.info(f"ScoreList:{score_list}")
+                original_scores = torch.ones_like(metagraph.S, dtype=torch.float32)
 
                 # Calculate score
                 for index, uid in enumerate(metagraph.uids):
@@ -251,7 +251,10 @@ def main( config ):
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
-                    scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
+                    if len(scores)> index:
+                        scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
+                    else:
+                        scores[index] = original_scores[index]
 
             '''if step % 10 == 2:
                 device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
@@ -280,7 +283,7 @@ def main( config ):
                     wallet = wallet, # Wallet to sign set weights using hotkey.
                     uids = metagraph.uids, # Uids of the miners to set weights for.
                     weights = weights, # Weights to set for the miners.
-                    wait_for_inclusion = True
+                    wait_for_inclusion = False
                 )
                 last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
