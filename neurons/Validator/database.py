@@ -31,49 +31,60 @@ cursor.execute('CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY
 
 #Fetch hotkeys from database that meets device_requirement
 def select_miners_hotkey(device_requirement):
-    #Fetch all records from miner_details table
-    cursor.execute('CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)')
-    cursor.execute("SELECT * FROM miner_details")
-    rows = cursor.fetchall()
+    try:
+        #Fetch all records from miner_details table
+        cursor.execute('CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)')
+        cursor.execute("SELECT * FROM miner_details")
+        rows = cursor.fetchall()
 
-    #Check if the miner meets device_requirement
-    hotkey_list = []
-    for row in rows:
-        details = json.loads(row[2])
-        if check_if_miner_meet(details, device_requirement) == True:
-            hotkey_list.append(row[1])
-    return hotkey_list
+        #Check if the miner meets device_requirement
+        hotkey_list = []
+        for row in rows:
+            details = json.loads(row[2])
+            if check_if_miner_meet(details, device_requirement) == True:
+                hotkey_list.append(row[1])
+        return hotkey_list
+    except Exception as e:
+        bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
+        return []
 
 #Update the miner_details with perfInfo
 def update(hotkey_list, perfInfo_responses):
-    cursor.execute(f'DELETE FROM miner_details')
-    for index, perfInfo in enumerate(perfInfo_responses):
-        cursor.execute("INSERT INTO miner_details (hotkey, details) VALUES (?, ?)", (hotkey_list[index], json.dumps(perfInfo)))
-    conn.commit()
+    try:
+        cursor.execute(f'DELETE FROM miner_details')
+        for index, perfInfo in enumerate(perfInfo_responses):
+            cursor.execute("INSERT INTO miner_details (hotkey, details) VALUES (?, ?)", (hotkey_list[index], json.dumps(perfInfo)))
+        conn.commit()
+    except Exception as e:
+        bt.logging.error(f"Error while updating miner_details : {e}")
 
 #Check if the miner meets required details
 def check_if_miner_meet(details, required_details):
-    #CPU side
-    cpu_miner = details['cpu']
-    required_cpu = required_details['cpu']
-    if required_cpu and cpu_miner and cpu_miner['count'] <= required_cpu['count']:
-        return False
-    
-    #GPU side
-    gpu_miner = details['gpu']
-    required_gpu = required_details['gpu']
-    if required_gpu and gpu_miner and gpu_miner['capacity'] <= required_gpu['capacity']:
-        return False
+    try:
+        #CPU side
+        cpu_miner = details['cpu']
+        required_cpu = required_details['cpu']
+        if required_cpu and cpu_miner and cpu_miner['count'] <= required_cpu['count']:
+            return False
+        
+        #GPU side
+        gpu_miner = details['gpu']
+        required_gpu = required_details['gpu']
+        if required_gpu and gpu_miner and gpu_miner['capacity'] <= required_gpu['capacity'] and gpu_miner['count'] <= required_gpu['count']:
+            return False
 
-    #Hard disk side
-    hard_disk_miner = details['hard_disk']
-    required_hard_disk = required_details['hard_disk']
-    if required_hard_disk and hard_disk_miner and hard_disk_miner['free'] <= required_hard_disk['capacity']:
-        return False
+        #Hard disk side
+        hard_disk_miner = details['hard_disk']
+        required_hard_disk = required_details['hard_disk']
+        if required_hard_disk and hard_disk_miner and hard_disk_miner['free'] <= required_hard_disk['capacity']:
+            return False
 
-    #Ram side
-    ram_miner = details['ram']
-    required_ram = required_details['ram']
-    if required_ram and ram_miner and ram_miner['available'] <= required_ram['capacity']:
+        #Ram side
+        ram_miner = details['ram']
+        required_ram = required_details['ram']
+        if required_ram and ram_miner and ram_miner['available'] <= required_ram['capacity']:
+            return False
+    except Exception as e:
+        bt.logging.error("The format is wrong, please check it again.")
         return False
     return True

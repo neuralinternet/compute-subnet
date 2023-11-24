@@ -22,64 +22,69 @@ import wandb
 
 #Calculate score based on the performance information
 def score(data, hotkey):
-    if not data:
+    try:
+        #Calculate score for each device
+        cpu_score = get_cpu_score(data["cpu"])
+        gpu_score = get_gpu_score(data["gpu"])
+        hard_disk_score = get_hard_disk_score(data["hard_disk"])
+        ram_score = get_ram_score(data["ram"])
+        registered = check_if_registered(hotkey)
+
+        score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
+
+        #Define weights for devices
+        cpu_weight = 0.2
+        gpu_weight = 0.55
+        hard_disk_weight = 0.1
+        ram_weight = 0.15
+
+        weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
+        registration_bonus = registered * 10
+
+        return np.dot(score_list, weight_list).item() * 10 + registration_bonus
+    except Exception as e:
         return 0
-    #Calculate score for each device
-    cpu_score = get_cpu_score(data["cpu"])
-    gpu_score = get_gpu_score(data["gpu"])
-    hard_disk_score = get_hard_disk_score(data["hard_disk"])
-    ram_score = get_ram_score(data["ram"])
-    registered = check_if_registered(hotkey)
-
-    score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
-
-    #Define weights for devices
-    cpu_weight = 0.2
-    gpu_weight = 0.55
-    hard_disk_weight = 0.1
-    ram_weight = 0.15
-
-    weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
-    registration_bonus = registered * 10
-
-    return np.dot(score_list, weight_list).item() * 10 + registration_bonus
 
 #Score of cpu
 def get_cpu_score(cpu_info):
-    if not cpu_info:
+    try:
+        count = cpu_info['count']
+        frequency = cpu_info['frequency']
+        level = 50 #20, 2.5
+        return count * frequency / 1024 / level
+    except Exception as e:
         return 0
-    count = cpu_info['count']
-    frequency = cpu_info['frequency']
-    level = 50 #20, 2.5
-    return count * frequency / 1024 / level
 
 #Score of gpu
 def get_gpu_score(gpu_info):
-    if not gpu_info:
+    try:
+        level = 200000 #20GB, 2GHz
+        capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
+        speed = (gpu_info['graphics_speed'] + gpu_info['memory_speed']) / 2
+        return capacity * speed / level
+    except Exception as e:
         return 0
-    level = 200000 #20GB, 2GHz
-    capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
-    speed = (gpu_info['graphics_speed'] + gpu_info['memory_speed']) / 2
-    return capacity * speed / level
     
 #Score of hard disk
 def get_hard_disk_score(hard_disk_info):
-    if not hard_disk_info:
-        return 0
-    level = 1000000 #1TB, 1g/s
-    capacity = hard_disk_info['free'] / 1024 / 1024 / 1024
-    speed = (hard_disk_info['read_speed'] + hard_disk_info['write_speed']) / 2
+    try:
+        level = 1000000 #1TB, 1g/s
+        capacity = hard_disk_info['free'] / 1024 / 1024 / 1024
+        speed = (hard_disk_info['read_speed'] + hard_disk_info['write_speed']) / 2
 
-    return capacity * speed / level
+        return capacity * speed / level
+    except Exception as e:
+        return 0
 
 #Score of ram
 def get_ram_score(ram_info):
-    if not ram_info:
+    try:
+        level = 200000 #100GB, 2g/s
+        capacity = ram_info['available'] / 1024 / 1024 / 1024
+        speed = ram_info['read_speed']
+        return capacity * speed / level
+    except Exception as e:
         return 0
-    level = 200000 #100GB, 2g/s
-    capacity = ram_info['available'] / 1024 / 1024 / 1024
-    speed = ram_info['read_speed']
-    return capacity * speed / level
 
 #Check if miner is registered
 def check_if_registered(hotkey):

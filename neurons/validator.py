@@ -212,6 +212,7 @@ def main( config ):
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block
+            bt.logging.info(f"{current_block}, {last_updated_block}")
             if current_block - last_updated_block > 100:
                 # TODO(developer): Define how the validator normalizes scores before setting weights.
                 weights = torch.nn.functional.normalize(scores, p=1.0, dim=0)
