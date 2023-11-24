@@ -56,24 +56,24 @@ def check_if_miner_meet(details, required_details):
     #CPU side
     cpu_miner = details['cpu']
     required_cpu = required_details['cpu']
-    if required_cpu and cpu_miner['count'] < required_cpu['count']:
+    if required_cpu and cpu_miner and cpu_miner['count'] <= required_cpu['count']:
         return False
     
     #GPU side
     gpu_miner = details['gpu']
     required_gpu = required_details['gpu']
-    if required_gpu and gpu_miner['capacity'] < required_gpu['capacity']:
+    if required_gpu and gpu_miner and gpu_miner['capacity'] <= required_gpu['capacity']:
         return False
 
     #Hard disk side
     hard_disk_miner = details['hard_disk']
     required_hard_disk = required_details['hard_disk']
-    if required_hard_disk and hard_disk_miner['free'] < required_hard_disk['capacity']:
+    if required_hard_disk and hard_disk_miner and hard_disk_miner['free'] <= required_hard_disk['capacity']:
         return False
 
     #Ram side
     ram_miner = details['ram']
     required_ram = required_details['ram']
-    if required_ram and ram_miner['available'] < required_ram['capacity']:
+    if required_ram and ram_miner and ram_miner['available'] <= required_ram['capacity']:
         return False
     return True
