@@ -75,7 +75,22 @@ def get_config():
     return config
 
 #Generate ssh connection for given device requirements and timeline
-def allocate (metagraph, dendrite, device_requirement, timeline, public_key):
+def allocate (config, device_requirement, timeline, public_key):
+    wallet = bt.wallet( config = config )
+    bt.logging.info(f"Wallet: {wallet}")
+
+    # The subtensor is our connection to the Bittensor blockchain.
+    subtensor = bt.subtensor( config = config )
+    bt.logging.info(f"Subtensor: {subtensor}")
+
+    # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
+    dendrite = bt.dendrite( wallet = wallet )
+    bt.logging.info(f"Dendrite: {dendrite}")
+
+    # The metagraph holds the state of the network, letting us know about other miners.
+    metagraph = subtensor.metagraph( config.netuid )
+    bt.logging.info(f"Metagraph: {metagraph}")
+    
     #Find out the candidates
     candidates_hotkey = db.select_miners_hotkey(device_requirement)
 
@@ -90,11 +105,25 @@ def allocate (metagraph, dendrite, device_requirement, timeline, public_key):
     )
 
     final_candidates_hotkey = []
+    unavailable_uids = []
 
     for index, allocate_response in enumerate(allocate_responses):
+        hotkey = axon_candidates[index].hotkey
         if allocate_response and allocate_response['status'] == True:
-            final_candidates_hotkey.append(axon_candidates[index].hotkey)
+            final_candidates_hotkey.append(hotkey)
+        elif not cs.check_if_registered(hotkey):
+            uid = metagraph.hotkeys.index(hotkey)
+            unavailable_uids.append(uid)
     
+    if unavailable_uids:
+        result = subtensor.set_weights(
+            netuid = config.netuid, # Subnet to set weights on.
+            wallet = wallet, # Wallet to sign set weights using hotkey.
+            uids = unavailable_uids, # Uids of the miners to set weights for.
+            weights = [0] * len(unavailable_uids), # Weights to set for the miners.
+            wait_for_inclusion = False
+        )
+
     #Check if there are candidates
     if final_candidates_hotkey == []:
         return {"status" : False, "msg" : "No proper miner"}
@@ -139,36 +168,10 @@ def filter_axons_with_ip(axons_list):
     return filtered_axons
 
 def main( config ):
-    # Set up logging with the provided configuration and directory.
-    bt.logging(config=config, logging_dir=config.full_path)
-    bt.logging.info(f"Running validator for subnet: {config.netuid} on network: {config.subtensor.chain_endpoint} with config:")
-    # Log the configuration for reference.
-    #bt.logging.info(config)
-
-    # Step 4: Build Bittensor validator objects
-    # These are core Bittensor classes to interact with the network.
-    bt.logging.info("Setting up bittensor objects.")
-
-    # The wallet holds the cryptographic key pairs for the validator.
-    wallet = bt.wallet( config = config )
-    bt.logging.info(f"Wallet: {wallet}")
-
-    # The subtensor is our connection to the Bittensor blockchain.
-    subtensor = bt.subtensor( config = config )
-    bt.logging.info(f"Subtensor: {subtensor}")
-
-    # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-    dendrite = bt.dendrite( wallet = wallet )
-    bt.logging.info(f"Dendrite: {dendrite}")
-
-    # The metagraph holds the state of the network, letting us know about other miners.
-    metagraph = subtensor.metagraph( config.netuid )
-    bt.logging.info(f"Metagraph: {metagraph}")
-
     device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
     timeline = 60
     private_key, public_key = rsa.generate_key_pair()
-    result = allocate(metagraph, dendrite, device_requirement, timeline, public_key)
+    result = allocate(config, device_requirement, timeline, public_key)
 
     if result['status'] == True:
         result_hotkey = result['hotkey']
@@ -177,6 +180,8 @@ def main( config ):
         decrypted_info = rsa.decrypt_data(private_key, base64.b64decode(result_info))
         upload_wandb(result_hotkey)
         bt.logging.info(f"Registered successfully : {decrypted_info}, 'ip':{result['ip']}")
+    else:
+        bt.logging.info(f"Failed : {result['msg']}")
 
 def upload_wandb(hotkey):
     try:
