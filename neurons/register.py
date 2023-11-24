@@ -168,7 +168,7 @@ def filter_axons_with_ip(axons_list):
     return filtered_axons
 
 def main( config ):
-    device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
+    device_requirement = {'cpu':{'count':1}, 'gpu':{'count': 2, 'capacity': 10737418240}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':10737418240}}
     timeline = 60
     private_key, public_key = rsa.generate_key_pair()
     result = allocate(config, device_requirement, timeline, public_key)
