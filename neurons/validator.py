@@ -73,52 +73,6 @@ def get_config():
     # Return the parsed config.
     return config
 
-#Generate ssh connection for given device requirements and timeline
-def allocate (metagraph, dendrite, device_requirement, timeline, public_key):
-    #Find out the candidates
-    candidates_hotkey = db.select_miners_hotkey(device_requirement)
-
-    axon_candidates = []
-    for axon in metagraph.axons:
-        if axon.hotkey in candidates_hotkey:
-            axon_candidates.append(axon)
-
-    allocate_responses = dendrite.query(
-        axon_candidates,
-        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = True)
-    )
-
-    final_candidates_hotkey = []
-
-    for index, allocate_response in enumerate(allocate_responses):
-        if allocate_response and allocate_response['status'] == True:
-            final_candidates_hotkey.append(axon_candidates[index].hotkey)
-    
-    #Check if there are candidates
-    if final_candidates_hotkey == []:
-        return {"status" : False, "msg" : "No proper miner"}
-    
-    #Sort the candidates with their score
-    scores = torch.ones_like(metagraph.S, dtype=torch.float32)
-
-    score_dict = {hotkey: score for hotkey, score in zip([axon.hotkey for axon in metagraph.axons], scores)}
-    sorted_hotkeys = sorted(final_candidates_hotkey, key=lambda hotkey: score_dict.get(hotkey, 0), reverse=True)
-
-    #Loop the sorted candidates and check if one can allocate the device
-    for hotkey in sorted_hotkeys:
-        index = metagraph.hotkeys.index(hotkey)
-        axon = metagraph.axons[index]
-        register_response = dendrite.query(
-            axon,
-            compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = False, public_key = public_key),
-            timeout = 120,
-        )
-        if register_response and register_response['status'] == True:
-            register_response['ip'] = axon.ip
-            return register_response
-        
-    return {"status" : False, "msg" : "No proper miner"}
-
 #Filter axons with ip address, remove axons with same ip address
 def filter_axons_with_ip(axons_list):
     # Set to keep track of unique identifiers
@@ -255,19 +209,6 @@ def main( config ):
                         scores[index] = alpha * scores[index] + (1 - alpha) * score / max_score
                     else:
                         scores[index] = original_scores[index]
-
-            '''if step % 10 == 2:
-                device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}
-                timeline = 60
-                private_key, public_key = rsa.generate_key_pair()
-                result = allocate(metagraph, dendrite, device_requirement, timeline, public_key)
-
-                if result['status'] == True:
-                    result_info = result['info']
-                    private_key = private_key.encode('utf-8')
-                    decrypted_info = rsa.decrypt_data(private_key, base64.b64decode(result_info))
-                    bt.logging.info(f"Registered successfully : {decrypted_info}, 'ip':{result['ip']}")
-                bt.logging.info(f"Register result : {result}")'''
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block
