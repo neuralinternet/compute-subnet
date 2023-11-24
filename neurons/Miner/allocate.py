@@ -22,9 +22,6 @@ import bittensor as bt
 
 #Register for given timeline and device_requirement
 def register(timeline, device_requirement, public_key):
-    if check(timeline, device_requirement)['status'] == False:
-        return {'status' : False}
-    
     try:
         kill_status = ctn.kill_container()
 
