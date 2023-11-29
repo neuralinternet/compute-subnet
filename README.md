@@ -37,8 +37,8 @@ $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bitten
 ```bash
 git clone https://github.com/neuralinternet/Compute-Subnet.git
 cd Compute-Subnet
-python -m pip install -r requirements.txt
-python -m pip install -e .
+python3 -m pip install -r requirements.txt
+python3 -m pip install -e .
 ```
 ## Setup Docker for Miner
 To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu) and start the docker service by running `sudo systemctl start docker` and `sudo apt install at`.
