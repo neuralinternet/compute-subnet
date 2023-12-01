@@ -163,6 +163,17 @@ Applying the weights:
 
 It is important to note that the role of validators, in contrast to miners, does not require the integration of GPU instances. Their function revolves around data integrity and accuracy verification, involving relatively modest network traffic and lower computational demands. As a result, their hardware requirements are less intensive, focusing more on stability and reliability rather than high-performance computation.
 
+```bash
+# To run the validator
+cd neurons
+python -m validator.py 
+    --netuid <your netuid> # The subnet id you want to connect to
+    --subtensor.network <your chain url> # blockchain endpoint you want to connect
+    --wallet.name <your validator wallet>  # name of your wallet
+    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
+    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
+```
+
 ## Resource Allocation Mechanism 
 
 The allocation mechanism within subnet 27 is designed to optimize the utilization of computational resources effectively. Key aspects of this mechanism include:
@@ -181,17 +192,6 @@ Through these functionalities, the allocation mechanism ensures that computation
 
 Validators can send requests to reserve access to resources from miners by specifying the specs manually in the in `register.py` and running this script: https://github.com/neuralinternet/Compute-Subnet/blob/main/neurons/register.py for example:
 ```{'cpu':{'count':1}, 'gpu':{'count':1}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
-
-```bash
-# To run the validator
-cd neurons
-python -m validator.py 
-    --netuid <your netuid> # The subnet id you want to connect to
-    --subtensor.network <your chain url> # blockchain endpoint you want to connect
-    --wallet.name <your validator wallet>  # name of your wallet
-    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
-    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
-```
 
 </div>
 
