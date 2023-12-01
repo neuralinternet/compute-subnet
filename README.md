@@ -179,7 +179,7 @@ The allocation mechanism within subnet 27 is designed to optimize the utilizatio
 Through these functionalities, the allocation mechanism ensures that computational resources are utilized efficiently and effectively, contributing to the overall robustness and performance of the network.
 
 Validators can send requests to reserve access to resources from miners by specifying the specs manually in the in `register.py` and running this script: https://github.com/neuralinternet/Compute-Subnet/blob/main/neurons/register.py for example:
-```{'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
+```{'cpu':{'count':1}, 'gpu':{'count':1}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
 
 ```bash
 # To run the validator
