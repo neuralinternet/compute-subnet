@@ -164,7 +164,7 @@ Applying the weights:
 It is important to note that the role of validators, in contrast to miners, does not require the integration of GPU instances. Their function revolves around data integrity and accuracy verification, involving relatively modest network traffic and lower computational demands. As a result, their hardware requirements are less intensive, focusing more on stability and reliability rather than high-performance computation.
 
 ### Resource Allocation Mechanism 
-The allocation mechanism within our network is designed to optimize the utilization of computational resources effectively. Key aspects of this mechanism include:
+The allocation mechanism within subnet 27 is designed to optimize the utilization of computational resources effectively. Key aspects of this mechanism include:
 
 1. **Resource Requirement Analysis:** The mechanism begins by analyzing the specific resource requirements of each task, including CPU, GPU, memory, and storage needs.
 
