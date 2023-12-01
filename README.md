@@ -163,7 +163,20 @@ Applying the weights:
 
 It is important to note that the role of validators, in contrast to miners, does not require the integration of GPU instances. Their function revolves around data integrity and accuracy verification, involving relatively modest network traffic and lower computational demands. As a result, their hardware requirements are less intensive, focusing more on stability and reliability rather than high-performance computation.
 
-### Resource Allocation
+### Resource Allocation Mechanism 
+The allocation mechanism within our network is designed to optimize the utilization of computational resources effectively. Key aspects of this mechanism include:
+
+1. **Resource Requirement Analysis:** The mechanism begins by analyzing the specific resource requirements of each task, including CPU, GPU, memory, and storage needs.
+
+2. **Miner Selection:** Based on the analysis, the mechanism selects suitable miners that meet the resource requirements. This selection process considers the current availability, performance history, and network weights of the miners.
+
+3. **Dynamic Allocation:** The allocation of tasks to miners is dynamic, allowing for real-time adjustments based on changing network conditions and miner performance.
+
+4. **Efficiency Optimization:** The mechanism aims to maximize network efficiency by matching the most suitable miners to each task, ensuring optimal use of the network's computational power.
+
+5. **Load Balancing:** It also incorporates load balancing strategies to prevent overburdening individual miners, thereby maintaining a healthy and sustainable network ecosystem.
+
+Through these functionalities, the allocation mechanism ensures that computational resources are utilized efficiently and effectively, contributing to the overall robustness and performance of the network.
 Validators can send requests to reserve access to resources from miners by specifying the specs manually in the in `register.py` and running this script: https://github.com/neuralinternet/Compute-Subnet/blob/main/neurons/register.py for example:
 ```{'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
 
