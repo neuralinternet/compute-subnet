@@ -18,7 +18,6 @@
 # Step 1: Import necessary libraries and modules
 import os
 import sys
-from threading import Thread
 import time
 import argparse
 import typing
@@ -38,7 +37,6 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
-    parser.add_argument("--auto_update", default = "minor", help = "Auto update" ) # major, minor, patch, no
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -135,17 +133,6 @@ def main(config):
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
 
-        # Version checking
-        if not compute.utils.check_version(synapse.version, config.auto_update):
-            synapse.version = compute.utils.get_my_version()
-            return synapse
-        
-        synapse.version = compute.utils.get_my_version()
-        
-        # If update is scheduled, not accept any request
-        if compute.utils.update_flag:
-            return synapse
-                
         app_data = synapse.perf_input
         synapse.perf_output = pf.get_respond(app_data)
         return synapse
@@ -177,17 +164,6 @@ def main(config):
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
     def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
-        
-        # Version checking
-        if not compute.utils.check_version(synapse.version, config.auto_update):
-            synapse.version = compute.utils.get_my_version()
-            return synapse
-        
-        synapse.version = compute.utils.get_my_version()
-        
-        # If update is scheduled, not accept any request
-        if compute.utils.update_flag:
-            return synapse
         
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
@@ -230,10 +206,6 @@ def main(config):
     # Start  starts the miner's axon, making it active on the network.
     bt.logging.info(f"Starting axon server on port: {config.axon.port}")
     axon.start()
-    
-    # Set up Auto Update
-    thread = Thread(target=compute.utils.check_for_update, args=(config.auto_update, ))
-    thread.start()
 
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
