@@ -21,6 +21,7 @@ import os
 import sys
 from threading import Thread
 import time
+from typing import List
 import torch
 import argparse
 import traceback
@@ -202,7 +203,7 @@ def main( config ):
                 
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
-                responses = dendrite.query(
+                responses : List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(version=compute.utils.get_my_version(), perf_input = repr(app_data)),
                     timeout = 30
@@ -215,7 +216,8 @@ def main( config ):
                         # check if the validator version should be updated
                         if not compute.utils.check_version(response.version, config.auto_update):
                             continue
-                        binary_data = ast.literal_eval(response) # Convert str to binary data
+                        perf_output = response.perf_output
+                        binary_data = ast.literal_eval(perf_output) # Convert str to binary data
                         decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
                         benchmark_responses.append(decoded_data)
                     else:
