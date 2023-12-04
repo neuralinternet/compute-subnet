@@ -39,7 +39,5 @@ def run(secret_key):
     command = f'cd neurons\ncd Validator\npyinstaller --onefile script.py\ncd ..\ncd ..'
     try:
         subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        #bt.logging.info("PyInstaller completed successfully.")
     except subprocess.CalledProcessError:
-        #bt.logging.info("PyInstaller encountered an error.")
         return False
