@@ -16,6 +16,8 @@
 # DEALINGS IN THE SOFTWARE.
 
 import bittensor as bt
+from typing import Optional, List, Dict
+import pydantic
 
 """
 Represents a software version with major, minor, and patch components.
