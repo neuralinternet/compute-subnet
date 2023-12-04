@@ -22,8 +22,8 @@ import time
 import subprocess
 from cryptography.fernet import Fernet
 
-secret_key = b'dCoFT7R_qA3UqKXcGorLm7uZ3dtkUnPe00mvx9pryZc='#key
-#Return the detailed information of cpu
+secret_key = b't4LXlXijLYmqvswYdo4MpA-fcTLN0fvYo-Qa0gq0wlc='#key
+# Return the detailed information of cpu
 def get_cpu_info():
     try:
         # Get the number of physical CPU cores
@@ -38,16 +38,15 @@ def get_cpu_info():
 
         return info
     except Exception as e:
-        #print(f"Error getting cpu information : {e}")
         return {}
 
-#Return the detailed information of gpu
+# Return the detailed information of gpu
 def get_gpu_info():
     try:
-        #Count of existing gpus
+        # Count of existing gpus
         gpu_count = igpu.count_devices()
 
-        #Get the detailed information for each gpu (name, capacity)
+        # Get the detailed information for each gpu (name, capacity)
         gpu_details = []
         capacity = 0
         for i in range(gpu_count):
@@ -57,7 +56,7 @@ def get_gpu_info():
         
         info = {"count":gpu_count, "capacity": capacity, "details": gpu_details}
 
-        #Measure speed
+        # Measure speed
         if gpu_count:
             # Run nvidia-smi command to get GPU information
             result = subprocess.run(['nvidia-smi', '--query-gpu=clocks.gr,clocks.mem', '--format=csv,noheader'], stdout=subprocess.PIPE)
@@ -71,14 +70,13 @@ def get_gpu_info():
         return info
             
     except Exception as e:
-        #print(f"Error getting cpu information : {e}")
         return {}
 
-#Return the detailed information of hard disk
+# Return the detailed information of hard disk
 def get_hard_disk_info():
     try:
 
-        #Capacity-related information
+        # Capacity-related information
         usage = psutil.disk_usage("/")
         info = {"total": usage.total, "free": usage.free, "used": usage.used}
 
@@ -95,10 +93,7 @@ def get_hard_disk_info():
                     "free": usage.free
                 })
             except Exception as e:
-                #print(f"Error getting disk information for {partition.device}: {e}")
                 continue
-
-        #info["partition"] = partition_info
 
         # Measure write speed
         size_mb = 100
@@ -128,10 +123,9 @@ def get_hard_disk_info():
         
         return info
     except Exception as e:
-        #print(f"Error getting disk information {e}")
         return {}
     
-#Return the detailed information of ram
+# Return the detailed information of ram
 def get_ram_info():
     try:
         virtual_memory = psutil.virtual_memory()
@@ -147,7 +141,7 @@ def get_ram_info():
             "swap_free": swap_memory.free
         }
 
-        #Measure read speed
+        # Measure read speed
         size_mb = 100
         data = bytearray(size_mb * 1024 * 1024)  # Create a byte array of the specified size (in MB)
         start_time = time.time()
@@ -156,7 +150,7 @@ def get_ram_info():
         read_time = end_time - start_time
         read_speed = size_mb / read_time
 
-        #Measure write speed
+        # Measure write speed
         data = bytearray(size_mb * 1024 * 1024)  # Create a byte array of the specified size (in MB)
         start_time = time.time()
         data[0:size_mb * 1024 * 1024] = b'\x00'  # Write zeros to the entire array in RAM
@@ -164,12 +158,11 @@ def get_ram_info():
         write_time = end_time - start_time
         write_speed = size_mb / write_time
 
-        info['read_speed'] = read_speed #unit : MB/s
-        info['write_speed'] = write_speed #unit : MB/s
+        info['read_speed'] = read_speed # unit : MB/s
+        info['write_speed'] = write_speed # unit : MB/s
 
         return info
     except Exception as e:
-        #print(f"Error getting ram information {e}")
         return {}
 
 def get_perf_info():
