@@ -198,7 +198,7 @@ def main( config ):
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses = dendrite.query(
                     axons_list,
-                    compute.protocol.PerfInfo(perf_input = repr(app_data)),
+                    compute.protocol.PerfInfo(version=compute.utils.get_my_version(), perf_input = repr(app_data)),
                     timeout = 30
                 )
 
@@ -206,6 +206,9 @@ def main( config ):
                 benchmark_responses = []
                 for index, response in enumerate(responses):
                     if response:
+                        # check if the validator version should be updated
+                        if not compute.utils.check_version(response.version, config.auto_update):
+                            continue
                         binary_data = ast.literal_eval(response) # Convert str to binary data
                         decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
                         benchmark_responses.append(decoded_data)
