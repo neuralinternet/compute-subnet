@@ -18,6 +18,7 @@
 # Step 1: Import necessary libraries and modules
 import os
 import sys
+from threading import Thread
 import time
 import argparse
 import typing
@@ -229,6 +230,10 @@ def main(config):
     # Start  starts the miner's axon, making it active on the network.
     bt.logging.info(f"Starting axon server on port: {config.axon.port}")
     axon.start()
+    
+    # Set up Auto Update
+    thread = Thread(target=compute.utils.check_for_update, args=(config.auto_update, ))
+    thread.start()
 
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")

@@ -19,6 +19,7 @@
 
 import os
 import sys
+from threading import Thread
 import time
 import torch
 import argparse
@@ -144,7 +145,11 @@ def main( config ):
     last_updated_block = curr_block - (curr_block % 100)
     last_reset_weights_block = curr_block
      
-    # Step 7: The Main Validation Loop
+    # Step 7: Set up Auto Update
+    thread = Thread(target=compute.utils.check_for_update, args=(config.auto_update, ))
+    thread.start()
+     
+    # Step 8: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
     while True:
