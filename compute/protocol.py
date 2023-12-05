@@ -19,25 +19,9 @@ import bittensor as bt
 from typing import Optional, List, Dict
 import pydantic
 
-"""
-Represents a software version with major, minor, and patch components.
-"""
-class Version (pydantic.BaseModel):
-    major_version: Optional[int] = None
-    minor_version: Optional[int] = None
-    patch_version: Optional[int] = None
-
-"""
-Extends the Bittensor Synapse with an additional version attribute, 
-used for compatibility and version control in operations.
-"""
-class ComputeSynapse ( bt.Synapse ):
-    version: Optional[Version] = None
-
-
-class PerfInfo( ComputeSynapse ):
+class PerfInfo( bt.Synapse ):
     """
-    A simple performance information protocol representation which uses ComputeSynapse as its base.
+    A simple performance information protocol representation which uses bt.Synapse as its base.
     This protocol helps in handling performance information request and response communication between
     the miner and the validator.
 
@@ -72,7 +56,7 @@ class PerfInfo( ComputeSynapse ):
     #     """
     #     return self.perf_output
 
-class Allocate( ComputeSynapse ):
+class Allocate( bt.Synapse ):
     """
     A simple Allocate protocol representation which uses bt.Synapse as its base.
     This protocol helps in handling Allocate request and response communication between

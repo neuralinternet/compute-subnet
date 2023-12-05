@@ -101,7 +101,7 @@ def allocate (config, device_requirement, timeline, public_key):
 
     responses = dendrite.query(
         axon_candidates,
-        compute.protocol.Allocate(version = compute.utils.get_my_version(), timeline = timeline, device_requirement = device_requirement, checking = True)
+        compute.protocol.Allocate(timeline = timeline, device_requirement = device_requirement, checking = True)
     )
 
     final_candidates_hotkey = []

@@ -19,7 +19,6 @@
 
 import os
 import sys
-from threading import Thread
 import time
 from typing import List
 import torch
@@ -48,7 +47,6 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument( '--netuid', type = int, default = 1, help = "The chain subnet uid." )
-    parser.add_argument("--auto_update", default = "minor", help = "Auto update" ) # major, minor, patch, no
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -146,11 +144,7 @@ def main( config ):
     last_updated_block = curr_block - (curr_block % 100)
     last_reset_weights_block = curr_block
      
-    # Step 7: Set up Auto Update
-    thread = Thread(target=compute.utils.check_for_update, args=(config.auto_update, ))
-    thread.start()
-     
-    # Step 8: The Main Validation Loop
+    # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
     while True:
@@ -205,7 +199,7 @@ def main( config ):
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses : List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
-                    compute.protocol.PerfInfo(version=compute.utils.get_my_version(), perf_input = repr(app_data)),
+                    compute.protocol.PerfInfo(perf_input = repr(app_data)),
                     timeout = 30
                 )
 
