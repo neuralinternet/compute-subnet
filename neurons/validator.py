@@ -205,12 +205,17 @@ def main( config ):
                 # Format responses and save them to benchmark_responses
                 benchmark_responses = []
                 for index, response in enumerate(responses):
-                    if response:
-                        binary_data = ast.literal_eval(response) # Convert str to binary data
-                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
-                        benchmark_responses.append(decoded_data)
-                    else:
+                    try:
+                        if response:
+                            binary_data = ast.literal_eval(response) # Convert str to binary data
+                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                            benchmark_responses.append(decoded_data)
+                        else:
+                            benchmark_responses.append({})
+                    except Exception as e:
+                        bt.logging.error(f"Error parsing response: {e}")
                         benchmark_responses.append({})
+
                     
                 bt.logging.info(f"✅ Benchmark results : {benchmark_responses}")
 
