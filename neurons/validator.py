@@ -199,7 +199,7 @@ def main( config ):
                 responses = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(perf_input = repr(app_data)),
-                    timeout = 30
+                    timeout = 120
                 )
 
                 # Format responses and save them to benchmark_responses
