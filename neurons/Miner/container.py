@@ -17,6 +17,7 @@
 # Step 1: Import necessary libraries and modules
 
 import docker
+from docker.types import DeviceRequest
 import sys
 import subprocess
 import json
@@ -98,16 +99,15 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
         #client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
         # Step 2: Run the Docker container
+        device_requests = [DeviceRequest(count=-1, capabilities=[['gpu']])]
+        if gpu_usage['capacity'] == 0:
+            device_requests = []
         container = client.containers.run(
             image=image_name,
             name=container_name,
             detach=True,
-            #cpuset_cpus=cpu_assignment,
-            #mem_limit=ram_limit,
-            #storage_opt={"size": hard_disk_capacity},
-            #volumes={volume_name: {'bind': volume_path, 'mode': 'rw'}},
-            #gpus=gpu_capacity,
-            #environment = ["NVIDIA_VISIBLE_DEVICES=all"],
+            device_requests=device_requests,
+            environment = ["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port}
         )
         
