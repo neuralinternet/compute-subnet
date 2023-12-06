@@ -75,25 +75,18 @@ def get_config():
 # Filter the axons with uids_list, remove those with the same IP address.
 def filter_axons(axons_list, uids_list):
     # Set to keep track of unique identifiers
-    unique_ip_addresses = set()
-    duplicated_ip_addresses = set()
+    unique_ip_addresses_and_port = set()
 
-    for index, axon in enumerate(axons_list):
-        ip_address = axon.ip
-
-        if ip_address not in unique_ip_addresses:
-            unique_ip_addresses.add(ip_address)
-        else:
-            duplicated_ip_addresses.add(ip_address)
-    
     # List to store filtered axons
     filtered_axons = []
     filtered_uids = []
     filtered_hotkeys = []
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
+        port = axon.port
 
-        if ip_address not in duplicated_ip_addresses:
+        if (ip_address, port) not in unique_ip_addresses_and_port:
+            unique_ip_addresses_and_port.add((ip_address, port))
             filtered_axons.append(axon)
             filtered_uids.append(uids_list[index])
             filtered_hotkeys.append(axon.hotkey)
