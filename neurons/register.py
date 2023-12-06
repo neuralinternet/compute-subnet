@@ -45,6 +45,8 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument( '--netuid', type = int, default = 1, help = "The chain subnet uid." )
+    parser.add_argument( '--gpu_type', type = str, default = "", help = "The type of GPU required." )
+    parser.add_argument( '--gpu_size', type = int, default = 0, help = "The capacity of GPU required in MB." )
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -136,7 +138,9 @@ def allocate (config, device_requirement, timeline, public_key):
     return {"status" : False, "msg" : "No proper miner"}
 
 def main( config ):
-    device_requirement = {'cpu':{'count':1}, 'gpu':{'count':1, 'capacity':10240, 'type':'PCIe'}, 'hard_disk':{'capacity':1073741824}, 'ram':{'capacity':1073741824}}
+    device_requirement = {'cpu':{'count':1}, 'gpu':{}, 'hard_disk':{'capacity':1073741824}, 'ram':{'capacity':1073741824}}
+    if config.gpu_type != "" and config.gpu_size != 0:
+        device_requirement['gpu'] = {'count':1, 'capacity':config.gpu_size, 'type':config.gpu_type}
     timeline = 60
     private_key, public_key = rsa.generate_key_pair()
     result = allocate(config, device_requirement, timeline, public_key)
