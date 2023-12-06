@@ -32,29 +32,22 @@ Checks if the provided version matches the current compute protocol version.
 
 Args:
     version (compute.protocol.Version): The version to check.
-    flag: major | minor | patch | no
 
 Returns:
     bool: True if the versions match, False otherwise.
 """
-def check_version( version: compute.protocol.Version, flag ) -> bool:
+def check_version( version: compute.protocol.Version ) -> bool:
     global update_flag
     version_str = compute.__version__
     major, minor, patch = version_str.split('.')
     other_version_str = f"{version.major_version}.{version.minor_version}.{version.patch_version}"
     if version.major_version != int(major):
         bt.logging.error("🔴 Major version mismatch", f"yours: {version_str}, other's: {other_version_str}")
-        if version.major_version > int(major) and flag != 'no':
-            set_update_flag()
         return False
     elif version.minor_version != int(minor):
         bt.logging.warning("🟡 Minor version mismatch", f"yours: {version_str}, other's: {other_version_str}")
-        if version.minor_version > int(minor) and (flag == 'minor' or flag == 'patch'):
-            set_update_flag()
     elif version.patch_version != int(patch):
         bt.logging.warning("🔵 Patch version mismatch", f"yours: {version_str}, other's: {other_version_str}")
-        if version.patch_version > int(patch) and flag == 'patch':
-            set_update_flag()
     return True
 
 
@@ -87,7 +80,7 @@ def update_repository(flag = 'patch'):
         new_major, new_minor, new_patch = new_version.split('.')
         major, minor, patch = compute.__version__.split('.')
         if new_version != compute.__version__:
-            os.system("python -e pip install -e .")
+            os.system("python3 -e pip install -e .")
         if major != new_major:
             return True
         if flag == 'major':

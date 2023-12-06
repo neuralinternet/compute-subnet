@@ -255,6 +255,12 @@ def main( config ):
                 if result: bt.logging.success('Successfully set weights.')
                 else: bt.logging.error('Failed to set weights.') 
 
+            # Check for auto update
+            if step % 5 == 0 and config.auto_update != "no":
+                if compute.utils.update_repository(config.auto_update):
+                    bt.logging.success("🔁 Repository updated, exiting validator")
+                    exit(0)
+
             # End the current step and prepare for the next iteration.
             step += 1
             # Sleep for a duration equivalent to the block time (i.e., time between successive blocks).
