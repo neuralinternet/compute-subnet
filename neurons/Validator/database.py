@@ -72,8 +72,14 @@ def check_if_miner_meet(details, required_details):
         # GPU side
         gpu_miner = details['gpu']
         required_gpu = required_details['gpu']
-        if required_gpu and (not gpu_miner or gpu_miner['capacity'] < required_gpu['capacity'] or gpu_miner['count'] < required_gpu['count']):
-            return False
+        if required_gpu:
+            if not gpu_miner or gpu_miner['capacity'] != required_gpu['capacity'] or gpu_miner['count'] < required_gpu['count']:
+                return False
+            else:
+                gpu_name = str(gpu_miner['details'][0]['name']).lower()
+                required_type = str(required_gpu['type']).lower()
+                if required_type not in gpu_name:
+                    return False
 
         # Hard disk side
         hard_disk_miner = details['hard_disk']

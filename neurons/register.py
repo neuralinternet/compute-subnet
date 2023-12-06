@@ -136,7 +136,7 @@ def allocate (config, device_requirement, timeline, public_key):
     return {"status" : False, "msg" : "No proper miner"}
 
 def main( config ):
-    device_requirement = {'cpu':{'count':1}, 'gpu':{'count':1, 'capacity':10240}, 'hard_disk':{'capacity':1073741824}, 'ram':{'capacity':1073741824}}
+    device_requirement = {'cpu':{'count':1}, 'gpu':{'count':1, 'capacity':10240, 'type':'PCIe'}, 'hard_disk':{'capacity':1073741824}, 'ram':{'capacity':1073741824}}
     timeline = 60
     private_key, public_key = rsa.generate_key_pair()
     result = allocate(config, device_requirement, timeline, public_key)
