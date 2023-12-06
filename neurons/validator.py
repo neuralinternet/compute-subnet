@@ -76,17 +76,24 @@ def get_config():
 def filter_axons(axons_list, uids_list):
     # Set to keep track of unique identifiers
     unique_ip_addresses = set()
-
-    # List to store filtered axons
-    filtered_axons = []
-    filtered_uids = []
-    filtered_hotkeys = []
+    duplicated_ip_addresses = set()
 
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
 
         if ip_address not in unique_ip_addresses:
             unique_ip_addresses.add(ip_address)
+        else:
+            duplicated_ip_addresses.add(ip_address)
+    
+    # List to store filtered axons
+    filtered_axons = []
+    filtered_uids = []
+    filtered_hotkeys = []
+    for index, axon in enumerate(axons_list):
+        ip_address = axon.ip
+
+        if ip_address not in duplicated_ip_addresses:
             filtered_axons.append(axon)
             filtered_uids.append(uids_list[index])
             filtered_hotkeys.append(axon.hotkey)
