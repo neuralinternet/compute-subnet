@@ -133,6 +133,17 @@ def main(config):
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
 
+        # Version checking
+        if not compute.utils.check_version(synapse.version):
+            synapse.version = compute.utils.get_my_version()
+            return synapse
+        
+        synapse.version = compute.utils.get_my_version()
+        
+        # If update is scheduled, not accept any request
+        if compute.utils.update_flag:
+            return synapse
+        
         app_data = synapse.perf_input
         synapse.perf_output = pf.get_respond(app_data)
         return synapse
