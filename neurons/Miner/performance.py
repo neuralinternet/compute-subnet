@@ -22,12 +22,15 @@ import json
 
 #Respond the execution of the application
 def get_respond(app_data):
-    app_data = ast.literal_eval(app_data)
-    file_path = './neurons/Miner/app'  # Change the file name and extension as needed
-
-    # Write the bytes data to a file
-    with open(file_path, 'wb') as file:
-        file.write(app_data)
-    subprocess.run('chmod +x ' + file_path, shell=True, check=True)
-    result = subprocess.check_output(file_path, shell=True, text=True)
-    return result
+    try:
+        app_data = ast.literal_eval(app_data)
+        file_path = './neurons/Miner/app'  # Change the file name and extension as needed
+    
+        # Write the bytes data to a file
+        with open(file_path, 'wb') as file:
+            file.write(app_data)
+        subprocess.run('chmod +x ' + file_path, shell=True, check=True)
+        result = subprocess.check_output(file_path, shell=True, text=True)
+        return result
+    except Exception as e:
+        return {}
