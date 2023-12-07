@@ -20,26 +20,29 @@ import bittensor as bt
 import re
 
 def run(secret_key):
-    script_name = './neurons/Validator/script.py'
-
-    # Read the content of the script.py file
-    with open(script_name, 'r') as file:
-        script_content = file.read()
-
-    # Find and replace the script_key value
-
-    pattern = r"secret_key\s*=\s*.*?#key"
-    script_content = re.sub(pattern, f"secret_key = {secret_key}#key", script_content, count=1)
-
-    # Write the modified content back to the file
-    with open(script_name, 'w') as file:
-        file.write(script_content)
-
-    # Run the pyinstaller command
-    command = f'cd neurons\ncd Validator\npyinstaller --onefile script.py\ncd ..\ncd ..'
     try:
-        subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError as e:
-        print("An error occurred while executing the command.")
-        print("Exit status:", e.returncode)
-        print("Error output:", e.stderr.decode())
+        script_name = './neurons/Validator/script.py'
+    
+        # Read the content of the script.py file
+        with open(script_name, 'r') as file:
+            script_content = file.read()
+    
+        # Find and replace the script_key value
+    
+        pattern = r"secret_key\s*=\s*.*?#key"
+        script_content = re.sub(pattern, f"secret_key = {secret_key}#key", script_content, count=1)
+    
+        # Write the modified content back to the file
+        with open(script_name, 'w') as file:
+            file.write(script_content)
+    
+        # Run the pyinstaller command
+        command = f'cd neurons\ncd Validator\npyinstaller --onefile script.py\ncd ..\ncd ..'
+        try:
+            subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as e:
+            print("An error occurred while executing the command.")
+            print("Exit status:", e.returncode)
+            print("Error output:", e.stderr.decode())
+    except Exception as e:
+        print(f"Error parsing response: {e}")
