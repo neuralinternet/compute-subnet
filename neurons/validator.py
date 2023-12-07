@@ -196,11 +196,17 @@ def main( config ):
                 cipher_suite = Fernet(secret_key)
                 # Compile the script and generate an exe.
                 ag.run(secret_key)
-                # Read the exe file and save it to app_data.
-                with open('neurons//Validator//dist//script', 'rb') as file:
-                    # Read the entire content of the EXE file
-                    app_data = file.read()
-                
+                try:
+                    
+                    main_dir = os.path.dirname(os.path.abspath(__file__))
+                    file_name = os.path.join(main_dir, 'Validator/dist/script')
+                    # Read the exe file and save it to app_data.
+                    with open(file_name, 'rb') as file:
+                        # Read the entire content of the EXE file
+                        app_data = file.read()
+                except Exception as e:
+                    bt.logging.error(f"{e}")
+                    continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses = dendrite.query(
@@ -220,7 +226,7 @@ def main( config ):
                         else:
                             benchmark_responses.append({})
                     except Exception as e:
-                        bt.logging.error(f"Error parsing response: {e}")
+                        #bt.logging.error(f"Error parsing response: {e}")
                         benchmark_responses.append({})
 
                     
