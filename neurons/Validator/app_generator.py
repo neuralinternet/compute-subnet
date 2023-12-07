@@ -44,5 +44,6 @@ def run(secret_key):
             subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
             bt.logging.error("An error occurred while generating the app.")
+            bt.logging.error(f"Error output:{e.stderr.decode()}")
     except Exception as e:
         bt.logging.error(f"{e}")
