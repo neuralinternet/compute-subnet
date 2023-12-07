@@ -197,9 +197,9 @@ def main( config ):
                 # Compile the script and generate an exe.
                 ag.run(secret_key)
                 try:
-                    
                     main_dir = os.path.dirname(os.path.abspath(__file__))
                     file_name = os.path.join(main_dir, 'Validator/dist/script')
+                    print(f"{file_name}")
                     # Read the exe file and save it to app_data.
                     with open(file_name, 'rb') as file:
                         # Read the entire content of the EXE file
