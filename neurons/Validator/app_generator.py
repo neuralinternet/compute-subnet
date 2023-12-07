@@ -39,5 +39,7 @@ def run(secret_key):
     command = f'cd neurons\ncd Validator\npyinstaller --onefile script.py\ncd ..\ncd ..'
     try:
         subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.CalledProcessError:
-        return False
+    except subprocess.CalledProcessError as e:
+        print("An error occurred while executing the command.")
+        print("Exit status:", e.returncode)
+        print("Error output:", e.stderr.decode())
