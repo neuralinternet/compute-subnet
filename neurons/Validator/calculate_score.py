@@ -33,10 +33,10 @@ def score(data, hotkey):
         score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
 
         # Define weights for devices
-        cpu_weight = 0.2
-        gpu_weight = 0.55
-        hard_disk_weight = 0.1
-        ram_weight = 0.15
+        cpu_weight = 0.02
+        gpu_weight = 0.95
+        hard_disk_weight = 0.015
+        ram_weight = 0.015
 
         weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
         registration_bonus = registered * 100
@@ -50,7 +50,7 @@ def get_cpu_score(cpu_info):
     try:
         count = cpu_info['count']
         frequency = cpu_info['frequency']
-        level = 50 # 20, 2.5
+        level = 75 # 30, 2.5
         return count * frequency / 1024 / level
     except Exception as e:
         return 0
@@ -58,7 +58,7 @@ def get_cpu_score(cpu_info):
 # Score of gpu
 def get_gpu_score(gpu_info):
     try:
-        level = 200000 # 20GB, 2GHz
+        level = 100000 # 10GB, 2GHz
         capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
         speed = (gpu_info['graphics_speed'] + gpu_info['memory_speed']) / 2
         return capacity * speed / level
@@ -68,7 +68,7 @@ def get_gpu_score(gpu_info):
 # Score of hard disk
 def get_hard_disk_score(hard_disk_info):
     try:
-        level = 1000000 # 1TB, 1g/s
+        level = 10000000 # 1TB, 10g/s
         capacity = hard_disk_info['free'] / 1024 / 1024 / 1024
         speed = (hard_disk_info['read_speed'] + hard_disk_info['write_speed']) / 2
 

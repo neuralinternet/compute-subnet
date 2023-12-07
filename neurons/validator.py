@@ -198,11 +198,16 @@ def main( config ):
                 cipher_suite = Fernet(secret_key)
                 # Compile the script and generate an exe.
                 ag.run(secret_key)
-                # Read the exe file and save it to app_data.
-                with open('neurons//Validator//dist//script', 'rb') as file:
-                    # Read the entire content of the EXE file
-                    app_data = file.read()
-                
+                try:
+                    main_dir = os.path.dirname(os.path.abspath(__file__))
+                    file_name = os.path.join(main_dir, 'Validator/dist/script')
+                    # Read the exe file and save it to app_data.
+                    with open(file_name, 'rb') as file:
+                        # Read the entire content of the EXE file
+                        app_data = file.read()
+                except Exception as e:
+                    bt.logging.error(f"{e}")
+                    continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses : List[compute.protocol.PerfInfo] = dendrite.query(
@@ -214,15 +219,18 @@ def main( config ):
                 # Format responses and save them to benchmark_responses
                 benchmark_responses = []
                 for index, response in enumerate(responses):
-                    if response:
-                        # check if the validator version should be updated
-                        if not compute.utils.check_version(response.version, config.auto_update):
-                            continue
-                        perf_output = response.perf_output
-                        binary_data = ast.literal_eval(perf_output) # Convert str to binary data
-                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
-                        benchmark_responses.append(decoded_data)
-                    else:
+                    try:
+                        if response:
+                            # check if the validator version should be updated
+                            if not compute.utils.check_version(response.version, config.auto_update):
+                                continue
+                            binary_data = ast.literal_eval(response) # Convert str to binary data
+                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                            benchmark_responses.append(decoded_data)
+                        else:
+                            benchmark_responses.append({})
+                    except Exception as e:
+                        #bt.logging.error(f"Error parsing response: {e}")
                         benchmark_responses.append({})
 
                     
