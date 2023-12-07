@@ -213,18 +213,15 @@ def main( config ):
                 # Format responses and save them to benchmark_responses
                 benchmark_responses = []
                 for index, response in enumerate(responses):
-                    try:
-                        if response:
-                            if not compute.utils.check_version(response.version, config.auto_update):
-                                continue
-                            perf_output = response.perf_output
-                            binary_data = ast.literal_eval(perf_output) # Convert str to binary data
-                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
-                            benchmark_responses.append(decoded_data)
-                        else:
-                            benchmark_responses.append({})
-                    except Exception as e:
-                        bt.logging.error(f"Error parsing response: {e}")
+                    if response:
+                        # check if the validator version should be updated
+                        if not compute.utils.check_version(response.version, config.auto_update):
+                            continue
+                        perf_output = response.perf_output
+                        binary_data = ast.literal_eval(perf_output) # Convert str to binary data
+                        decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                        benchmark_responses.append(decoded_data)
+                    else:
                         benchmark_responses.append({})
 
                     
