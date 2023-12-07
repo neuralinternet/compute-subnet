@@ -18,10 +18,12 @@
 import subprocess
 import bittensor as bt
 import re
+import os
 
 def run(secret_key):
     try:
-        script_name = './neurons/Validator/script.py'
+        main_dir = os.path.dirname(os.path.abspath(__file__))
+        script_name = os.path.join(main_dir, 'script.py')
     
         # Read the content of the script.py file
         with open(script_name, 'r') as file:
@@ -37,7 +39,7 @@ def run(secret_key):
             file.write(script_content)
     
         # Run the pyinstaller command
-        command = f'cd neurons\ncd Validator\npyinstaller --onefile script.py\ncd ..\ncd ..'
+        command = f'pyinstaller --onefile "{script_name}"'
         try:
             subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
