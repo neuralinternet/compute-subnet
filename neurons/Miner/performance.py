@@ -19,12 +19,15 @@ import bittensor as bt
 import subprocess
 import ast
 import json
+import os
 
 #Respond the execution of the application
 def get_respond(app_data):
     try:
         app_data = ast.literal_eval(app_data)
-        file_path = './neurons/Miner/app'  # Change the file name and extension as needed
+        
+        main_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(main_dir, 'app')
     
         # Write the bytes data to a file
         with open(file_path, 'wb') as file:
