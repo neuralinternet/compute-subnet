@@ -20,6 +20,7 @@
 import os
 import sys
 import time
+from typing import List
 import torch
 import argparse
 import traceback
@@ -203,7 +204,7 @@ def main( config ):
                 
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
-                responses = dendrite.query(
+                responses : List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(perf_input = repr(app_data)),
                     timeout = 120
@@ -214,7 +215,10 @@ def main( config ):
                 for index, response in enumerate(responses):
                     try:
                         if response:
-                            binary_data = ast.literal_eval(response) # Convert str to binary data
+                            if not compute.utils.check_version(response.version, config.auto_update):
+                                continue
+                            perf_output = response.perf_output
+                            binary_data = ast.literal_eval(perf_output) # Convert str to binary data
                             decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
                             benchmark_responses.append(decoded_data)
                         else:
@@ -261,6 +265,12 @@ def main( config ):
                 last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
                 else: bt.logging.error('Failed to set weights.') 
+
+            # Check for auto update
+            if step % 5 == 0 and config.auto_update != "no":
+                if compute.utils.update_repository(config.auto_update):
+                    bt.logging.success("🔁 Repository updated, exiting validator")
+                    exit(0)
 
             # End the current step and prepare for the next iteration.
             step += 1
