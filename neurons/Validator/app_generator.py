@@ -39,12 +39,10 @@ def run(secret_key):
             file.write(script_content)
     
         # Run the pyinstaller command
-        command = f'pyinstaller --onefile "{script_name}"'
+        command = f'cd {main_dir}\npyinstaller --onefile script.py'
         try:
             subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as e:
-            print("An error occurred while executing the command.")
-            print("Exit status:", e.returncode)
-            print("Error output:", e.stderr.decode())
+            bt.logging.error("An error occurred while generating the app.")
     except Exception as e:
-        print(f"Error parsing response: {e}")
+        bt.logging.error(f"{e}")
