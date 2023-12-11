@@ -47,7 +47,7 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument( '--netuid', type = int, default = 1, help = "The chain subnet uid." )
-    parser.add_argument("--auto_update", default="no", help="Auto update")  # major, minor, patch, no
+    parser.add_argument("--auto_update", default="yes", help="Auto update")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -187,6 +187,9 @@ def main( config ):
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
+                # Check for auto update
+                if config.auto_update == "yes":
+                    compute.util.try_update()
                 # Filter axons with stake and ip address.
                 queryable_uids = [uid for index, uid in enumerate(uids) if metagraph.neurons[uid].axon_info.ip != '0.0.0.0' and metagraph.total_stake[index] < 1.024e3]
                 queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
@@ -221,9 +224,6 @@ def main( config ):
                 for index, response in enumerate(responses):
                     try:
                         if response:
-                            # check if the validator version should be updated
-                            if not compute.utils.check_version(response.version, config.auto_update):
-                                continue
                             binary_data = ast.literal_eval(response) # Convert str to binary data
                             decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
                             benchmark_responses.append(decoded_data)
@@ -270,13 +270,7 @@ def main( config ):
                 )
                 last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
-                else: bt.logging.error('Failed to set weights.') 
-
-            # Check for auto update
-            if step % 5 == 0 and config.auto_update != "no":
-                if compute.utils.update_repository(config.auto_update):
-                    bt.logging.success("🔁 Repository updated, exiting validator")
-                    exit(0)
+                else: bt.logging.error('Failed to set weights.')
 
             # End the current step and prepare for the next iteration.
             step += 1

@@ -1,106 +1,153 @@
-import compute
-import bittensor as bt
-import time
-from datetime import datetime
-import codecs
+"""
+The MIT License (MIT)
+Copyright © 2023 demon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+documentation files (the “Software”), to deal in the Software without restriction, including without limitation
+the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
+and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of
+the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+"""
+from os import path
 import re
+import requests
+import sys
+import bittensor as bt
 import os
+import torch
+import git
+import subprocess
+import codecs
 
-update_flag = False
-update_at = 0
+def version2number(version):
+    return int(version.replace('.', '').replace('-', '').replace('_', ''))
 
-def timestamp_to_datestring(timestamp):
-    # Convert the timestamp to a datetime object
-    dt_object = datetime.fromtimestamp(timestamp)
+def get_remote_version():
+    url = "https://raw.githubusercontent.com/neuralinternet/Compute-Subnet/main/compute/__init__.py"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        
+        lines = response.text.split('\n')
+        for line in lines:
+            if line.startswith('__version__'):
+                version_info = line.split('=')[1].strip(' "\'').replace('"', '')
+                return version_info
+    else:
+        print("Failed to get file content")
+        return 0
 
-    # Format the datetime object as an ISO 8601 string
-    iso_date_string = dt_object.isoformat()
-    return iso_date_string
+def get_local_version():
+    try:
+        # loading version from __init__.py
+        here = path.abspath(path.dirname(__file__))
+        with codecs.open(
+            os.path.join(here, "__init__.py"), encoding="utf-8"
+        ) as init_file:
+            version_match = re.search(
+                r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M
+            )
+            version_string = version_match.group(1)
+        return version_string
+    except Exception as e:
+        bt.logging.error(f"Error getting local version. : {e}")
+        return ""
 
-def set_update_flag():
-    global update_flag
-    global update_at
-    if update_flag:
-        bt.logging.info(f"🧭 Auto Update scheduled on {timestamp_to_datestring(update_at)}")
-        return
-    update_flag = True
-    update_at = time.time() + 120
-    bt.logging.info(f"🧭 Auto Update scheduled on {timestamp_to_datestring(update_at)}")
-
-"""
-Checks if the provided version matches the current compute protocol version.
-
-Args:
-    version (compute.protocol.Version): The version to check.
-
-Returns:
-    bool: True if the versions match, False otherwise.
-"""
-def check_version( version: compute.protocol.Version ) -> bool:
-    global update_flag
-    version_str = compute.__version__
-    major, minor, patch = version_str.split('.')
-    other_version_str = f"{version.major_version}.{version.minor_version}.{version.patch_version}"
-    if version.major_version != int(major):
-        bt.logging.error("🔴 Major version mismatch", f"yours: {version_str}, other's: {other_version_str}")
+def check_version_updated():
+    remote_version = get_remote_version()
+    local_version = get_local_version()
+    bt.logging.info(f"Version check - remote_version: {remote_version}, local_version: {local_version}")
+    
+    
+    if version2number(remote_version) != version2number(local_version):
+        bt.logging.info(f"👩‍👦Update to the latest version is required")
+        return True
+    else:
         return False
-    elif version.minor_version != int(minor):
-        bt.logging.warning("🟡 Minor version mismatch", f"yours: {version_str}, other's: {other_version_str}")
-    elif version.patch_version != int(patch):
-        bt.logging.warning("🔵 Patch version mismatch", f"yours: {version_str}, other's: {other_version_str}")
-    return True
 
+def update_repo():
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        
+        origin = repo.remotes.origin
 
-"""
-Retrieves the current version of the compute protocol being used.
-
-Returns:
-    compute.protocol.Version: The version object with major, minor, and patch components.
-"""
-def get_my_version() -> compute.protocol.Version:
-    version_str = compute.__version__
-    major, minor, patch = version_str.split('.')
-    return compute.protocol.Version(
-        major_version = int(major),
-        minor_version = int(minor),
-        patch_version = int(patch)
-    )
-
-'''
-Update repository if there is a new version available
-'''
-def update_repository(flag = 'patch'):
-    bt.logging.info("Updating repository")
-    os.system("git pull")
-    here = os.path.abspath(os.path.dirname(__file__))
-    with codecs.open(os.path.join(here, '__init__.py'), encoding='utf-8') as init_file:
-        version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
-        new_version = version_match.group(1)
-        bt.logging.success(f"current version: {compute.__version__}, new version: {new_version}")
-        new_major, new_minor, new_patch = new_version.split('.')
-        major, minor, patch = compute.__version__.split('.')
-        if new_version != compute.__version__:
-            os.system("python3 -e pip install -e .")
-        if major != new_major:
-            return True
-        if flag == 'major':
+        # origin.fetch()
+        if repo.is_dirty(untracked_files=True):
+            bt.logging.error("Update failed: Uncommited changes detected. Please commit changes")
             return False
-        if minor != new_minor:
+        try:
+            bt.logging.info("Try pulling remote repository")
+            origin.pull()
+            bt.logging.info("pulling success")
             return True
-        if flag == 'minor':
-            return False
-        if patch != new_patch:
-            return True
+        except git.exc.GitCommandError as e:
+            bt.logging.info(f"update : Merge conflict detected: {e} Recommend you manually commit changes and update")
+            return handle_merge_conflict(repo)
+        
+    except Exception as e:
+        bt.logging.error(f"update failed: {e} Recommend you manually commit changes and update")
+    
     return False
+        
+def handle_merge_conflict(repo):
+    try:
+        repo.git.reset("--merge")
+        origin = repo.remotes.origin
+        current_branch = repo.active_branch
+        origin.pull(current_branch.name)
 
-def check_for_update(flag = 'patch'):
-    global update_flag
-    global update_at
-    while True:
-        if update_flag:
-            if time.time() >= update_at:
-                update_repository(flag)
-                bt.logging.info("🔁 Exiting process for update.")
-                os._exit(0)
-            return
-        time.sleep(1)
+        for item in repo.index.diff(None):
+            file_path = item.a_path
+            bt.logging.info(f"Resolving conflict in file: {file_path}")
+            repo.git.checkout('--theirs', file_path)
+        repo.index.commit("Resolved merge conflicts automatically")
+        bt.logging.info(f"Merge conflicts resolved, repository updated to remote state.")
+        bt.logging.info(f"✅ Repo update success")
+        return True
+    except git.GitCommandError as e:
+        bt.logging.error(f"update failed: {e} Recommend you manually commit changes and update")
+        return False
+
+def version2number(version_string):
+    version_digits = version_string.split(".")
+    return 100 * version_digits[0] + 10 * version_digits[1] + version_digits[2]
+
+def restart_app():
+    bt.logging.info("👩‍🦱app restarted due to the update")
+    
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+    
+def try_update_packages():
+    bt.logging.info("Try updating packages...")
+
+    try:
+        repo = git.Repo(search_parent_directories=True)
+        repo_path = repo.working_tree_dir
+        
+        requirements_path = os.path.join(repo_path, "requirements.txt")
+        
+        python_executable = sys.executable
+        subprocess.check_call([python_executable], "-m", "pip", "install", "-r", requirements_path)
+        bt.logging.info("📦Updating packages finished.")
+        
+    except Exception as e:
+        bt.logging.info(f"Updating packages failed {e}")
+    
+def try_update():
+    try:
+        if check_version_updated() == True:
+            bt.logging.info("found the latest version in the repo. try ♻️update...")
+            if update_repo() == True:
+                try_update_packages()
+                restart_app()
+    except Exception as e:
+        bt.logging.info(f"Try updating failed {e}")

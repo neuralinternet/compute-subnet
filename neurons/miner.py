@@ -37,7 +37,7 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
-    parser.add_argument("--auto_update", default="no", help="Auto update")  # major, minor, patch, no
+    parser.add_argument("--auto_update", default="yes", help="Auto update")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -133,18 +133,6 @@ def main(config):
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
-
-        # Version checking
-        if not compute.utils.check_version(synapse.version):
-            synapse.version = compute.utils.get_my_version()
-            return synapse
-        
-        synapse.version = compute.utils.get_my_version()
-        
-        # If update is scheduled, not accept any request
-        if compute.utils.update_flag:
-            return synapse
-        
         app_data = synapse.perf_input
         synapse.perf_output = pf.get_respond(app_data)
         return synapse
@@ -238,11 +226,9 @@ def main(config):
                     f"Emission:{metagraph.E[my_subnet_uid]}"
                 )
                 bt.logging.info(log)
-            # Check for auto update every minute
-            if step % 60 == 0 and config.auto_update != "no":
-                if compute.utils.update_repository(config.auto_update):
-                    bt.logging.success("🔁 Repository updated, exiting miner")
-                    exit(0)
+            # Check for auto update
+            if step % 30 == 0 and config.auto_update == "yes":
+                compute.util.try_update()
             step += 1
             time.sleep(1)
 
