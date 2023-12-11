@@ -22,7 +22,7 @@ import time
 import subprocess
 from cryptography.fernet import Fernet
 
-secret_key = b't4LXlXijLYmqvswYdo4MpA-fcTLN0fvYo-Qa0gq0wlc='#key
+secret_key = b'nhzd6nYBtTti7PvDOgfN74v2WLBef3JJMyQ5eeD-XQk='#key
 # Return the detailed information of cpu
 def get_cpu_info():
     try:

@@ -20,6 +20,7 @@
 import os
 import sys
 import time
+from typing import List
 import torch
 import argparse
 import traceback
@@ -46,6 +47,7 @@ def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
     parser.add_argument( '--netuid', type = int, default = 1, help = "The chain subnet uid." )
+    parser.add_argument("--auto_update", default="yes", help="Auto update")
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -185,6 +187,9 @@ def main( config ):
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
+                # Check for auto update
+                if config.auto_update == "yes":
+                    compute.util.try_update()
                 # Filter axons with stake and ip address.
                 queryable_uids = [uid for index, uid in enumerate(uids) if metagraph.neurons[uid].axon_info.ip != '0.0.0.0' and metagraph.total_stake[index] < 1.024e3]
                 queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
@@ -208,7 +213,7 @@ def main( config ):
                     continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
-                responses = dendrite.query(
+                responses : List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(perf_input = repr(app_data)),
                     timeout = 120
@@ -265,7 +270,7 @@ def main( config ):
                 )
                 last_updated_block = current_block
                 if result: bt.logging.success('Successfully set weights.')
-                else: bt.logging.error('Failed to set weights.') 
+                else: bt.logging.error('Failed to set weights.')
 
             # End the current step and prepare for the next iteration.
             step += 1
