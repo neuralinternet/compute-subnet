@@ -239,6 +239,7 @@ def main( config ):
                 db.update(hotkeys_list, benchmark_responses)
                 
                 # Calculate score
+                score_uid_dict = {}
                 for index, uid in enumerate(metagraph.uids):
                     score = 0
                     try:
@@ -251,8 +252,9 @@ def main( config ):
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score
+                    score_uid_dict[uid.item()] = scores[index].item()
                 
-                bt.logging.info(f"🔢 Updated scores : {scores.tolist()}")
+                bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block

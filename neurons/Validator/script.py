@@ -16,13 +16,13 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 import psutil
-import igpu
+import GPUtil
 import json
 import time
 import subprocess
 from cryptography.fernet import Fernet
 
-secret_key = b'nhzd6nYBtTti7PvDOgfN74v2WLBef3JJMyQ5eeD-XQk='#key
+secret_key = b'rciNxGPlT5pNNhDIzQ6ABd5nLlFdPMokx_sZIZ8UvwM='#key
 # Return the detailed information of cpu
 def get_cpu_info():
     try:
@@ -43,18 +43,17 @@ def get_cpu_info():
 # Return the detailed information of gpu
 def get_gpu_info():
     try:
-        # Count of existing gpus
-        gpu_count = igpu.count_devices()
+        # Get existing gpus
+        gpus = GPUtil.getGPUs()
 
         # Get the detailed information for each gpu (name, capacity)
         gpu_details = []
         capacity = 0
-        for i in range(gpu_count):
-            gpu = igpu.get_device(i)
-            gpu_details.append({"name" : gpu.name, "capacity" : gpu.memory.total, "utilization" : gpu.utilization.gpu})
-            capacity += gpu.memory.total
+        for gpu in gpus:
+            gpu_details.append({"name" : gpu.name, "capacity": gpu.memoryTotal})
+            capacity += gpu.memoryTotal
         
-        info = {"count":gpu_count, "capacity": capacity, "details": gpu_details}
+        info = {"count":len(gpus), "capacity": capacity, "details": gpu_details}
 
         # Measure speed
         if gpu_count:
