@@ -56,7 +56,7 @@ def get_gpu_info():
         info = {"count":len(gpus), "capacity": capacity, "details": gpu_details}
 
         # Measure speed
-        if gpu_count:
+        if len(gpus):
             # Run nvidia-smi command to get GPU information
             result = subprocess.run(['nvidia-smi', '--query-gpu=clocks.gr,clocks.mem', '--format=csv,noheader'], stdout=subprocess.PIPE)
             gpu_speed_info = result.stdout.decode().strip().split(',')
