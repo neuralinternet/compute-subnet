@@ -23,6 +23,7 @@ import os
 import sys
 import time
 import traceback
+import compute
 from typing import List, Union, Set
 
 import bittensor as bt
@@ -36,10 +37,8 @@ import Validator.database as db
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-import compute
 
-
-KNOWN_MALICIOUS_HOTKEYS = [
+SUSPECTED_MALICIOUS_HOTKEYS = [
     '5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A',
     '5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL',
     '5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft',
@@ -65,6 +64,13 @@ def get_config():
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     parser.add_argument("--auto_update", default="yes", help="Auto update")
     parser.add_argument(
+        "--blacklist.suspected.hotkeys",
+        dest="blacklist_suspected_hotkeys",
+        default=False,
+        action='store_true',
+        help="Automatically use the list of internal suspected hotkeys."
+    )
+    parser.add_argument(
         "--blacklisted.hotkeys",
         type=parse_list,
         dest="blacklisted_hotkeys",
@@ -81,8 +87,9 @@ def get_config():
     # Parse the config (will take command-line arguments if provided)
     config = bt.config(parser)
 
-    for blacklisted_hotkey in KNOWN_MALICIOUS_HOTKEYS:
-        config.blacklisted_hotkeys.append(blacklisted_hotkey)
+    if config.blacklist_suspected_hotkeys:
+        for blacklisted_hotkey in SUSPECTED_MALICIOUS_HOTKEYS:
+            config.blacklisted_hotkeys.append(blacklisted_hotkey)
 
     # Step 3: Set up logging directory
     # Logging is crucial for monitoring and debugging purposes.
