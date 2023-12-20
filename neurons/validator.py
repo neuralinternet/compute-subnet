@@ -23,8 +23,7 @@ import os
 import sys
 import time
 import traceback
-import compute
-from typing import List, Union, Set
+from typing import List
 
 import bittensor as bt
 import torch
@@ -33,28 +32,35 @@ from cryptography.fernet import Fernet
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
 import Validator.database as db
+import compute
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
+blacklisted_hotkeys_set: set = set()
+blacklisted_coldkeys_set: set = set()
 
+SUSPECTED_MALICIOUS_COLDKEYS = []
 SUSPECTED_MALICIOUS_HOTKEYS = [
-    '5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A',
-    '5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL',
-    '5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft',
-    '5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW',
-    '5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm',
-    '5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1',
-    '5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky',
-    '5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv',
-    '5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW',
-    '5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE',
+    "5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A",
+    "5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL",
+    "5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft",
+    "5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW",
+    "5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm",
+    "5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1",
+    "5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky",
+    "5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv",
+    "5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW",
+    "5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE",
+    "5E2RkNBMCrdfgpnXHuiC22osAxiw6fSgZ1iEVLqWMXSpSKac",
+    "5DaLy2qQRNsmbutQ7Havj49CoZSKksQSRkCLJsiknH8GcsN2",
 ]
 
 
 def parse_list(input_string):
-    """ Very temporary TODO move to utils. """
+    """Very temporary TODO move to utils."""
     return ast.literal_eval(input_string)
+
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -66,16 +72,30 @@ def get_config():
     parser.add_argument(
         "--blacklist.suspected.hotkeys",
         dest="blacklist_suspected_hotkeys",
-        default=False,
-        action='store_true',
-        help="Automatically use the list of internal suspected hotkeys."
+        default=True,
+        action="store_true",
+        help="Automatically use the list of internal suspected hotkeys.",
     )
     parser.add_argument(
         "--blacklisted.hotkeys",
         type=parse_list,
         dest="blacklisted_hotkeys",
         help="The list of the blacklisted hotkeys int the following format: \"['hotkey_x', '...']\"",
-        default=[]
+        default=[],
+    )
+    parser.add_argument(
+        "--blacklist.suspected.coldkeys",
+        dest="blacklist_suspected_coldkeys",
+        default=True,
+        action="store_true",
+        help="Automatically use the list of internal suspected hotkeys.",
+    )
+    parser.add_argument(
+        "--blacklisted.coldkeys",
+        type=parse_list,
+        dest="blacklisted_coldkeys",
+        help="The list of the blacklisted coldkeys int the following format: \"['coldkeys_x', '...']\"",
+        default=[],
     )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -89,6 +109,10 @@ def get_config():
 
     if config.blacklist_suspected_hotkeys:
         for blacklisted_hotkey in SUSPECTED_MALICIOUS_HOTKEYS:
+            config.blacklisted_hotkeys.append(blacklisted_hotkey)
+
+    if config.blacklisted_coldkeys:
+        for blacklisted_hotkey in SUSPECTED_MALICIOUS_COLDKEYS:
             config.blacklisted_hotkeys.append(blacklisted_hotkey)
 
     # Step 3: Set up logging directory
@@ -111,19 +135,9 @@ def get_config():
 
 
 # Filter the axons with uids_list, remove those with the same IP address.
-def filter_axons(axons_list, uids_list, blacklisted_hotkeys: Union[List, Set] = None):
+def filter_axons(axons_list, uids_list):
     # Set to keep track of unique identifiers
-    unique_ip_addresses = set()
-    duplicated_ip_addresses = set()
-
-    for index, axon in enumerate(axons_list):
-        ip_address = axon.ip
-        hotkey = axon.hotkey
-
-        if ip_address not in unique_ip_addresses and hotkey not in blacklisted_hotkeys:
-            unique_ip_addresses.add(ip_address)
-        else:
-            duplicated_ip_addresses.add(ip_address)
+    valid_ip_addresses = set()
 
     # List to store filtered axons
     filtered_axons = []
@@ -132,7 +146,8 @@ def filter_axons(axons_list, uids_list, blacklisted_hotkeys: Union[List, Set] = 
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
 
-        if ip_address not in duplicated_ip_addresses:
+        if ip_address not in valid_ip_addresses:
+            valid_ip_addresses.add(ip_address)
             filtered_axons.append(axon)
             filtered_uids.append(uids_list[index])
             filtered_hotkeys.append(axon.hotkey)
@@ -140,7 +155,51 @@ def filter_axons(axons_list, uids_list, blacklisted_hotkeys: Union[List, Set] = 
     return filtered_axons, filtered_uids, filtered_hotkeys
 
 
+def is_blacklisted(neuron):
+    coldkey = neuron.axon_info.coldkey
+    hotkey = neuron.axon_info.hotkey
+
+    # Blacklist coldkeys that are blacklisted by user
+    if coldkey in blacklisted_coldkeys_set:
+        bt.logging.debug(f"Blacklisted recognized coldkey {coldkey} - with hotkey: {hotkey}")
+        return True
+
+    # Blacklist coldkeys that are blacklisted by user or by set of hotkeys
+    if hotkey in blacklisted_hotkeys_set:
+        bt.logging.debug(f"Blacklisted recognized hotkey {hotkey}")
+        # Add the coldkey attached to this hotkey in the blacklisted coldkeys
+        blacklisted_coldkeys_set.add(coldkey)
+        return True
+
+
+def get_valid_queryable_uids(metagraph, uids):
+    valid_uids = []
+    for index, uid in enumerate(uids):
+        neuron = metagraph.neurons[uid]
+
+        if neuron.axon_info.ip != "0.0.0.0" and metagraph.total_stake[index] < 1.024e3 and not is_blacklisted(neuron=neuron):
+            valid_uids.append(uid)
+
+    return valid_uids
+
+
+def get_valid_tensors(metagraph):
+    tensors = []
+    for uid in metagraph.uids:
+        neuron = metagraph.neurons[uid]
+
+        if neuron.axon_info.ip != "0.0.0.0" and not is_blacklisted(neuron=neuron):
+            tensors.append(True)
+        else:
+            tensors.append(False)
+
+    return tensors
+
+
 def main(config):
+    global blacklisted_hotkeys_set
+    global blacklisted_coldkeys_set
+
     # Set up logging with the provided configuration and directory.
     bt.logging(config=config, logging_dir=config.full_path)
     bt.logging.info(f"Running validator for subnet: {config.netuid} on network: {config.subtensor.chain_endpoint} with config:")
@@ -169,6 +228,7 @@ def main(config):
 
     # Optimize the blacklist list
     blacklisted_hotkeys_set = {blacklisted_hotkey for blacklisted_hotkey in config.blacklisted_hotkeys}
+    blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
     # Step 5: Connect the validator to the network
     if wallet.hotkey.ss58_address not in metagraph.hotkeys:
@@ -191,7 +251,6 @@ def main(config):
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
-    last_reset_weights_block = curr_block
 
     # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
@@ -223,12 +282,7 @@ def main(config):
                 # Set the weights of validators to zero.
                 scores = new_scores * (metagraph.total_stake < 1.024e3)
                 # Set the weight to zero for all nodes without assigned IP addresses.
-                scores = scores * torch.Tensor(
-                    [
-                        metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
-                        for uid in metagraph.uids
-                    ]
-                )
+                scores = scores * torch.Tensor(get_valid_tensors(metagraph=metagraph))
 
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
@@ -237,20 +291,11 @@ def main(config):
                 if config.auto_update == "yes":
                     compute.util.try_update()
                 # Filter axons with stake and ip address.
-                queryable_uids = [
-                    uid
-                    for index, uid in enumerate(uids)
-                    if metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
-                    and metagraph.total_stake[index] < 1.024e3
-                ]
-                queryable_axons = [
-                    metagraph.axons[metagraph.uids.tolist().index(uid)]
-                    for uid in queryable_uids
-                ]
+                queryable_uids = get_valid_queryable_uids(metagraph, uids)
+                queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
                 axons_list, uids_list, hotkeys_list = filter_axons(
                     axons_list=queryable_axons,
                     uids_list=queryable_uids,
-                    blacklisted_hotkeys=blacklisted_hotkeys_set,
                 )
 
                 # Prepare app_data for benchmarking
@@ -302,7 +347,8 @@ def main(config):
                     try:
                         uid_index = uids_list.index(uid)
                         score = cs.score(benchmark_responses[uid_index], axons_list[uid_index].hotkey)
-                    except ValueError:
+                        score = min(score, 100)
+                    except (ValueError, KeyError):
                         score = 0
 
                     # Update the global score of the miner.
