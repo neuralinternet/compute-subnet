@@ -17,37 +17,61 @@
 
 # Step 1: Import necessary libraries and modules
 
+import argparse
+import ast
 import os
 import sys
 import time
-from typing import List
-import torch
-import argparse
 import traceback
-import json
-import base64
+from typing import List, Union, Set
+
 import bittensor as bt
+import torch
+from cryptography.fernet import Fernet
 
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
 import Validator.database as db
-
-import RSAEncryption as rsa
-import ast
-from cryptography.fernet import Fernet
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import compute
 
+
+KNOWN_MALICIOUS_HOTKEYS = [
+    '5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A',
+    '5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL',
+    '5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft',
+    '5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW',
+    '5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm',
+    '5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1',
+    '5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky',
+    '5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv',
+    '5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW',
+    '5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE',
+]
+
+
+def parse_list(input_string):
+    """ Very temporary TODO move to utils. """
+    return ast.literal_eval(input_string)
+
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
 def get_config():
     parser = argparse.ArgumentParser()
     # Adds override arguments for network and netuid.
-    parser.add_argument( '--netuid', type = int, default = 1, help = "The chain subnet uid." )
+    parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     parser.add_argument("--auto_update", default="yes", help="Auto update")
+    parser.add_argument(
+        "--blacklisted.hotkeys",
+        type=parse_list,
+        dest="blacklisted_hotkeys",
+        help="The list of the blacklisted hotkeys int the following format: \"['hotkey_x', '...']\"",
+        default=[]
+    )
+
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
     # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
@@ -55,7 +79,10 @@ def get_config():
     # Adds wallet specific arguments i.e. --wallet.name ..., --wallet.hotkey ./. or --wallet.path ...
     bt.wallet.add_args(parser)
     # Parse the config (will take command-line arguments if provided)
-    config =  bt.config(parser)
+    config = bt.config(parser)
+
+    for blacklisted_hotkey in KNOWN_MALICIOUS_HOTKEYS:
+        config.blacklisted_hotkeys.append(blacklisted_hotkey)
 
     # Step 3: Set up logging directory
     # Logging is crucial for monitoring and debugging purposes.
@@ -65,29 +92,32 @@ def get_config():
             config.wallet.name,
             config.wallet.hotkey,
             config.netuid,
-            'validator',
+            "validator",
         )
     )
     # Ensure the logging directory exists.
-    if not os.path.exists(config.full_path): os.makedirs(config.full_path, exist_ok=True)
+    if not os.path.exists(config.full_path):
+        os.makedirs(config.full_path, exist_ok=True)
 
     # Return the parsed config.
     return config
 
+
 # Filter the axons with uids_list, remove those with the same IP address.
-def filter_axons(axons_list, uids_list):
+def filter_axons(axons_list, uids_list, blacklisted_hotkeys: Union[List, Set] = None):
     # Set to keep track of unique identifiers
     unique_ip_addresses = set()
     duplicated_ip_addresses = set()
 
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
+        hotkey = axon.hotkey
 
-        if ip_address not in unique_ip_addresses:
+        if ip_address not in unique_ip_addresses and hotkey not in blacklisted_hotkeys:
             unique_ip_addresses.add(ip_address)
         else:
             duplicated_ip_addresses.add(ip_address)
-    
+
     # List to store filtered axons
     filtered_axons = []
     filtered_uids = []
@@ -102,7 +132,8 @@ def filter_axons(axons_list, uids_list):
 
     return filtered_axons, filtered_uids, filtered_hotkeys
 
-def main( config ):
+
+def main(config):
     # Set up logging with the provided configuration and directory.
     bt.logging(config=config, logging_dir=config.full_path)
     bt.logging.info(f"Running validator for subnet: {config.netuid} on network: {config.subtensor.chain_endpoint} with config:")
@@ -114,20 +145,23 @@ def main( config ):
     bt.logging.info("Setting up bittensor objects.")
 
     # The wallet holds the cryptographic key pairs for the validator.
-    wallet = bt.wallet( config = config )
+    wallet = bt.wallet(config=config)
     bt.logging.info(f"Wallet: {wallet}")
 
     # The subtensor is our connection to the Bittensor blockchain.
-    subtensor = bt.subtensor( config = config )
+    subtensor = bt.subtensor(config=config)
     bt.logging.info(f"Subtensor: {subtensor}")
 
     # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-    dendrite = bt.dendrite( wallet = wallet )
+    dendrite = bt.dendrite(wallet=wallet)
     bt.logging.info(f"Dendrite: {dendrite}")
 
     # The metagraph holds the state of the network, letting us know about other miners.
-    metagraph = subtensor.metagraph( config.netuid )
+    metagraph = subtensor.metagraph(config.netuid)
     bt.logging.info(f"Metagraph: {metagraph}")
+
+    # Optimize the blacklist list
+    blacklisted_hotkeys_set = {blacklisted_hotkey for blacklisted_hotkey in config.blacklisted_hotkeys}
 
     # Step 5: Connect the validator to the network
     if wallet.hotkey.ss58_address not in metagraph.hotkeys:
@@ -140,7 +174,7 @@ def main( config ):
 
     # Step 6: Set up initial scoring weights for validation
     bt.logging.info("Building validation weights.")
-    
+
     # Initialize alpha
     alpha = 0.9
 
@@ -151,7 +185,7 @@ def main( config ):
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
     last_reset_weights_block = curr_block
-     
+
     # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
@@ -160,7 +194,7 @@ def main( config ):
             # Sync the subtensor state with the blockchain.
             if step % 5 == 0:
                 bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
-                
+
                 # Resync our local state with the latest state from the blockchain.
                 metagraph = subtensor.metagraph(config.netuid)
 
@@ -182,7 +216,12 @@ def main( config ):
                 # Set the weights of validators to zero.
                 scores = new_scores * (metagraph.total_stake < 1.024e3)
                 # Set the weight to zero for all nodes without assigned IP addresses.
-                scores = scores * torch.Tensor([metagraph.neurons[uid].axon_info.ip != '0.0.0.0' for uid in metagraph.uids])
+                scores = scores * torch.Tensor(
+                    [
+                        metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
+                        for uid in metagraph.uids
+                    ]
+                )
 
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
@@ -191,9 +230,21 @@ def main( config ):
                 if config.auto_update == "yes":
                     compute.util.try_update()
                 # Filter axons with stake and ip address.
-                queryable_uids = [uid for index, uid in enumerate(uids) if metagraph.neurons[uid].axon_info.ip != '0.0.0.0' and metagraph.total_stake[index] < 1.024e3]
-                queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
-                axons_list, uids_list, hotkeys_list = filter_axons(queryable_axons, queryable_uids)
+                queryable_uids = [
+                    uid
+                    for index, uid in enumerate(uids)
+                    if metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
+                    and metagraph.total_stake[index] < 1.024e3
+                ]
+                queryable_axons = [
+                    metagraph.axons[metagraph.uids.tolist().index(uid)]
+                    for uid in queryable_uids
+                ]
+                axons_list, uids_list, hotkeys_list = filter_axons(
+                    axons_list=queryable_axons,
+                    uids_list=queryable_uids,
+                    blacklisted_hotkeys=blacklisted_hotkeys_set,
+                )
 
                 # Prepare app_data for benchmarking
                 # Generate secret key for app
@@ -203,9 +254,9 @@ def main( config ):
                 ag.run(secret_key)
                 try:
                     main_dir = os.path.dirname(os.path.abspath(__file__))
-                    file_name = os.path.join(main_dir, 'Validator/dist/script')
+                    file_name = os.path.join(main_dir, "Validator/dist/script")
                     # Read the exe file and save it to app_data.
-                    with open(file_name, 'rb') as file:
+                    with open(file_name, "rb") as file:
                         # Read the entire content of the EXE file
                         app_data = file.read()
                 except Exception as e:
@@ -213,10 +264,10 @@ def main( config ):
                     continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
-                responses : List[compute.protocol.PerfInfo] = dendrite.query(
+                responses: List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
-                    compute.protocol.PerfInfo(perf_input = repr(app_data)),
-                    timeout = 120
+                    compute.protocol.PerfInfo(perf_input=repr(app_data)),
+                    timeout=120,
                 )
 
                 # Format responses and save them to benchmark_responses
@@ -224,20 +275,19 @@ def main( config ):
                 for index, response in enumerate(responses):
                     try:
                         if response:
-                            binary_data = ast.literal_eval(response) # Convert str to binary data
-                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode()) #Decrypt data and convert it to object
+                            binary_data = ast.literal_eval(response)  # Convert str to binary data
+                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
                             benchmark_responses.append(decoded_data)
                         else:
                             benchmark_responses.append({})
                     except Exception as e:
-                        #bt.logging.error(f"Error parsing response: {e}")
+                        # bt.logging.error(f"Error parsing response: {e}")
                         benchmark_responses.append({})
 
-                    
                 bt.logging.info(f"✅ Benchmark results : {benchmark_responses}")
 
                 db.update(hotkeys_list, benchmark_responses)
-                
+
                 # Calculate score
                 score_uid_dict = {}
                 for index, uid in enumerate(metagraph.uids):
@@ -253,7 +303,7 @@ def main( config ):
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[index] = alpha * scores[index] + (1 - alpha) * score
                     score_uid_dict[uid.item()] = scores[index].item()
-                
+
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
 
             # Periodically update the weights on the Bittensor blockchain.
@@ -264,15 +314,17 @@ def main( config ):
                 # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
                 # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
                 result = subtensor.set_weights(
-                    netuid = config.netuid, # Subnet to set weights on.
-                    wallet = wallet, # Wallet to sign set weights using hotkey.
-                    uids = metagraph.uids, # Uids of the miners to set weights for.
-                    weights = weights, # Weights to set for the miners.
-                    wait_for_inclusion = False
+                    netuid=config.netuid,  # Subnet to set weights on.
+                    wallet=wallet,  # Wallet to sign set weights using hotkey.
+                    uids=metagraph.uids,  # Uids of the miners to set weights for.
+                    weights=weights,  # Weights to set for the miners.
+                    wait_for_inclusion=False,
                 )
                 last_updated_block = current_block
-                if result: bt.logging.success('Successfully set weights.')
-                else: bt.logging.error('Failed to set weights.')
+                if result:
+                    bt.logging.success("Successfully set weights.")
+                else:
+                    bt.logging.error("Failed to set weights.")
 
             # End the current step and prepare for the next iteration.
             step += 1
@@ -289,9 +341,10 @@ def main( config ):
             bt.logging.success("Keyboard interrupt detected. Exiting validator.")
             exit()
 
+
 # The main function parses the configuration and runs the validator.
 if __name__ == "__main__":
     # Parse the configuration.
     config = get_config()
     # Run the main function.
-    main( config )
+    main(config)
