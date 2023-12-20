@@ -195,6 +195,18 @@ Validators can send requests to reserve access to resources from miners by speci
 
 </div>
 
+### Options
+
+Flags that you can use with the validator script.
+
+- `--blacklisted.hotkeys`
+  - Description: List of hotkeys to blacklist. 
+  - Default: `[]`
+  - usage: `--blacklisted.hotkeys "['hotkey_x', '...']"`
+- `--blacklist.suspected.hotkeys`
+  - Description: Automatically use the list of internal suspected hotkeys.
+  - Default: `False`
+
 ---
 
 ## License
