@@ -30,13 +30,29 @@ def score(data, hotkey):
         ram_score = get_ram_score(data["ram"])
         registered = check_if_registered(hotkey)
 
+        # Define upper limits for scores
+        # 128 (max nb cpu) * 5000 (5Ghz) / 1024 (const) / 75 (level)
+        cpu_limit = 8738133.33333
+        # 652472 (capacity) * 16000 (speed Mhz) / 100000 (level)
+        gpu_limit = 104395.52
+        # 10000000000000 (free space 10Tb) * 20000 (speed) / 10000000 (level)
+        hard_disk_limit = 20000000000
+        # 512 (free ram 512Gb) * 5000 (speed) / 200000 (level)
+        ram_limit = 51200000000
+
+        # Applying upper limits to scores
+        cpu_score = min(cpu_score, cpu_limit)
+        gpu_score = min(gpu_score, gpu_limit)
+        hard_disk_score = min(hard_disk_score, hard_disk_limit)
+        ram_score = min(ram_score, ram_limit)
+
         score_list = np.array([[cpu_score, gpu_score, hard_disk_score, ram_score]])
 
         # Define weights for devices
-        cpu_weight = 0.02
+        cpu_weight = 0.025
         gpu_weight = 0.95
         hard_disk_weight = 0.015
-        ram_weight = 0.015
+        ram_weight = 0.01
 
         weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
         registration_bonus = registered * 100
@@ -50,7 +66,7 @@ def get_cpu_score(cpu_info):
     try:
         count = cpu_info['count']
         frequency = cpu_info['frequency']
-        level = 75 # 30, 2.5
+        level = 75  # 30, 2.5
         return count * frequency / 1024 / level
     except Exception as e:
         return 0
@@ -79,8 +95,8 @@ def get_hard_disk_score(hard_disk_info):
 # Score of ram
 def get_ram_score(ram_info):
     try:
-        level = 200000 # 100GB, 2g/s
-        capacity = ram_info['available'] / 1024 / 1024 / 1024
+        level = 200000  # 100GB, 2g/s
+        capacity = ram_info['free'] / 1024 / 1024 / 1024
         speed = ram_info['read_speed']
         return capacity * speed / level
     except Exception as e:
