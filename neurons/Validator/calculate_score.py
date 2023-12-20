@@ -32,13 +32,13 @@ def score(data, hotkey):
 
         # Define upper limits for scores
         # 128 (max nb cpu) * 5000 (5Ghz) / 1024 (const) / 75 (level)
-        cpu_limit = 8738133.33333
+        cpu_limit = 8.33333333333
         # 652472 (capacity) * 16000 (speed Mhz) / 100000 (level)
-        gpu_limit = 104395.52
+        gpu_limit = 104.39552
         # 10000000000000 (free space 10Tb) * 20000 (speed) / 10000000 (level)
-        hard_disk_limit = 20000000000
+        hard_disk_limit = 18.6264514923
         # 512 (free ram 512Gb) * 5000 (speed) / 200000 (level)
-        ram_limit = 51200000000
+        ram_limit = 128
 
         # Applying upper limits to scores
         cpu_score = min(cpu_score, cpu_limit)
@@ -51,8 +51,8 @@ def score(data, hotkey):
         # Define weights for devices
         cpu_weight = 0.025
         gpu_weight = 0.95
-        hard_disk_weight = 0.015
-        ram_weight = 0.01
+        hard_disk_weight = 0.02
+        ram_weight = 0.005
 
         weight_list = np.array([[cpu_weight], [gpu_weight], [hard_disk_weight], [ram_weight]])
         registration_bonus = registered * 100
@@ -74,7 +74,7 @@ def get_cpu_score(cpu_info):
 # Score of gpu
 def get_gpu_score(gpu_info):
     try:
-        level = 100000 # 10GB, 2GHz
+        level = 100000000  # 10GB, 2GHz
         capacity = gpu_info['capacity'] / 1024 / 1024 / 1024
         speed = (gpu_info['graphics_speed'] + gpu_info['memory_speed']) / 2
         return capacity * speed / level
