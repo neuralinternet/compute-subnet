@@ -114,6 +114,16 @@ def main(config):
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
+        
+        index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        stake = metagraph.S[index].item()
+
+        if stake < 1024:
+            bt.logging.trace(
+                f"Not enough stake {stake}"
+            )
+            return True, "Not enough stake!"
+        
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
@@ -145,6 +155,16 @@ def main(config):
                 f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}"
             )
             return True, "Unrecognized hotkey"
+        
+        index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        stake = metagraph.S[index].item()
+
+        if stake < 1024:
+            bt.logging.trace(
+                f"Not enough stake {stake}"
+            )
+            return True, "Not enough stake!"
+        
         bt.logging.trace(
             f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
         )
