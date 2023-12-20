@@ -23,7 +23,6 @@ import os
 import sys
 import time
 import traceback
-import compute
 from typing import List, Union, Set
 
 import bittensor as bt
@@ -33,28 +32,30 @@ from cryptography.fernet import Fernet
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
 import Validator.database as db
+import compute
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 
 SUSPECTED_MALICIOUS_HOTKEYS = [
-    '5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A',
-    '5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL',
-    '5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft',
-    '5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW',
-    '5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm',
-    '5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1',
-    '5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky',
-    '5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv',
-    '5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW',
-    '5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE',
+    "5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A",
+    "5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL",
+    "5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft",
+    "5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW",
+    "5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm",
+    "5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1",
+    "5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky",
+    "5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv",
+    "5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW",
+    "5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE",
 ]
 
 
 def parse_list(input_string):
-    """ Very temporary TODO move to utils. """
+    """Very temporary TODO move to utils."""
     return ast.literal_eval(input_string)
+
 
 # Step 2: Set up the configuration parser
 # This function is responsible for setting up and parsing command-line arguments.
@@ -67,15 +68,15 @@ def get_config():
         "--blacklist.suspected.hotkeys",
         dest="blacklist_suspected_hotkeys",
         default=False,
-        action='store_true',
-        help="Automatically use the list of internal suspected hotkeys."
+        action="store_true",
+        help="Automatically use the list of internal suspected hotkeys.",
     )
     parser.add_argument(
         "--blacklisted.hotkeys",
         type=parse_list,
         dest="blacklisted_hotkeys",
         help="The list of the blacklisted hotkeys int the following format: \"['hotkey_x', '...']\"",
-        default=[]
+        default=[],
     )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -223,12 +224,7 @@ def main(config):
                 # Set the weights of validators to zero.
                 scores = new_scores * (metagraph.total_stake < 1.024e3)
                 # Set the weight to zero for all nodes without assigned IP addresses.
-                scores = scores * torch.Tensor(
-                    [
-                        metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
-                        for uid in metagraph.uids
-                    ]
-                )
+                scores = scores * torch.Tensor([metagraph.neurons[uid].axon_info.ip != "0.0.0.0" for uid in metagraph.uids])
 
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
@@ -238,15 +234,9 @@ def main(config):
                     compute.util.try_update()
                 # Filter axons with stake and ip address.
                 queryable_uids = [
-                    uid
-                    for index, uid in enumerate(uids)
-                    if metagraph.neurons[uid].axon_info.ip != "0.0.0.0"
-                    and metagraph.total_stake[index] < 1.024e3
+                    uid for index, uid in enumerate(uids) if metagraph.neurons[uid].axon_info.ip != "0.0.0.0" and metagraph.total_stake[index] < 1.024e3
                 ]
-                queryable_axons = [
-                    metagraph.axons[metagraph.uids.tolist().index(uid)]
-                    for uid in queryable_uids
-                ]
+                queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
                 axons_list, uids_list, hotkeys_list = filter_axons(
                     axons_list=queryable_axons,
                     uids_list=queryable_uids,
@@ -302,6 +292,7 @@ def main(config):
                     try:
                         uid_index = uids_list.index(uid)
                         score = cs.score(benchmark_responses[uid_index], axons_list[uid_index].hotkey)
+                        score = min(score, 15)
                     except ValueError:
                         score = 0
 
