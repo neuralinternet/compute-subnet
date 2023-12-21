@@ -143,8 +143,8 @@ def main(config):
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
-        app_data = synapse.perf_input
-        synapse.perf_output = pf.get_respond(app_data)
+        # app_data = synapse.perf_input
+        synapse.perf_output = pf.get_respond()
         return synapse
 
         # The blacklist function decides if a request should be ignored.

@@ -16,24 +16,28 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 import bittensor as bt
+from Miner.perfinfo import get_perf_info
 import subprocess
 import ast
 import json
 import os
 
 #Respond the execution of the application
-def get_respond(app_data):
+def get_respond():
     try:
-        app_data = ast.literal_eval(app_data)
+        # app_data = ast.literal_eval(app_data)
         
-        main_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(main_dir, 'app')
+        # main_dir = os.path.dirname(os.path.abspath(__file__))
+        # file_path = os.path.join(main_dir, 'app')
     
-        # Write the bytes data to a file
-        with open(file_path, 'wb') as file:
-            file.write(app_data)
-        subprocess.run('chmod +x ' + file_path, shell=True, check=True)
-        result = subprocess.check_output(file_path, shell=True, text=True)
+        # # Write the bytes data to a file
+        # with open(file_path, 'wb') as file:
+        #     file.write(app_data)
+        # subprocess.run('chmod +x ' + file_path, shell=True, check=True)
+        # result = subprocess.check_output(file_path, shell=True, text=True)
+
+        result = get_perf_info()
+
         return result
     except Exception as e:
         return {}

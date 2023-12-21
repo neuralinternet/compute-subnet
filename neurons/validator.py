@@ -304,25 +304,26 @@ def main(config):
 
                 # Prepare app_data for benchmarking
                 # Generate secret key for app
-                secret_key = Fernet.generate_key()
-                cipher_suite = Fernet(secret_key)
-                # Compile the script and generate an exe.
-                ag.run(secret_key)
-                try:
-                    main_dir = os.path.dirname(os.path.abspath(__file__))
-                    file_name = os.path.join(main_dir, "Validator/dist/script")
-                    # Read the exe file and save it to app_data.
-                    with open(file_name, "rb") as file:
-                        # Read the entire content of the EXE file
-                        app_data = file.read()
-                except Exception as e:
-                    bt.logging.error(f"{e}")
-                    continue
+                # secret_key = Fernet.generate_key()
+                # cipher_suite = Fernet(secret_key)
+                # # Compile the script and generate an exe.
+                # ag.run(secret_key)
+                # try:
+                #     main_dir = os.path.dirname(os.path.abspath(__file__))
+                #     file_name = os.path.join(main_dir, "Validator/dist/script")
+                #     # Read the exe file and save it to app_data.
+                #     with open(file_name, "rb") as file:
+                #         # Read the entire content of the EXE file
+                #         app_data = file.read()
+                # except Exception as e:
+                #     bt.logging.error(f"{e}")
+                #     continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses: List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
-                    compute.protocol.PerfInfo(perf_input=repr(app_data)),
+                    # compute.protocol.PerfInfo(perf_input=repr(app_data)),
+                    compute.protocol.PerfInfo(perf_input=None),
                     timeout=120,
                 )
 
@@ -331,9 +332,10 @@ def main(config):
                 for index, response in enumerate(responses):
                     try:
                         if response:
-                            binary_data = ast.literal_eval(response)  # Convert str to binary data
-                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                            benchmark_responses.append(decoded_data)
+                            # binary_data = ast.literal_eval(response)  # Convert str to binary data
+                            # decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
+                            # benchmark_responses.append(decoded_data)
+                            benchmark_responses.append(response)
                         else:
                             benchmark_responses.append({})
                     except Exception as e:
