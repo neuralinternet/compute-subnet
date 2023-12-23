@@ -26,6 +26,9 @@ import bittensor as bt
 import Miner.performance as pf
 import Miner.allocate as al
 
+from substrateinterface import Keypair
+
+
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -143,8 +146,7 @@ def main(config):
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
-        # app_data = synapse.perf_input
-        synapse.perf_output = pf.get_respond()
+        synapse.perf_output = pf.get_respond(synapse.perf_input)
         return synapse
 
         # The blacklist function decides if a request should be ignored.

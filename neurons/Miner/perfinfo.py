@@ -173,10 +173,4 @@ def get_perf_info():
     perf_info = {'cpu' : cpu_info, 'gpu' : gpu_info, 'hard_disk' : hard_disk_info, 'ram' : ram_info}
     perf_str = json.dumps(perf_info)
 
-    # cipher_suite = Fernet(secret_key)
-
-    # encoded_str = cipher_suite.encrypt(perf_str.encode())
-
     return perf_str.encode()
-
-    # return encoded_str

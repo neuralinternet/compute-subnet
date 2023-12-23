@@ -15,31 +15,49 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
-import bittensor as bt
-from Miner.perfinfo import get_perf_info
-import subprocess
-import ast
 import json
-import os
+from Miner.perfinfo import get_perf_info
+import base64
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet
 
 #Respond the execution of the application
-def get_respond():
+def get_respond(input):
     try:
-        # app_data = ast.literal_eval(app_data)
+        decoded_pem = base64.b64decode(input)
         
-        # main_dir = os.path.dirname(os.path.abspath(__file__))
-        # file_path = os.path.join(main_dir, 'app')
-    
-        # # Write the bytes data to a file
-        # with open(file_path, 'wb') as file:
-        #     file.write(app_data)
-        # subprocess.run('chmod +x ' + file_path, shell=True, check=True)
-        # result = subprocess.check_output(file_path, shell=True, text=True)
+        public_key = serialization.load_pem_public_key(decoded_pem)
+        # Generate a random encryption key
+        key = Fernet.generate_key()
 
-        result = get_perf_info()
+        # Initialize the Fernet cipher with the key
+        cipher_suite = Fernet(key)
 
-        print(result)
+        # Message to be encrypted
+        system_info  = get_perf_info()
 
-        return result
+        # Encrypt the message
+        encrypted_message = cipher_suite.encrypt(system_info)
+
+       
+        crypted_key = public_key.encrypt(
+            key,
+            padding.OAEP(
+                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+
+        return_dict = {
+            "key": base64.b64encode(crypted_key).decode(),
+            "msg": base64.b64encode(encrypted_message).decode()
+        }
+
+        return json.dumps(return_dict)
+
     except Exception as e:
         return {}

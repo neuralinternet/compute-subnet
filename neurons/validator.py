@@ -24,15 +24,24 @@ import sys
 import time
 import traceback
 from typing import List
+import json
 
 import bittensor as bt
 import torch
-from cryptography.fernet import Fernet
 
 import Validator.app_generator as ag
 import Validator.calculate_score as cs
 import Validator.database as db
 import compute
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives import hashes
+
+import base64
+
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -218,6 +227,19 @@ def main(config):
     wallet = bt.wallet(config=config)
     bt.logging.info(f"Wallet: {wallet}")
 
+    # The keypair created from the private key, used to decrypt miner responses
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,  # Common public exponent value
+        key_size=2048          # Key size (2048 bits is a common choice)
+    )
+    public_key = private_key.public_key()
+
+    # Make pubkey transportable
+    public_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
     # The subtensor is our connection to the Bittensor blockchain.
     subtensor = bt.subtensor(config=config)
     bt.logging.info(f"Subtensor: {subtensor}")
@@ -302,28 +324,12 @@ def main(config):
                     uids_list=queryable_uids,
                 )
 
-                # Prepare app_data for benchmarking
-                # Generate secret key for app
-                # secret_key = Fernet.generate_key()
-                # cipher_suite = Fernet(secret_key)
-                # # Compile the script and generate an exe.
-                # ag.run(secret_key)
-                # try:
-                #     main_dir = os.path.dirname(os.path.abspath(__file__))
-                #     file_name = os.path.join(main_dir, "Validator/dist/script")
-                #     # Read the exe file and save it to app_data.
-                #     with open(file_name, "rb") as file:
-                #         # Read the entire content of the EXE file
-                #         app_data = file.read()
-                # except Exception as e:
-                #     bt.logging.error(f"{e}")
-                #     continue
+                
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
                 responses: List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
-                    # compute.protocol.PerfInfo(perf_input=repr(app_data)),
-                    compute.protocol.PerfInfo(perf_input=""),
+                    compute.protocol.PerfInfo(perf_input=base64.b64encode(public_pem)),
                     timeout=120,
                 )
 
@@ -332,14 +338,29 @@ def main(config):
                 for index, response in enumerate(responses):
                     try:
                         if response:
-                            # binary_data = ast.literal_eval(response)  # Convert str to binary data
-                            # decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                            # benchmark_responses.append(decoded_data)
-                            benchmark_responses.append(response)
+
+                            # Unwrap and decode
+                            input_dict  = json.loads(response)
+                            crypted_key = base64.b64decode(input_dict["key"].encode())
+                            crypted_msg = base64.b64decode(input_dict["msg"].encode())
+
+                            # Decrypt key
+                            decrypted_key = private_key.decrypt(
+                                crypted_key,
+                                padding.OAEP(
+                                    mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                    algorithm=hashes.SHA256(),
+                                    label=None
+                                )
+                            )
+                            # Decrypt message
+                            cipher_suite = Fernet(decrypted_key)
+                            decrypted_msg = cipher_suite.decrypt(crypted_msg)
+                            benchmark_responses.append(decrypted_msg.decode())
                         else:
                             benchmark_responses.append({})
                     except Exception as e:
-                        # bt.logging.error(f"Error parsing response: {e}")
+                        bt.logging.error(f"Error parsing response: {e}")
                         benchmark_responses.append({})
 
                 bt.logging.info(f"✅ Benchmark results : {benchmark_responses}")
