@@ -18,44 +18,6 @@
 import bittensor as bt
 
 
-class PerfInfo(bt.Synapse):
-    """
-    A simple performance information protocol representation which uses bt.Synapse as its base.
-    This protocol helps in handling performance information request and response communication between
-    the miner and the validator.
-
-    Attributes:
-    - perf_input: The byte data of application that will be sent.
-    - perf_output: A dictionary with the detailed information of cpu, gpu, hard disk and ram.
-    """
-
-    perf_input: str = ""
-
-    perf_output: str = ""
-    """
-    Request output, filled by recieving axon.
-    Example: {"CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
-    """
-
-    def deserialize(self) -> str:
-        """
-        Deserialize the performance information output. This method retrieves the response from
-        the miner in the form of perf_output, deserializes it and returns it
-        as the output of the dendrite.query() call.
-
-        Returns:
-        - str: The deserialized response, which in this case is the value of perf_output.
-
-        Example:
-        Assuming a Performance instance has a perf_output value of {}:
-        >>> perfinfo_instance = PerfInfo()
-        >>> perfinfo_instance.perf_output = ''
-        >>> perfinfo_instance.deserialize()
-        ''
-        """
-        return self.perf_output
-
-
 class Allocate(bt.Synapse):
     """
     A simple Allocate protocol representation which uses bt.Synapse as its base.
@@ -102,7 +64,7 @@ class Challenge(bt.Synapse):
     the miner and the validator.
 
     Attributes:
-    - challenge_input: The byte data of validators header randomized with a secret key.
+    - challenge_input: The byte data of validators header randomized with a secret key + current difficulty.
     - challenge_output: A string containing the nonce that resolved the challenge.
     """
 

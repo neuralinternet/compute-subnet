@@ -30,7 +30,9 @@ def generate_random_header(length: int = 20):
     # Generating private/public keys
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
     private_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
     )
 
     # Using the private key bytes as seed for guaranteed randomness
@@ -49,6 +51,6 @@ def verify_hash(header, nonce, target_difficulty):
 
 
 def gen_proof_of_work(uid):
-    header = generate_random_header(uid)
+    header = generate_random_header()
     bt.logging.info(f"🔢 Header generated for uid : {uid}")
     return header

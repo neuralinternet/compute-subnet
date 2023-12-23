@@ -20,6 +20,7 @@
 import argparse
 import ast
 import concurrent.futures
+import json
 import os
 import sys
 import time
@@ -228,7 +229,7 @@ def main(config):
     blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
     # Step 5: Connect the validator to the network
-    # TODO UNCOMMENT THIS
+    # TODO UNCOMMENT THIS WHEN PROD - THIS IS COMMENTED FOR TESTING PURPOSE ONLY
     # if wallet.hotkey.ss58_address not in metagraph.hotkeys:
     #     bt.logging.error(f"\nYour validator: {wallet} is not registered to chain connection: {subtensor} \nRun btcli register and try again.")
     #     exit()
@@ -257,7 +258,7 @@ def main(config):
         "response": None,
         "challenge_output": None,
         "time_elapsed": None,
-        "verify": None,
+        "verified": None,
     }
     last_uids_dict = {uid: default_dict for uid in last_uids_list}
 
@@ -286,11 +287,24 @@ def main(config):
                 # Create new_scores with current metagraph
                 new_scores = torch.zeros(len(new_uids), dtype=torch.float32)
                 new_difficulties = torch.zeros(len(last_uids_list), dtype=torch.int8)
+                new_difficulties[new_difficulties == 0] = 1
 
                 for uid in last_uids_dict:
                     try:
                         new_scores[uid] = scores[uid]
-                        new_difficulties[uid] = difficulties[uid]
+
+                        # Increase or decrease the difficulty on some conditions
+                        verified = last_uids_dict[uid].get("verified")
+                        time_elapsed = last_uids_dict[uid].get("time_elapsed")
+                        difficulty = last_uids_dict[uid].get("difficulty")
+                        if verified is True and time_elapsed < compute.pow_timeout / 2:
+                            new_difficulties[uid] = difficulty + 1
+                        elif last_uids_dict[uid].get("verified") is True:
+                            new_difficulties[uid] = difficulty
+                        elif last_uids_dict[uid].get("verified") is False and difficulty > 1:
+                            new_difficulties[uid] = difficulty - 1
+                        else:
+                            new_difficulties[uid] = difficulties[uid]
                     except KeyError:
                         # New node
                         new_scores[uid] = 0
@@ -313,8 +327,9 @@ def main(config):
                 bt.logging.info(f"🔢 PoW challenge generation.")
                 for uid in new_uids_dict:
                     header = bp.gen_proof_of_work(uid)
-                    new_uids_dict["headers"] = header
-                    new_uids_dict["synapse"] = compute.protocol.Challenge(challenge_input=header)
+                    challenge_input = {"header": header, "difficulty": new_uids_dict[uid]["difficulty"]}
+                    new_uids_dict[uid]["headers"] = header
+                    new_uids_dict[uid]["synapse"] = compute.protocol.Challenge(challenge_input=json.dumps(challenge_input))
 
                 def perform_query(_axon, _synapse):
                     start_time = time.time()  # Record the start time of the query
@@ -346,7 +361,7 @@ def main(config):
                         except Exception as e:
                             bt.logging.error(f"An error occurred for axon {axon}: {e}")
 
-                benchmark_result = [(data["difficulty"], data["time_elapsed"], data["verify"]) for data in new_uids_dict.values()]
+                benchmark_result = [(data["difficulty"], data["time_elapsed"], data["verified"]) for data in new_uids_dict.values()]
                 bt.logging.info(f"✅ Benchmark results : {benchmark_result}")
 
                 db.update(uids_details=new_uids_dict)
