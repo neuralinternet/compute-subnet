@@ -177,6 +177,6 @@ def get_perf_info():
 
     # encoded_str = cipher_suite.encrypt(perf_str.encode())
 
-    return perf_info
+    return perf_str.encode()
 
     # return encoded_str

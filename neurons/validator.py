@@ -323,7 +323,7 @@ def main(config):
                 responses: List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
                     # compute.protocol.PerfInfo(perf_input=repr(app_data)),
-                    compute.protocol.PerfInfo(perf_input=None),
+                    compute.protocol.PerfInfo(perf_input=""),
                     timeout=120,
                 )
 

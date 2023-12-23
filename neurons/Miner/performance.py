@@ -38,6 +38,8 @@ def get_respond():
 
         result = get_perf_info()
 
+        print(result)
+
         return result
     except Exception as e:
         return {}
