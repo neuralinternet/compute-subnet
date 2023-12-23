@@ -356,24 +356,25 @@ async def main(config):
                         print(result)
                     except Exception as e:
                         bt.logging.error(f"An error occurred for uid {uid}: {e}")
+                exit()
 
-                    # # Retrieve the results once the calls are completed
-                    # for future in concurrent.futures.as_completed(futures):
-                    #     axon = futures[future]
-                    #     try:
-                    #         uid, result, time_elapsed = future.result()
-                    #         print(uid, result, time_elapsed)
-                    #         challenge_output = result.challenge_output
-                    #         new_uids_dict[uid]["response"] = result
-                    #         new_uids_dict[uid]["challenge_output"] = challenge_output
-                    #         new_uids_dict[uid]["time_elapsed"] = time_elapsed
-                    #         bp.verify_hash(
-                    #             header=new_uids_dict[uid].get("header"),
-                    #             nonce=challenge_output,
-                    #             target_difficulty=new_uids_dict[uid].get("difficulty"),
-                    #         )
-                    #     except Exception as e:
-                    #         bt.logging.error(f"An error occurred for axon {axon}: {e}")
+                # # Retrieve the results once the calls are completed
+                # for future in concurrent.futures.as_completed(futures):
+                #     axon = futures[future]
+                #     try:
+                #         uid, result, time_elapsed = future.result()
+                #         print(uid, result, time_elapsed)
+                #         challenge_output = result.challenge_output
+                #         new_uids_dict[uid]["response"] = result
+                #         new_uids_dict[uid]["challenge_output"] = challenge_output
+                #         new_uids_dict[uid]["time_elapsed"] = time_elapsed
+                #         bp.verify_hash(
+                #             header=new_uids_dict[uid].get("header"),
+                #             nonce=challenge_output,
+                #             target_difficulty=new_uids_dict[uid].get("difficulty"),
+                #         )
+                #     except Exception as e:
+                #         bt.logging.error(f"An error occurred for axon {axon}: {e}")
 
                 benchmark_challenge = [(data.get("difficulty"), data.get("time_elapsed"), data.get("verified")) for data in new_uids_dict.values()]
                 bt.logging.info(f"✅ Benchmark challenge : {benchmark_challenge}")

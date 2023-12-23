@@ -27,7 +27,7 @@ device_info_timeout = 60
 pow_timeout = 120
 # Initial and minimal proof of work difficulty.
 # Needs benchmark and adjustment.
-pow_min_difficulty = 5
+pow_min_difficulty = 2
 # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty.
 # Needs benchmark and adjustment.
 pow_max_difficulty = 10
