@@ -367,7 +367,7 @@ def main(config):
                         except Exception as e:
                             bt.logging.error(f"An error occurred for axon {axon}: {e}")
 
-                benchmark_result = [(data["difficulty"], data["time_elapsed"], data["verified"]) for data in new_uids_dict.values()]
+                benchmark_result = [(data.get("difficulty"), data.get("time_elapsed"), data.get("verified")) for data in new_uids_dict.values()]
                 bt.logging.info(f"✅ Benchmark results : {benchmark_result}")
 
                 db.update_pow_details(uids_data=new_uids_dict)

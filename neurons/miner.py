@@ -251,7 +251,7 @@ def main(config):
                 bt.logging.info(log)
 
             # Check for auto update
-            if step % 15 == 0 and config.auto_update == "yes":
+            if step % 30 == 0 and config.auto_update == "yes":
                 util.try_update()
 
             step += 1
