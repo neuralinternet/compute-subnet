@@ -31,6 +31,7 @@ import torch
 from cryptography.fernet import Fernet
 
 from compute import pow_min_difficulty, pow_timeout, protocol, util
+from neurons import env
 from Validator import app_generator as ag, basic_pow as bp, calculate_score as cs, database as db
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -148,7 +149,7 @@ def filter_axons(queryable_axons, queryable_uids):
         ip_address = axon.ip
 
         # TODO remove for prod
-        if ip_address not in valid_ip_addresses and ip_address == "207.188.6.204":
+        if ip_address not in valid_ip_addresses and ip_address == env.IP:
             valid_ip_addresses.add(ip_address)
             filtered_uid_axons_dict[queryable_uids[index]] = axon
 

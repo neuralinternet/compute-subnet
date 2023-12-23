@@ -24,7 +24,7 @@ __spec_version__ = (1000 * int(version_split[0])) + (10 * int(version_split[1]))
 device_info_timeout = 60
 
 # Time before the proof of work requets will timeout.
-pow_timeout = 120
+pow_timeout = 10
 # Initial and minimal proof of work difficulty.
 # Needs benchmark and adjustment.
 pow_min_difficulty = 2

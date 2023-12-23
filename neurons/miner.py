@@ -133,6 +133,7 @@ def main(config):
 
     # The blacklist function decides if a request should be ignored.
     def blacklist_challenge(synapse: protocol.Challenge) -> typing.Tuple[bool, str]:
+        return False, "Hotkey recognized!"
         blacklist = base_blacklist(synapse)
         bt.logging.info(blacklist[1])
         return blacklist
