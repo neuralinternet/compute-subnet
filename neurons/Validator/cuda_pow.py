@@ -1,18 +1,26 @@
+# The method contained within this file are for now testing purpose.
+# It is not integrated yet to the code.
+# This is an improvement to start working on once the general algorithm is validated.
+# This part will ensure that the GPUs are necessarily used instead of CPUs and optimize essentially the
+# Hash rates from GPUs as it is the mindset of the subnet-27
+
 import time
 
 import numpy as np
 import pycuda
 import pycuda.driver as cuda
-from pycuda._driver import Context
 from pycuda.compiler import SourceModule
+
+from compute import pow_min_difficulty
+from neurons.Validator.basic_pow import generate_random_header
 
 
 def proof_of_work_cuda(question, difficulty):
     cuda.init()
-    device = cuda.Device(0)  # enter your gpu id here
+    device = cuda.Device(0)
     ctx = device.make_context()
 
-    block_size = 256  # Taille du bloc CUDA
+    block_size = 256
     question_bytes = question.encode("utf-8")
     question_gpu = cuda.mem_alloc(len(question_bytes))
     cuda.memcpy_htod(question_gpu, question_bytes)
@@ -69,20 +77,8 @@ def proof_of_work_cuda(question, difficulty):
     valid_answer = bytes(result)
     nonce_found = nonce[0]
 
-    Context.pop()
+    pycuda.driver.Context.pop()
     return nonce_found, valid_answer, end_time - start_time
 
 
-# Exemple d'utilisation
-question_from_validator = "Quelle est la couleur du ciel ?"
-difficulty_level = 4  # Difficulté : nombre de zéros requis au début de la réponse
-
-nonce_found, valid_answer, time_taken = proof_of_work_cuda(question_from_validator, difficulty_level)
-if nonce_found is not None:
-    print(f"Nonce trouvé : {nonce_found}")
-    print(f"Réponse valide : {valid_answer}")
-    print(f"Temps pris : {time_taken} secondes")
-else:
-    print("Impossible de trouver une réponse dans les 120 secondes.")
-
-pycuda.driver.Context.pop()
+nonce_found, valid_answer, time_taken = proof_of_work_cuda(generate_random_header(), pow_min_difficulty)

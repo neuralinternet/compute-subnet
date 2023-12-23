@@ -19,20 +19,17 @@
 
 import argparse
 import ast
+import concurrent.futures
 import os
 import sys
 import time
 import traceback
-from typing import List
 
 import bittensor as bt
 import torch
-from cryptography.fernet import Fernet
 
-import Validator.app_generator as ag
-import Validator.calculate_score as cs
-import Validator.database as db
 import compute
+from Validator import basic_pow as bp, calculate_score as cs, database as db
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -57,7 +54,7 @@ SUSPECTED_MALICIOUS_HOTKEYS = [
     "5GNNB5kZfo6F9hqwXvaRfYdTuJPSzrXbtABzwoL499jPNBjt",
     "5GVjcJLQboN5NcQoP4x8oqovjAiEizdscoocWo9HBYYmPdR3",
     "5FswTe5bbs9n1SzaGpzUd6sDfnzdPfWVS2MwDWNbAneeT15k",
-    "5F4bqDZkx79hCxmbbsVMuq312EW9hQLvsBzKsAJgcEqpb8L9"
+    "5F4bqDZkx79hCxmbbsVMuq312EW9hQLvsBzKsAJgcEqpb8L9",
 ]
 
 
@@ -139,24 +136,20 @@ def get_config():
 
 
 # Filter the axons with uids_list, remove those with the same IP address.
-def filter_axons(axons_list, uids_list):
+def filter_axons(queryable_axons, queryable_uids):
     # Set to keep track of unique identifiers
     valid_ip_addresses = set()
 
     # List to store filtered axons
-    filtered_axons = []
-    filtered_uids = []
-    filtered_hotkeys = []
-    for index, axon in enumerate(axons_list):
+    filtered_uid_axons_dict = dict()
+    for index, axon in enumerate(queryable_axons):
         ip_address = axon.ip
 
         if ip_address not in valid_ip_addresses:
             valid_ip_addresses.add(ip_address)
-            filtered_axons.append(axon)
-            filtered_uids.append(uids_list[index])
-            filtered_hotkeys.append(axon.hotkey)
+            filtered_uid_axons_dict[queryable_uids[index]] = axon
 
-    return filtered_axons, filtered_uids, filtered_hotkeys
+    return filtered_uid_axons_dict
 
 
 def is_blacklisted(neuron):
@@ -235,13 +228,14 @@ def main(config):
     blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
     # Step 5: Connect the validator to the network
-    if wallet.hotkey.ss58_address not in metagraph.hotkeys:
-        bt.logging.error(f"\nYour validator: {wallet} if not registered to chain connection: {subtensor} \nRun btcli register and try again.")
-        exit()
-    else:
-        # Each miner gets a unique identity (UID) in the network for differentiation.
-        my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
-        bt.logging.info(f"Running validator on uid: {my_subnet_uid}")
+    # TODO UNCOMMENT THIS
+    # if wallet.hotkey.ss58_address not in metagraph.hotkeys:
+    #     bt.logging.error(f"\nYour validator: {wallet} is not registered to chain connection: {subtensor} \nRun btcli register and try again.")
+    #     exit()
+    # else:
+    #     # Each miner gets a unique identity (UID) in the network for differentiation.
+    #     my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
+    #     bt.logging.info(f"Running validator on uid: {my_subnet_uid}")
 
     # Step 6: Set up initial scoring weights for validation
     bt.logging.info("Building validation weights.")
@@ -249,20 +243,36 @@ def main(config):
     # Initialize alpha
     alpha = 0.9
 
-    # Initialize weights for each miner, store current uids.
-    last_uids = metagraph.uids.tolist()
-    scores = torch.zeros(len(last_uids), dtype=torch.float32)
+    # Initialize weights, difficulties for each miner, and store current uids.
+    last_uids_list = metagraph.uids.tolist()
+    scores = torch.zeros(len(last_uids_list), dtype=torch.float32)
+    difficulties = torch.zeros(len(last_uids_list), dtype=torch.int8)
+    difficulties[difficulties == 0] = 1
+    default_dict = {
+        "axon": None,
+        "header": None,
+        "difficulty": None,
+        "score": None,
+        "synapse": None,
+        "response": None,
+        "challenge_output": None,
+        "time_elapsed": None,
+        "verify": None,
+    }
+    last_uids_dict = {uid: default_dict for uid in last_uids_list}
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
 
+    new_uids = []
+    new_uids_dict = {}
     # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
     while True:
         try:
-            # Sync the subtensor state with the blockchain.
             if step % 5 == 0:
+                # Sync the subtensor state with the blockchain.
                 bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
 
                 # Resync our local state with the latest state from the blockchain.
@@ -270,18 +280,22 @@ def main(config):
 
                 # Sync scores with metagraph
                 # Get the current uids of all miners in the network.
-                uids = metagraph.uids.tolist()
-                # Create new_scores with current metagraph
-                new_scores = torch.zeros(len(uids), dtype=torch.float32)
+                new_uids = metagraph.uids.tolist()
+                new_uids_dict = {uid: default_dict for uid in new_uids}
 
-                for index, uid in enumerate(uids):
+                # Create new_scores with current metagraph
+                new_scores = torch.zeros(len(new_uids), dtype=torch.float32)
+                new_difficulties = torch.zeros(len(last_uids_list), dtype=torch.int8)
+
+                for uid in last_uids_dict:
                     try:
-                        last_index = last_uids.index(uid)
-                        new_scores[index] = scores[last_index]
-                    except ValueError:
+                        new_scores[uid] = scores[uid]
+                        new_difficulties[uid] = difficulties[uid]
+                    except KeyError:
                         # New node
-                        new_scores[index] = 0
-                last_uids = uids
+                        new_scores[uid] = 0
+
+                last_uids_dict = new_uids_dict
 
                 # Set the weights of validators to zero.
                 scores = new_scores * (metagraph.total_stake < 1.024e3)
@@ -291,77 +305,74 @@ def main(config):
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
-                # Check for auto update
-                if config.auto_update == "yes":
-                    compute.util.try_update()
                 # Filter axons with stake and ip address.
-                queryable_uids = get_valid_queryable_uids(metagraph, uids)
+                queryable_uids = get_valid_queryable_uids(metagraph, new_uids)
                 queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
-                axons_list, uids_list, hotkeys_list = filter_axons(
-                    axons_list=queryable_axons,
-                    uids_list=queryable_uids,
-                )
+                filtered_uid_axons_dict = filter_axons(queryable_axons=queryable_axons, queryable_uids=queryable_uids)
 
-                # Prepare app_data for benchmarking
-                # Generate secret key for app
-                secret_key = Fernet.generate_key()
-                cipher_suite = Fernet(secret_key)
-                # Compile the script and generate an exe.
-                ag.run(secret_key)
-                try:
-                    main_dir = os.path.dirname(os.path.abspath(__file__))
-                    file_name = os.path.join(main_dir, "Validator/dist/script")
-                    # Read the exe file and save it to app_data.
-                    with open(file_name, "rb") as file:
-                        # Read the entire content of the EXE file
-                        app_data = file.read()
-                except Exception as e:
-                    bt.logging.error(f"{e}")
-                    continue
-                # Query the miners for benchmarking
-                bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
-                responses: List[compute.protocol.PerfInfo] = dendrite.query(
-                    axons_list,
-                    compute.protocol.PerfInfo(perf_input=repr(app_data)),
-                    timeout=120,
-                )
+                bt.logging.info(f"🔢 PoW challenge generation.")
+                for uid in new_uids_dict:
+                    header = bp.gen_proof_of_work(uid)
+                    new_uids_dict["headers"] = header
+                    new_uids_dict["synapse"] = compute.protocol.Challenge(challenge_input=header)
 
-                # Format responses and save them to benchmark_responses
-                benchmark_responses = []
-                for index, response in enumerate(responses):
-                    try:
-                        if response:
-                            binary_data = ast.literal_eval(response)  # Convert str to binary data
-                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                            benchmark_responses.append(decoded_data)
-                        else:
-                            benchmark_responses.append({})
-                    except Exception as e:
-                        # bt.logging.error(f"Error parsing response: {e}")
-                        benchmark_responses.append({})
+                def perform_query(_axon, _synapse):
+                    start_time = time.time()  # Record the start time of the query
+                    response = dendrite.query(_axon, _synapse, timeout=compute.pow_timeout)
+                    end_time = time.time()  # Record the time upon receiving the response
+                    response_time = end_time - start_time  # Calculate the response time
+                    return _axon.uid, response, response_time  # Return the uid, response, and response time
 
-                bt.logging.info(f"✅ Benchmark results : {benchmark_responses}")
+                # Query the miners for benchmarking using a ThreadPoolExecutor to execute the calls in parallel
+                bt.logging.info(f"🆔 Benchmarking uids : {filtered_uid_axons_dict.keys()}")
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    # Launch asynchronous calls to dendrite.query for each axon in the list
+                    futures = {executor.submit(perform_query, axon, new_uids_dict[uid].get("synapse")): axon for uid, axon in filtered_uid_axons_dict.items()}
 
-                db.update(hotkeys_list, benchmark_responses)
+                    # Retrieve the results once the calls are completed
+                    for future in concurrent.futures.as_completed(futures):
+                        axon = futures[future]
+                        try:
+                            axon_uid, result, time_elapsed = future.result()
+                            challenge_output = result.challenge_output
+                            new_uids_dict[axon_uid]["response"] = result
+                            new_uids_dict[axon_uid]["challenge_output"] = challenge_output
+                            new_uids_dict[axon_uid]["time_elapsed"] = time_elapsed
+                            bp.verify_hash(
+                                header=new_uids_dict[axon_uid].get("header"),
+                                nonce=challenge_output,
+                                target_difficulty=new_uids_dict[axon_uid].get("difficulty"),
+                            )
+                        except Exception as e:
+                            bt.logging.error(f"An error occurred for axon {axon}: {e}")
+
+                benchmark_result = [(data["difficulty"], data["time_elapsed"], data["verify"]) for data in new_uids_dict.values()]
+                bt.logging.info(f"✅ Benchmark results : {benchmark_result}")
+
+                db.update(uids_details=new_uids_dict)
 
                 # Calculate score
-                score_uid_dict = {}
-                for index, uid in enumerate(metagraph.uids):
-                    score = 0
+                for uid in metagraph.uids:
                     try:
-                        uid_index = uids_list.index(uid)
-                        score = cs.score(benchmark_responses[uid_index], axons_list[uid_index].hotkey)
-                        score = min(score, 100)
+                        score = cs.score(new_uids_dict[uid])
+                        # Benchmark the new possible score obtainable to put a true score limit.
+                        # score = min(score, 100)
                     except (ValueError, KeyError):
                         score = 0
 
                     # Update the global score of the miner.
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
-                    scores[index] = alpha * scores[index] + (1 - alpha) * score
-                    score_uid_dict[uid.item()] = scores[index].item()
+                    scores[uid] = alpha * scores[uid] + (1 - alpha) * score
+                    new_uids_dict[uid]["score"] = scores[uid].item()
 
-                bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
+                score_result = [(uid, data["score"]) for uid, data in new_uids_dict.items()]
+                bt.logging.info(f"🔢 Updated scores : {score_result}")
+
+            if step % 15 == 0:
+                # Check for auto update
+                if config.auto_update == "yes":
+                    compute.util.try_update()
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block

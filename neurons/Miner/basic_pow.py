@@ -1,32 +1,36 @@
 # The MIT License (MIT)
-# Copyright © 2023
-
+# Copyright © 2023 Rapiiidooo
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
 # the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software,
 # and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
 # The above copyright notice and this permission notice shall be included in all copies or substantial portions of
 # the Software.
-
+#
 # THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
 # THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Import all submodules.
-from . import pow
-from . import protocol
-from . import reward
-from . import util
+import bittensor as bt
+
+from compute.pow import calculate_hash
 
 
-# Define the version of the template module.
-__version__ = "1.0.5"
-version_split = __version__.split(".")
-__spec_version__ = (1000 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
+def proof_of_work_miner(header, target_difficulty):
+    nonce = 0
+    # TODO ADD TIMING
+    while True:
+        hash_result = calculate_hash(header, nonce)
 
-pow_timeout = 120
-pow_min_difficulty = 5
-pow_max_difficulty = 10
+        # Ensure the hash satisfy the targeted difficulty
+        if hash_result.startswith("0" * target_difficulty):
+            return nonce, hash_result
+        nonce += 1
+
+        if nonce % 1_000_000 == 0:
+            bt.logging.info(f"🔢 Nonce iterated : {nonce}")
+
+        # bt.logging.info("Unable to find a valid answer within 120 seconds or the signature is not valid.")

@@ -1,10 +1,7 @@
 bittensor
 torch
-psutil
-igpu
 cryptography
 pyinstaller
 docker
 wandb
 at
-GPUtil
