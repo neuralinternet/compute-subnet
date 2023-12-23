@@ -31,8 +31,8 @@ def score(data):
         # Calculate score for each device
         registered = check_if_registered(data["axon"].hotkey)
 
-        difficulty = data["axon"].difficulty
-        time_elapsed = data["axon"].time_elapsed
+        difficulty = data["difficulty"]
+        time_elapsed = data["time_elapsed"]
 
         # Just in case but in theory, it is not possible to fake the difficulty as it is sent by the validator
         # Same occurs for the time, it's calculated by the validator so miners can not fake it

@@ -14,10 +14,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 import time
+import traceback
 
 import bittensor as bt
+import torch
 
-import compute
+from compute import pow, pow_timeout
 
 __all__ = ["proof_of_work_miner"]
 
@@ -26,8 +28,13 @@ def proof_of_work_miner(header, target_difficulty):
     start_time = time.time()
     nonce = 0
 
-    while time.time() - start_time > compute.pow_timeout:
-        hash_result = compute.pow.calculate_hash(header, nonce)
+    if not torch.cuda.is_available():
+        bt.logging.error(traceback.format_exc())
+        bt.logging.error("CUDA is not available.")
+        bt.logging.error("Switched to CPUs, be careful you might never have results and might be de-registered.")
+
+    while time.time() - start_time > pow_timeout:
+        hash_result = pow.calculate_hash(header, nonce)
 
         # Ensure the hash satisfy the targeted difficulty
         if hash_result.startswith("0" * target_difficulty):

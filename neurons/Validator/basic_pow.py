@@ -18,7 +18,6 @@
 import random
 import string
 
-import bittensor as bt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -52,7 +51,9 @@ def verify_hash(header, nonce, target_difficulty):
     return hash_result.startswith("0" * target_difficulty)
 
 
-def gen_proof_of_work(uid):
-    header = generate_random_header()
-    bt.logging.info(f"🔢 Header generated for uid : {uid}")
-    return header
+def gen_proof_of_work():
+    try:
+        header = generate_random_header()
+        return header
+    except Exception as _:
+        return None

@@ -17,6 +17,7 @@
 
 import bittensor as bt
 
+from compute import pow_min_difficulty
 
 __all__ = ["Challenge", "Allocate", "DeviceInfo"]
 
@@ -32,7 +33,8 @@ class Challenge(bt.Synapse):
     - challenge_output: A string containing the nonce that resolved the challenge.
     """
 
-    challenge_input: str = ""
+    header: str = ""
+    difficulty: int = pow_min_difficulty
 
     challenge_output: str = ""
     """

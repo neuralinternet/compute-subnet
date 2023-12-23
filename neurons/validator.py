@@ -20,7 +20,6 @@
 import argparse
 import ast
 import concurrent.futures
-import json
 import os
 import sys
 import time
@@ -31,7 +30,7 @@ import bittensor as bt
 import torch
 from cryptography.fernet import Fernet
 
-import compute
+from compute import pow_min_difficulty, pow_timeout, protocol, util
 from Validator import app_generator as ag, basic_pow as bp, calculate_score as cs, database as db
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -250,19 +249,8 @@ def main(config):
     last_uids_list = metagraph.uids.tolist()
     scores = torch.zeros(len(last_uids_list), dtype=torch.float32)
     difficulties = torch.zeros(len(last_uids_list), dtype=torch.int8)
-    difficulties[difficulties == 0] = 1
-    default_dict = {
-        "axon": None,
-        "header": None,
-        "difficulty": None,
-        "score": None,
-        "synapse": None,
-        "response": None,
-        "challenge_output": None,
-        "time_elapsed": None,
-        "verified": None,
-    }
-    last_uids_dict = {uid: default_dict for uid in last_uids_list}
+    difficulties[difficulties == 0] = pow_min_difficulty
+    last_uids_dict = {uid: {} for uid in last_uids_list}
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
@@ -286,33 +274,42 @@ def main(config):
                 # Sync scores with metagraph
                 # Get the current uids of all miners in the network.
                 new_uids = metagraph.uids.tolist()
-                new_uids_dict = {uid: default_dict for uid in new_uids}
+                new_uids_dict = {uid: {} for uid in new_uids}
 
                 # Create new_scores with current metagraph
                 new_scores = torch.zeros(len(new_uids), dtype=torch.float32)
                 new_difficulties = torch.zeros(len(last_uids_list), dtype=torch.int8)
-                new_difficulties[new_difficulties == 0] = 1
+                new_difficulties[new_difficulties == 0] = pow_min_difficulty
 
                 for uid in last_uids_dict:
                     try:
                         new_scores[uid] = scores[uid]
+                        new_uids_dict[uid]["score"] = scores[uid]
 
                         # Increase or decrease the difficulty on some conditions
                         verified = last_uids_dict[uid].get("verified")
                         time_elapsed = last_uids_dict[uid].get("time_elapsed")
                         difficulty = last_uids_dict[uid].get("difficulty")
-                        if verified is True and time_elapsed < compute.pow_timeout / 2:
-                            new_difficulties[uid] = difficulty + 1
-                        elif last_uids_dict[uid].get("verified") is True:
-                            new_difficulties[uid] = difficulty
-                        elif last_uids_dict[uid].get("verified") is False and difficulty > 1:
-                            new_difficulties[uid] = difficulty - 1
-                        else:
-                            new_difficulties[uid] = difficulties[uid]
+                        if difficulty:
+                            if verified is True and time_elapsed < pow_timeout / 2:
+                                new_difficulties[uid] = difficulty + 1
+                            elif last_uids_dict[uid].get("verified") is True:
+                                new_difficulties[uid] = difficulty
+                            elif last_uids_dict[uid].get("verified") is False and difficulty > pow_min_difficulty:
+                                new_difficulties[uid] = difficulty - 1
+                            else:
+                                new_difficulties[uid] = difficulties[uid]
+                            new_uids_dict[uid]["difficulty"] = new_difficulties[uid]
                     except KeyError:
                         # New node
                         new_scores[uid] = 0
+                        new_difficulties[uid] = pow_min_difficulty
 
+                    new_uids_dict[uid]["score"] = new_scores[uid]
+                    new_uids_dict[uid]["difficulty"] = new_difficulties[uid]
+
+                for key, value in new_uids_dict.items():
+                    print(key, value)
                 last_uids_dict = new_uids_dict
 
                 # Set the weights of validators to zero.
@@ -329,24 +326,29 @@ def main(config):
                 filtered_uid_axons_dict = filter_axons(queryable_axons=queryable_axons, queryable_uids=queryable_uids)
 
                 bt.logging.info(f"🔢 PoW challenge generation.")
-                for uid in new_uids_dict:
-                    header = bp.gen_proof_of_work(uid)
-                    challenge_input = {"header": header, "difficulty": new_uids_dict[uid]["difficulty"]}
-                    new_uids_dict[uid]["headers"] = header
-                    new_uids_dict[uid]["synapse"] = compute.protocol.Challenge(challenge_input=json.dumps(challenge_input))
+                for uid, axon in filtered_uid_axons_dict.items():
+                    header = bp.gen_proof_of_work()
+                    new_uids_dict[uid]["axon"] = axon
+                    new_uids_dict[uid]["header"] = header
+                    new_uids_dict[uid]["synapse"] = protocol.Challenge(header=header, difficulty=new_uids_dict[uid]["difficulty"])
 
-                def perform_query(_axon, _synapse):
+                header_generated = [data.get("header", None) for data in new_uids_dict.values()]
+                bt.logging.info(f"🔢 Headers generated: {header_generated}")
+
+                def perform_query(_uid, _axon, _synapse):
                     start_time = time.time()  # Record the start time of the query
-                    response = dendrite.query(_axon, _synapse, timeout=compute.pow_timeout)
+                    _response = dendrite.query(_axon, _synapse, timeout=pow_timeout)
                     end_time = time.time()  # Record the time upon receiving the response
                     response_time = end_time - start_time  # Calculate the response time
-                    return _axon.uid, response, response_time  # Return the uid, response, and response time
+                    return uid, _response, response_time  # Return the uid, response, and response time
 
                 # Query the miners for benchmarking using a ThreadPoolExecutor to execute the calls in parallel
                 bt.logging.info(f"🆔 Challenge uids : {filtered_uid_axons_dict.keys()}")
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     # Launch asynchronous calls to dendrite.query for each axon in the list
-                    futures = {executor.submit(perform_query, axon, new_uids_dict[uid].get("synapse")): axon for uid, axon in filtered_uid_axons_dict.items()}
+                    futures = {
+                        executor.submit(perform_query, uid, axon, new_uids_dict[uid].get("synapse")): axon for uid, axon in filtered_uid_axons_dict.items()
+                    }
 
                     # Retrieve the results once the calls are completed
                     for future in concurrent.futures.as_completed(futures):
@@ -407,9 +409,9 @@ def main(config):
                     continue
                 # Query the miners for benchmarking
                 bt.logging.info(f"🆔 DeviceInfo uids : {filtered_uid_axons_dict.keys()}")
-                responses: List[compute.protocol.DeviceInfo] = dendrite.query(
+                responses: List[protocol.DeviceInfo] = dendrite.query(
                     filtered_uid_axons_dict.values(),
-                    compute.protocol.DeviceInfo(device_info_input=repr(app_data)),
+                    protocol.DeviceInfo(device_info_input=repr(app_data)),
                     timeout=60,
                 )
 
@@ -434,7 +436,7 @@ def main(config):
             if step % 20 == 0:
                 # Check for auto update
                 if config.auto_update == "yes":
-                    compute.util.try_update()
+                    util.try_update()
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block
