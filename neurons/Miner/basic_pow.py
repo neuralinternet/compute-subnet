@@ -15,6 +15,7 @@
 # DEALINGS IN THE SOFTWARE.
 import time
 import traceback
+from typing import Tuple
 
 import bittensor as bt
 import torch
@@ -24,7 +25,7 @@ from compute import pow, pow_timeout
 __all__ = ["proof_of_work_miner"]
 
 
-def proof_of_work_miner(header, target_difficulty):
+def proof_of_work_miner(header, target_difficulty) -> Tuple[int, str]:
     start_time = time.time()
     nonce = 0
 

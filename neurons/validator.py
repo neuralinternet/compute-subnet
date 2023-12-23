@@ -19,7 +19,7 @@
 
 import argparse
 import ast
-import concurrent.futures
+import asyncio
 import os
 import sys
 import time
@@ -147,7 +147,8 @@ def filter_axons(queryable_axons, queryable_uids):
     for index, axon in enumerate(queryable_axons):
         ip_address = axon.ip
 
-        if ip_address not in valid_ip_addresses:
+        # TODO remove for prod
+        if ip_address not in valid_ip_addresses and ip_address == "207.188.6.204":
             valid_ip_addresses.add(ip_address)
             filtered_uid_axons_dict[queryable_uids[index]] = axon
 
@@ -195,7 +196,15 @@ def get_valid_tensors(metagraph):
     return tensors
 
 
-def main(config):
+async def perform_query_async(dendrite, uid, axon, synapse):
+    start_time = time.time()  # Record the start time of the query
+    response = dendrite.query(axon, synapse, timeout=pow_timeout)
+    end_time = time.time()  # Record the time upon receiving the response
+    response_time = end_time - start_time  # Calculate the response time
+    return uid, response, response_time  # Return the uid, response, and response time
+
+
+async def main(config):
     global blacklisted_hotkeys_set
     global blacklisted_coldkeys_set
 
@@ -308,8 +317,6 @@ def main(config):
                     new_uids_dict[uid]["score"] = new_scores[uid]
                     new_uids_dict[uid]["difficulty"] = new_difficulties[uid]
 
-                for key, value in new_uids_dict.items():
-                    print(key, value)
                 last_uids_dict = new_uids_dict
 
                 # Set the weights of validators to zero.
@@ -335,45 +342,47 @@ def main(config):
                 header_generated = [data.get("header", None) for data in new_uids_dict.values()]
                 bt.logging.info(f"🔢 Headers generated: {header_generated}")
 
-                def perform_query(_uid, _axon, _synapse):
-                    start_time = time.time()  # Record the start time of the query
-                    _response = dendrite.query(_axon, _synapse, timeout=pow_timeout)
-                    end_time = time.time()  # Record the time upon receiving the response
-                    response_time = end_time - start_time  # Calculate the response time
-                    return uid, _response, response_time  # Return the uid, response, and response time
-
                 # Query the miners for benchmarking using a ThreadPoolExecutor to execute the calls in parallel
                 bt.logging.info(f"🆔 Challenge uids : {filtered_uid_axons_dict.keys()}")
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    # Launch asynchronous calls to dendrite.query for each axon in the list
-                    futures = {
-                        executor.submit(perform_query, uid, axon, new_uids_dict[uid].get("synapse")): axon for uid, axon in filtered_uid_axons_dict.items()
-                    }
 
-                    # Retrieve the results once the calls are completed
-                    for future in concurrent.futures.as_completed(futures):
-                        axon = futures[future]
-                        try:
-                            axon_uid, result, time_elapsed = future.result()
-                            challenge_output = result.challenge_output
-                            new_uids_dict[axon_uid]["response"] = result
-                            new_uids_dict[axon_uid]["challenge_output"] = challenge_output
-                            new_uids_dict[axon_uid]["time_elapsed"] = time_elapsed
-                            bp.verify_hash(
-                                header=new_uids_dict[axon_uid].get("header"),
-                                nonce=challenge_output,
-                                target_difficulty=new_uids_dict[axon_uid].get("difficulty"),
-                            )
-                        except Exception as e:
-                            bt.logging.error(f"An error occurred for axon {axon}: {e}")
+                tasks = []
+                for uid, axon in filtered_uid_axons_dict.items():
+                    task = asyncio.create_task(perform_query_async(dendrite, uid, axon, new_uids_dict[uid].get("synapse")))
+                    tasks.append((uid, task))
 
-                benchmark_result = [(data.get("difficulty"), data.get("time_elapsed"), data.get("verified")) for data in new_uids_dict.values()]
-                bt.logging.info(f"✅ Benchmark results : {benchmark_result}")
+                for uid, task in tasks:
+                    try:
+                        result = await task
+                        print(result)
+                    except Exception as e:
+                        bt.logging.error(f"An error occurred for uid {uid}: {e}")
+
+                    # # Retrieve the results once the calls are completed
+                    # for future in concurrent.futures.as_completed(futures):
+                    #     axon = futures[future]
+                    #     try:
+                    #         uid, result, time_elapsed = future.result()
+                    #         print(uid, result, time_elapsed)
+                    #         challenge_output = result.challenge_output
+                    #         new_uids_dict[uid]["response"] = result
+                    #         new_uids_dict[uid]["challenge_output"] = challenge_output
+                    #         new_uids_dict[uid]["time_elapsed"] = time_elapsed
+                    #         bp.verify_hash(
+                    #             header=new_uids_dict[uid].get("header"),
+                    #             nonce=challenge_output,
+                    #             target_difficulty=new_uids_dict[uid].get("difficulty"),
+                    #         )
+                    #     except Exception as e:
+                    #         bt.logging.error(f"An error occurred for axon {axon}: {e}")
+
+                benchmark_challenge = [(data.get("difficulty"), data.get("time_elapsed"), data.get("verified")) for data in new_uids_dict.values()]
+                bt.logging.info(f"✅ Benchmark challenge : {benchmark_challenge}")
 
                 db.update_pow_details(uids_data=new_uids_dict)
 
                 # Calculate score
                 for uid in metagraph.uids:
+                    print(uid)
                     try:
                         score = cs.score(new_uids_dict[uid])
                         # Benchmark the new possible score obtainable to put a true score limit.
@@ -385,8 +394,12 @@ def main(config):
                     # This score contributes to the miner's weight in the network.
                     # A higher weight means that the miner has been consistently responding correctly.
                     scores[uid] = alpha * scores[uid] + (1 - alpha) * score
+                    print(uid)
+                    print(new_uids_dict)
+                    print(new_uids_dict[uid])
+                    print(scores[uid].item())
                     new_uids_dict[uid]["score"] = scores[uid].item()
-
+                exit()
                 score_result = [(uid, data["score"]) for uid, data in new_uids_dict.items()]
                 bt.logging.info(f"🔢 Updated scores : {score_result}")
 
@@ -408,7 +421,7 @@ def main(config):
                     bt.logging.error(f"{e}")
                     continue
                 # Query the miners for benchmarking
-                bt.logging.info(f"🆔 DeviceInfo uids : {filtered_uid_axons_dict.keys()}")
+                bt.logging.info(f"🆔 DeviceInfo for uids : {filtered_uid_axons_dict.keys()}")
                 responses: List[protocol.DeviceInfo] = dendrite.query(
                     filtered_uid_axons_dict.values(),
                     protocol.DeviceInfo(device_info_input=repr(app_data)),
@@ -479,4 +492,4 @@ if __name__ == "__main__":
     # Parse the configuration.
     config = get_config()
     # Run the main function.
-    main(config)
+    asyncio.run(main(config=config))

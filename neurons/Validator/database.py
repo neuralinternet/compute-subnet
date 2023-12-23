@@ -107,7 +107,7 @@ def update_pow_details(uids_data: dict):
             )
         conn.commit()
     except Exception as e:
-        bt.logging.error(f"Error while updating pow_details : {e}")
+        bt.logging.error(f"Error while updating {table_name[0]} : {e}")
 
 
 #  Update the pow_details with challenge details
@@ -116,7 +116,7 @@ def update_device_details(uids_data: dict):
         cursor.execute(f"DELETE FROM {table_name[1]}")
         for uid, details in uids_data.items():
             cursor.execute(
-                "INSERT INTO {table_name[1]} (hotkey, details) VALUES (?, ?)",
+                f"INSERT INTO {table_name[1]} (hotkey, details) VALUES (?, ?)",
                 (
                     details.get("axon").hotkey,
                     details.get("details"),
@@ -124,4 +124,4 @@ def update_device_details(uids_data: dict):
             )
         conn.commit()
     except Exception as e:
-        bt.logging.error(f"Error while updating pow_details : {e}")
+        bt.logging.error(f"Error while updating {table_name[1]} : {e}")

@@ -19,7 +19,6 @@
 import argparse
 import base64
 import os
-import sys
 
 import bittensor as bt
 import torch
@@ -27,11 +26,7 @@ import wandb
 
 import RSAEncryption as rsa
 import Validator.database as db
-
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
-
-import compute
+from compute import pow_min_difficulty, pow_timeout, protocol
 
 
 # Step 2: Set up the configuration parser
@@ -96,7 +91,7 @@ def allocate(config, requirement, timeline, public_key):
         if axon.hotkey in candidates_hotkey:
             axon_candidates.append(axon)
 
-    responses = dendrite.query(axon_candidates, compute.protocol.Allocate(timeline=timeline, requirement=requirement, checking=True))
+    responses = dendrite.query(axon_candidates, protocol.Allocate(timeline=timeline, requirement=requirement, checking=True))
 
     final_candidates_hotkey = []
 
@@ -121,7 +116,7 @@ def allocate(config, requirement, timeline, public_key):
         axon = metagraph.axons[index]
         register_response = dendrite.query(
             axon,
-            compute.protocol.Allocate(timeline=timeline, requirement=requirement, checking=False, public_key=public_key),
+            protocol.Allocate(timeline=timeline, requirement=requirement, checking=False, public_key=public_key),
             timeout=120,
         )
         if register_response and register_response["status"] is True:
@@ -133,7 +128,7 @@ def allocate(config, requirement, timeline, public_key):
 
 
 def main(config):
-    requirement = {"difficulty": compute.pow_min_difficulty, "time_elapsed": compute.pow_timeout, "verified": True}
+    requirement = {"difficulty": pow_min_difficulty, "time_elapsed": pow_timeout, "verified": True}
     timeline = 60
     private_key, public_key = rsa.generate_key_pair()
     result = allocate(config, requirement, timeline, public_key)

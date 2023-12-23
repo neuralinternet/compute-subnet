@@ -147,7 +147,11 @@ def main(config):
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
     def challenge(synapse: protocol.Challenge) -> protocol.Challenge:
-        synapse.challenge_output = basic_pow.proof_of_work_miner(header=synapse.header, target_difficulty=synapse.difficulty)
+        bt.logging.info(f"Received challenge header: {synapse.challenge_header}")
+        synapse.challenge_nonce, synapse.challenge_hash = basic_pow.proof_of_work_miner(
+            header=synapse.challenge_header,
+            target_difficulty=synapse.challenge_difficulty,
+        )
         return synapse
 
     # The blacklist function decides if a request should be ignored.
