@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
+import json
 
 # Step 1: Import necessary libraries and modules
 import os
@@ -27,7 +28,7 @@ import typing
 import bittensor as bt
 
 import Miner.allocate as al
-import Miner.performance as pf
+import Miner.basic_pow as bp
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -109,54 +110,79 @@ def main(config):
     # Step 5: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
 
-    # The blacklist function decides if a request should be ignored.
-    def blacklist_perfInfo(synapse: compute.protocol.PerfInfo) -> typing.Tuple[bool, str]:
-        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+    def base_blacklist(synapse: typing.Union[compute.protocol.Allocate, compute.protocol.Challenge]) -> typing.Tuple[bool, str]:
+        try:
+            index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
+            hotkey = synapse.dendrite.hotkey
+            stake = metagraph.S[index].item()
+
+            # Blacklist entities that are not validators
+            uid = metagraph.hotkeys.index(hotkey)
+            if not metagraph.validator_permit[uid]:
+                bt.logging.info(f"Blacklisted non-validator: {hotkey}")
+                return True, f"Hotkey {hotkey} is not a validator"
+
             # Ignore requests from unrecognized entities.
-            bt.logging.trace(f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}")
-            return True, "Unrecognized hotkey"
+            if synapse.dendrite.hotkey not in metagraph.hotkeys:
+                bt.logging.trace(f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}")
+                return True, "Unrecognized hotkey"
 
-        index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
-        stake = metagraph.S[index].item()
+            if stake < 1024:
+                bt.logging.trace(f"Not enough stake {stake}")
+                return True, f"Not enough stake!"
 
-        if stake < 1024:
-            bt.logging.trace(f"Not enough stake {stake}")
-            return True, "Not enough stake!"
+            bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
+            return False, "Hotkey recognized!"
+        except Exception as _:
+            bt.logging.error(f"😬errror during blacklist {traceback.format_exc()}")
 
-        bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
-        return False, "Hotkey recognized!"
+    # The blacklist function decides if a request should be ignored.
+    def blacklist_challenge(synapse: compute.protocol.Challenge) -> typing.Tuple[bool, str]:
+        blacklist = base_blacklist(synapse)
+        bt.logging.info(blacklist[1])
+        return blacklist
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_perfInfo(synapse: compute.protocol.PerfInfo) -> float:
+    def priority_challenge(synapse: compute.protocol.Challenge) -> float:
         caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
         prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
         bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority)
         return prirority
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
-        app_data = synapse.perf_input
-        synapse.perf_output = pf.get_respond(app_data)
+    def challenge(synapse: compute.protocol.Challenge) -> compute.protocol.Challenge:
+        serialized_data = synapse.challenge_input
+        deserialized_data = json.loads(serialized_data)
+        synapse.perf_output = bp.proof_of_work_miner(header=deserialized_data["header"], target_difficulty=deserialized_data["difficulty"])
         return synapse
 
-        # The blacklist function decides if a request should be ignored.
+    # The blacklist function decides if a request should be ignored.
+    def blacklist_device_info(synapse: compute.protocol.Challenge) -> typing.Tuple[bool, str]:
+        blacklist = base_blacklist(synapse)
+        bt.logging.info(blacklist[1])
+        return blacklist
 
+    # The priority function determines the order in which requests are handled.
+    # More valuable or higher-priority requests are processed before others.
+    def priority_device_info(synapse: compute.protocol.DeviceInfo) -> float:
+        caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
+        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority)
+        return prirority
+
+    # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
+    def device_info(synapse: compute.protocol.Challenge) -> compute.protocol.Challenge:
+        serialized_data = synapse.challenge_input
+        deserialized_data = json.loads(serialized_data)
+        synapse.perf_output = bp.proof_of_work_miner(header=deserialized_data["header"], target_difficulty=deserialized_data["difficulty"])
+        return synapse
+
+    # The blacklist function decides if a request should be ignored.
     def blacklist_allocate(synapse: compute.protocol.Allocate) -> typing.Tuple[bool, str]:
-        if synapse.dendrite.hotkey not in metagraph.hotkeys:
-            # Ignore requests from unrecognized entities.
-            bt.logging.trace(f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}")
-            return True, "Unrecognized hotkey"
-
-        index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
-        stake = metagraph.S[index].item()
-
-        if stake < 1024:
-            bt.logging.trace(f"Not enough stake {stake}")
-            return True, "Not enough stake!"
-
-        bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
-        return False, "Hotkey recognized!"
+        blacklist = base_blacklist(synapse)
+        bt.logging.info(blacklist[1])
+        return blacklist
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
@@ -169,16 +195,15 @@ def main(config):
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
     def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
         timeline = synapse.timeline
-        device_requirement = synapse.device_requirement
+        requirement = synapse.requirement
         checking = synapse.checking
 
-        result = True
-        if checking == True:
-            result = al.check(timeline, device_requirement)
+        if checking is True:
+            result = al.check()
             synapse.output = result
         else:
             public_key = synapse.public_key
-            result = al.register(timeline, device_requirement, public_key)
+            result = al.register(timeline, requirement, public_key)
             synapse.output = result
         return synapse
 
@@ -190,18 +215,22 @@ def main(config):
     # Attach determiners which functions are called when servicing a request.
     bt.logging.info(f"Attaching forward function to axon.")
     axon.attach(
-        forward_fn=perfInfo,
-        blacklist_fn=blacklist_perfInfo,
-        priority_fn=priority_perfInfo,
+        forward_fn=challenge,
+        blacklist_fn=blacklist_challenge,
+        priority_fn=priority_challenge,
     ).attach(
         forward_fn=allocate,
         blacklist_fn=blacklist_allocate,
         priority_fn=priority_allocate,
+    ).attach(
+        forward_fn=device_info,
+        blacklist_fn=priority_device_info,
+        priority_fn=priority_device_info,
     )
 
     # Serve passes the axon information to the network + netuid we are hosting on.
     # This will auto-update if the axon port of external ip have changed.
-    bt.logging.info(f"Serving axon {perfInfo, allocate} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
+    bt.logging.info(f"Serving axon {challenge, allocate} on network: {config.subtensor.chain_endpoint} with netuid: {config.netuid}")
     axon.serve(netuid=config.netuid, subtensor=subtensor)
 
     # Start  starts the miner's axon, making it active on the network.
@@ -227,9 +256,11 @@ def main(config):
                     f"Emission:{metagraph.E[my_subnet_uid]}"
                 )
                 bt.logging.info(log)
+
             # Check for auto update
-            if step % 30 == 0 and config.auto_update == "yes":
+            if step % 15 == 0 and config.auto_update == "yes":
                 compute.util.try_update()
+
             step += 1
             time.sleep(1)
 

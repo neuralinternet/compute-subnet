@@ -26,13 +26,17 @@ conn = sqlite3.connect("database.db")
 # Create a cursor
 cursor = conn.cursor()
 
-# Retrieve the existing table's schema if it exists
-cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='miner_details'")
-existing_schema = cursor.fetchone()
+table_name = ["pow_details", "device_details"]
 
+# Retrieve the existing table's schema if it exists
+cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pow_details'")
+existing_schema_pow = cursor.fetchone()
+cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='device_details'")
+existing_schema_device = cursor.fetchone()
+existing_schema_list = [existing_schema_pow, existing_schema_device]
 # Define the desired new schema
-new_schema = """
-    CREATE TABLE IF NOT EXISTS miner_details (
+new_schema_pow = """
+    CREATE TABLE IF NOT EXISTS pow_details (
         id INTEGER PRIMARY KEY,
         hotkey TEXT,
         difficulty INTEGER,
@@ -40,28 +44,37 @@ new_schema = """
         verified BOOLEAN,
     )
 """
+new_schema_device = """
+    CREATE TABLE IF NOT EXISTS device_details (
+        id INTEGER PRIMARY KEY,
+        hotkey TEXT,
+        details TEXT,
+    )
+"""
+new_schema_list = [new_schema_pow, new_schema_device]
 
 # Compare the schemas
-if existing_schema is not None and existing_schema[0] != new_schema:
-    # Drop the existing table if the schemas are different
-    cursor.execute("DROP TABLE miner_details")
-    bt.logging.info(f"Migration needed : Existing table dropped.")
+for index, schema in enumerate(existing_schema_list):
+    if schema is not None and schema != new_schema_list[index]:
+        # Drop the existing table if the schemas are different
+        cursor.execute(f"DROP TABLE {table_name[index]}")
+        bt.logging.info(f"Migration needed : Existing table dropped.")
 
-    # Create the new table with the new schema
-    cursor.execute(new_schema)
-    bt.logging.info(f"Migration done : New table created.")
+        # Create the new table with the new schema
+        cursor.execute(new_schema_list[index])
+        bt.logging.info(f"Migration done : New table created.")
 
-    # Commit changes and close the connection
-    conn.commit()
-    bt.logging.info(f"Applying the changes.")
+        # Commit changes and close the connection
+        conn.commit()
+        bt.logging.info(f"Applying the changes.")
 
 
 # Fetch hotkeys from database that meets device_requirement
 def select_miners_hotkey(requirement):
     try:
-        # Fetch all records from miner_details table
-        cursor.execute(new_schema)
-        cursor.execute("SELECT * FROM miner_details")
+        # Fetch all records from pow_details table
+        cursor.execute(new_schema_list[0])
+        cursor.execute(f"SELECT * FROM {table_name[0]}")
         rows = cursor.fetchall()
 
         # Check if the miner meets device_requirement
@@ -74,17 +87,17 @@ def select_miners_hotkey(requirement):
                 hotkey_list.append(row[1])
         return hotkey_list
     except Exception as e:
-        bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
+        bt.logging.error(f"Error while getting hotkeys from pow_details : {e}")
         return []
 
 
-#  Update the miner_details with challenge details
-def update(uids_details: dict):
+#  Update the pow_details with challenge details
+def update_pow_details(uids_data: dict):
     try:
-        cursor.execute(f"DELETE FROM miner_details")
-        for uid, details in uids_details.items():
+        cursor.execute(f"DELETE FROM {table_name[0]}")
+        for uid, details in uids_data.items():
             cursor.execute(
-                "INSERT INTO miner_details (hotkey, difficulty, time_elapsed, verified) VALUES (?, ?, ?, ?)",
+                f"INSERT INTO {table_name[0]} (hotkey, difficulty, time_elapsed, verified) VALUES (?, ?, ?, ?)",
                 (
                     details.get("axon").hotkey,
                     details.get("difficulty"),
@@ -94,4 +107,21 @@ def update(uids_details: dict):
             )
         conn.commit()
     except Exception as e:
-        bt.logging.error(f"Error while updating miner_details : {e}")
+        bt.logging.error(f"Error while updating pow_details : {e}")
+
+
+#  Update the pow_details with challenge details
+def update_device_details(uids_data: dict):
+    try:
+        cursor.execute(f"DELETE FROM {table_name[1]}")
+        for uid, details in uids_data.items():
+            cursor.execute(
+                "INSERT INTO {table_name[1]} (hotkey, details) VALUES (?, ?)",
+                (
+                    details.get("axon").hotkey,
+                    details.get("details"),
+                ),
+            )
+        conn.commit()
+    except Exception as e:
+        bt.logging.error(f"Error while updating pow_details : {e}")

@@ -25,12 +25,14 @@ import os
 import sys
 import time
 import traceback
+from typing import List
 
 import bittensor as bt
 import torch
+from cryptography.fernet import Fernet
 
 import compute
-from Validator import basic_pow as bp, calculate_score as cs, database as db
+from Validator import app_generator as ag, basic_pow as bp, calculate_score as cs, database as db
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -267,6 +269,8 @@ def main(config):
 
     new_uids = []
     new_uids_dict = {}
+    filtered_uid_axons_dict = {}
+
     # Step 7: The Main Validation Loop
     bt.logging.info("Starting validator loop.")
     step = 0
@@ -339,7 +343,7 @@ def main(config):
                     return _axon.uid, response, response_time  # Return the uid, response, and response time
 
                 # Query the miners for benchmarking using a ThreadPoolExecutor to execute the calls in parallel
-                bt.logging.info(f"🆔 Benchmarking uids : {filtered_uid_axons_dict.keys()}")
+                bt.logging.info(f"🆔 Challenge uids : {filtered_uid_axons_dict.keys()}")
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     # Launch asynchronous calls to dendrite.query for each axon in the list
                     futures = {executor.submit(perform_query, axon, new_uids_dict[uid].get("synapse")): axon for uid, axon in filtered_uid_axons_dict.items()}
@@ -364,7 +368,7 @@ def main(config):
                 benchmark_result = [(data["difficulty"], data["time_elapsed"], data["verified"]) for data in new_uids_dict.values()]
                 bt.logging.info(f"✅ Benchmark results : {benchmark_result}")
 
-                db.update(uids_details=new_uids_dict)
+                db.update_pow_details(uids_data=new_uids_dict)
 
                 # Calculate score
                 for uid in metagraph.uids:
@@ -385,6 +389,49 @@ def main(config):
                 bt.logging.info(f"🔢 Updated scores : {score_result}")
 
             if step % 15 == 0:
+                # Prepare app_data for benchmarking
+                # Generate secret key for app
+                secret_key = Fernet.generate_key()
+                cipher_suite = Fernet(secret_key)
+                # Compile the script and generate an exe.
+                ag.run(secret_key)
+                try:
+                    main_dir = os.path.dirname(os.path.abspath(__file__))
+                    file_name = os.path.join(main_dir, "Validator/dist/script")
+                    # Read the exe file and save it to app_data.
+                    with open(file_name, "rb") as file:
+                        # Read the entire content of the EXE file
+                        app_data = file.read()
+                except Exception as e:
+                    bt.logging.error(f"{e}")
+                    continue
+                # Query the miners for benchmarking
+                bt.logging.info(f"🆔 DeviceInfo uids : {filtered_uid_axons_dict.keys()}")
+                responses: List[compute.protocol.DeviceInfo] = dendrite.query(
+                    filtered_uid_axons_dict.values(),
+                    compute.protocol.DeviceInfo(device_info_input=repr(app_data)),
+                    timeout=60,
+                )
+
+                # Format responses and save them to benchmark_responses
+                for index, response in enumerate(responses):
+                    try:
+                        if response:
+                            binary_data = ast.literal_eval(response)  # Convert str to binary data
+                            decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
+                            new_uids_dict[index]["details"] = decoded_data
+                        else:
+                            new_uids_dict[index]["details"] = {}
+                    except Exception as e:
+                        # bt.logging.error(f"Error parsing response: {e}")
+                        new_uids_dict[index]["details"] = {}
+
+                details_result = [(uid, data["details"]) for uid, data in new_uids_dict.items()]
+                bt.logging.info(f"✅ Benchmark results : {details_result}")
+
+                db.update_device_details(uids_data=new_uids_dict)
+
+            if step % 20 == 0:
                 # Check for auto update
                 if config.auto_update == "yes":
                     compute.util.try_update()

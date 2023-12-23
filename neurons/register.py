@@ -124,7 +124,7 @@ def allocate(config, requirement, timeline, public_key):
             compute.protocol.Allocate(timeline=timeline, requirement=requirement, checking=False, public_key=public_key),
             timeout=120,
         )
-        if register_response and register_response["status"] == True:
+        if register_response and register_response["status"] is True:
             register_response["ip"] = axon.ip
             register_response["hotkey"] = axon.hotkey
             return register_response
@@ -138,7 +138,7 @@ def main(config):
     private_key, public_key = rsa.generate_key_pair()
     result = allocate(config, requirement, timeline, public_key)
 
-    if result["status"] == True:
+    if result["status"] is True:
         result_hotkey = result["hotkey"]
         result_info = result["info"]
         private_key = private_key.encode("utf-8")

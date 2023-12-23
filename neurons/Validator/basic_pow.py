@@ -25,6 +25,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from compute.pow import calculate_hash
 
+__all__ = ["verify_hash", "gen_proof_of_work"]
+
 
 def generate_random_header(length: int = 20):
     # Generating private/public keys

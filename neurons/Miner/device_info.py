@@ -24,11 +24,28 @@ __all__ = ["register", "check"]
 
 
 # Register for given timeline and device_requirement
-def register(timeline, requirement, public_key):
+def register(timeline, device_requirement, public_key):
     try:
         _ = ctn.kill_container()
 
-        run_status = ctn.run_allocate_container(requirement, public_key)
+        # Extract requirements from device_requirement and format them
+        cpu_count = device_requirement["cpu"]["count"]  # e.g 2
+        cpu_assignment = "0-" + str(cpu_count - 1)  # e.g 0-1
+        if cpu_count == 1:
+            cpu_assignment = "0"
+        ram_capacity = device_requirement["ram"]["capacity"]  # e.g 5g
+        hard_disk_capacity = device_requirement["hard_disk"]["capacity"]  # e.g 100g
+        if not device_requirement["gpu"]:
+            gpu_capacity = 0
+        else:
+            gpu_capacity = device_requirement["gpu"]["capacity"]  # e.g all
+
+        cpu_usage = {"assignment": cpu_assignment}
+        gpu_usage = {"capacity": gpu_capacity}
+        ram_usage = {"capacity": str(int(ram_capacity / 1073741824)) + "g"}
+        hard_disk_usage = {"capacity": str(int(hard_disk_capacity / 1073741824)) + "g"}
+
+        run_status = ctn.run_device_info_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key)
 
         # Kill container when it meets timeline
         sd.start(timeline)
@@ -39,7 +56,7 @@ def register(timeline, requirement, public_key):
 
 
 # Check if miner is acceptable
-def check():
+def check(timeline, device_requirement):
     # Check if miner is already allocated
     if ctn.check_container():
         return {"status": False}

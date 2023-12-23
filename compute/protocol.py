@@ -18,6 +18,46 @@
 import bittensor as bt
 
 
+__all__ = ["Challenge", "Allocate", "DeviceInfo"]
+
+
+class Challenge(bt.Synapse):
+    """
+    A simple challenge protocol representation which uses bt.Synapse as its base.
+    This protocol helps in handling performance information request and response communication between
+    the miner and the validator.
+
+    Attributes:
+    - challenge_input: The byte data of validators header randomized with a secret key + current difficulty.
+    - challenge_output: A string containing the nonce that resolved the challenge.
+    """
+
+    challenge_input: str = ""
+
+    challenge_output: str = ""
+    """
+    Request output, filled by receiving axon.
+    Example: "123456789"
+    """
+
+    def deserialize(self) -> str:
+        """
+        Deserialize the challenge output. This method retrieves the response from
+        the miner in the form of challenge_output, deserializes it and returns it
+        as the output of the dendrite.query() call.
+
+        Returns:
+        - str: Value of challenge_output.
+
+        Example:
+        Assuming a Challenge instance has a challenge_output value of {}:
+        >>> challenge_instance = Challenge()
+        >>> challenge_instance.challenge_output = ''
+        ''
+        """
+        return self.challenge_output
+
+
 class Allocate(bt.Synapse):
     """
     A simple Allocate protocol representation which uses bt.Synapse as its base.
@@ -57,38 +97,39 @@ class Allocate(bt.Synapse):
         return self.output
 
 
-class Challenge(bt.Synapse):
+class DeviceInfo(bt.Synapse):
     """
-    A simple challenge protocol representation which uses bt.Synapse as its base.
-    This protocol helps in handling performance information request and response communication between
+    A simple device information protocol representation which uses bt.Synapse as its base.
+    This protocol helps in handling device information request and response communication between
     the miner and the validator.
 
     Attributes:
-    - challenge_input: The byte data of validators header randomized with a secret key + current difficulty.
-    - challenge_output: A string containing the nonce that resolved the challenge.
+    - device_info_input: The byte data of application that will be sent.
+    - device_info_output: A dictionary with the detailed information of cpu, gpu, hard disk and ram.
     """
 
-    challenge_input: str = ""
+    device_info_input: str = ""
 
-    challenge_output: str = ""
+    device_info_output: str = ""
     """
     Request output, filled by receiving axon.
-    Example: "123456789"
+    Example: {"CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
     """
 
     def deserialize(self) -> str:
         """
-        Deserialize the challenge output. This method retrieves the response from
-        the miner in the form of challenge_output, deserializes it and returns it
+        Deserialize the device information output. This method retrieves the response from
+        the miner in the form of device_info_output, deserializes it and returns it
         as the output of the dendrite.query() call.
 
         Returns:
-        - str: Value of challenge_output.
+        - str: The deserialized response, which in this case is the value of device_info_output.
 
         Example:
-        Assuming a Challenge instance has a challenge_output value of {}:
-        >>> challenge_instance = Challenge()
-        >>> challenge_instance.challenge_output = ''
+        Assuming a Performance instance has a device_info_output value of {}:
+        >>> device_info_instance = DeviceInfo()
+        >>> device_info_instance.device_info_output = ''
+        >>> device_info_instance.deserialize()
         ''
         """
-        return self.challenge_output
+        return self.device_info_output

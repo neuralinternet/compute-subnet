@@ -2,6 +2,7 @@ import hashlib
 
 import torch
 
+__all__ = ["calculate_hash"]
 
 # def simple_calculate_hash(header, nonce):
 #     data = f"{header}{nonce}".encode("utf-8")

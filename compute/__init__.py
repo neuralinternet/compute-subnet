@@ -15,18 +15,26 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Import all submodules.
-from . import pow
-from . import protocol
-from . import reward
-from . import util
+import pow
 
+# Import all submodules.
+import protocol
+import reward
+import util
 
 # Define the version of the template module.
 __version__ = "1.0.5"
 version_split = __version__.split(".")
 __spec_version__ = (1000 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
 
+# Time before the device info request will timeout.
+device_info_timeout = 60
+
+# Time before the proof of work requets will timeout.
 pow_timeout = 120
+# Initial and minimal proof of work difficulty.
+# Needs benchmark and adjustment.
 pow_min_difficulty = 5
+# Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty.
+# Needs benchmark and adjustment.
 pow_max_difficulty = 10

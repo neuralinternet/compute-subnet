@@ -1,5 +1,6 @@
 # The MIT License (MIT)
-# Copyright © 2023 Crazydevlegend & Rapiiidooo
+# Copyright © 2023 Crazydevlegend
+# Copyright © 2023 Rapiiidooo
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -20,6 +21,8 @@ import numpy as np
 import wandb
 
 import compute
+
+__all__ = ["score"]
 
 
 # Calculate score based on the performance information

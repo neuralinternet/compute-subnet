@@ -13,17 +13,21 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
+import time
 
 import bittensor as bt
 
-from compute.pow import calculate_hash
+import compute
+
+__all__ = ["proof_of_work_miner"]
 
 
 def proof_of_work_miner(header, target_difficulty):
+    start_time = time.time()
     nonce = 0
-    # TODO ADD TIMING
-    while True:
-        hash_result = calculate_hash(header, nonce)
+
+    while time.time() - start_time > compute.pow_timeout:
+        hash_result = compute.pow.calculate_hash(header, nonce)
 
         # Ensure the hash satisfy the targeted difficulty
         if hash_result.startswith("0" * target_difficulty):
@@ -33,4 +37,4 @@ def proof_of_work_miner(header, target_difficulty):
         if nonce % 1_000_000 == 0:
             bt.logging.info(f"🔢 Nonce iterated : {nonce}")
 
-        # bt.logging.info("Unable to find a valid answer within 120 seconds or the signature is not valid.")
+    bt.logging.info("Unable to find a valid answer within 120 seconds.")
