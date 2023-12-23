@@ -16,22 +16,22 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 
-import container as ctn
-import schedule as sd
-
 
 __all__ = ["register", "check"]
+
+from Miner.container import check_container, kill_container, run_allocate_container
+from Miner.schedule import start
 
 
 # Register for given timeline and device_requirement
 def register(timeline, requirement, public_key):
     try:
-        _ = ctn.kill_container()
+        _ = kill_container()
 
-        run_status = ctn.run_allocate_container(requirement, public_key)
+        run_status = run_allocate_container(requirement, public_key)
 
         # Kill container when it meets timeline
-        sd.start(timeline)
+        start(timeline)
         return run_status
     except Exception as e:
         # bt.logging.info(f"Error registering container {e}")
@@ -41,7 +41,7 @@ def register(timeline, requirement, public_key):
 # Check if miner is acceptable
 def check():
     # Check if miner is already allocated
-    if ctn.check_container():
+    if check_container():
         return {"status": False}
     # Check if there is enough device
     return {"status": True}

@@ -20,20 +20,15 @@ import json
 
 # Step 1: Import necessary libraries and modules
 import os
-import sys
 import time
 import traceback
 import typing
 
 import bittensor as bt
 
-import Miner.allocate as al
-import Miner.basic_pow as bp
-
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
-
-import compute
+from compute import protocol, util
+from Miner import basic_pow
+from Miner.allocate import check, register
 
 
 def get_config():
@@ -110,7 +105,7 @@ def main(config):
     # Step 5: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
 
-    def base_blacklist(synapse: typing.Union[compute.protocol.Allocate, compute.protocol.Challenge]) -> typing.Tuple[bool, str]:
+    def base_blacklist(synapse: typing.Union[protocol.Challenge, protocol.Allocate, protocol.DeviceInfo]) -> typing.Tuple[bool, str]:
         try:
             index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
             hotkey = synapse.dendrite.hotkey
@@ -137,74 +132,72 @@ def main(config):
             bt.logging.error(f"😬errror during blacklist {traceback.format_exc()}")
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_challenge(synapse: compute.protocol.Challenge) -> typing.Tuple[bool, str]:
+    def blacklist_challenge(synapse: protocol.Challenge) -> typing.Tuple[bool, str]:
         blacklist = base_blacklist(synapse)
         bt.logging.info(blacklist[1])
         return blacklist
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_challenge(synapse: compute.protocol.Challenge) -> float:
+    def priority_challenge(synapse: protocol.Challenge) -> float:
         caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
-        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
-        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority)
-        return prirority
+        priority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority)
+        return priority
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def challenge(synapse: compute.protocol.Challenge) -> compute.protocol.Challenge:
-        serialized_data = synapse.challenge_input
-        deserialized_data = json.loads(serialized_data)
-        synapse.perf_output = bp.proof_of_work_miner(header=deserialized_data["header"], target_difficulty=deserialized_data["difficulty"])
+    def challenge(synapse: protocol.Challenge) -> protocol.Challenge:
+        synapse.challenge_output = basic_pow.proof_of_work_miner(header=synapse.header, target_difficulty=synapse.difficulty)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_device_info(synapse: compute.protocol.Challenge) -> typing.Tuple[bool, str]:
+    def blacklist_allocate(synapse: protocol.Allocate) -> typing.Tuple[bool, str]:
         blacklist = base_blacklist(synapse)
         bt.logging.info(blacklist[1])
         return blacklist
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_device_info(synapse: compute.protocol.DeviceInfo) -> float:
-        caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
-        prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
-        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority)
-        return prirority
-
-    # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def device_info(synapse: compute.protocol.Challenge) -> compute.protocol.Challenge:
-        serialized_data = synapse.challenge_input
-        deserialized_data = json.loads(serialized_data)
-        synapse.perf_output = bp.proof_of_work_miner(header=deserialized_data["header"], target_difficulty=deserialized_data["difficulty"])
-        return synapse
-
-    # The blacklist function decides if a request should be ignored.
-    def blacklist_allocate(synapse: compute.protocol.Allocate) -> typing.Tuple[bool, str]:
-        blacklist = base_blacklist(synapse)
-        bt.logging.info(blacklist[1])
-        return blacklist
-
-    # The priority function determines the order in which requests are handled.
-    # More valuable or higher-priority requests are processed before others.
-    def priority_allocate(synapse: compute.protocol.Allocate) -> float:
+    def priority_allocate(synapse: protocol.Allocate) -> float:
         caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
         prirority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
         bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority)
         return prirority
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
-    def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
+    def allocate(synapse: protocol.Allocate) -> protocol.Allocate:
         timeline = synapse.timeline
         requirement = synapse.requirement
         checking = synapse.checking
 
         if checking is True:
-            result = al.check()
+            result = check()
             synapse.output = result
         else:
             public_key = synapse.public_key
-            result = al.register(timeline, requirement, public_key)
+            result = register(timeline, requirement, public_key)
             synapse.output = result
+        return synapse
+
+    # The blacklist function decides if a request should be ignored.
+    def blacklist_device_info(synapse: protocol.DeviceInfo) -> typing.Tuple[bool, str]:
+        blacklist = base_blacklist(synapse)
+        bt.logging.info(blacklist[1])
+        return blacklist
+
+    # The priority function determines the order in which requests are handled.
+    # More valuable or higher-priority requests are processed before others.
+    def priority_device_info(synapse: protocol.DeviceInfo) -> float:
+        caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
+        priority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
+        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority)
+        return priority
+
+    # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
+    def device_info(synapse: protocol.DeviceInfo) -> protocol.DeviceInfo:
+        serialized_data = synapse.device_info_input
+        deserialized_data = json.loads(serialized_data)
+        synapse.perf_output = basic_pow.proof_of_work_miner(header=deserialized_data["header"], target_difficulty=deserialized_data["difficulty"])
         return synapse
 
     # Step 6: Build and link miner functions to the axon.
@@ -224,7 +217,7 @@ def main(config):
         priority_fn=priority_allocate,
     ).attach(
         forward_fn=device_info,
-        blacklist_fn=priority_device_info,
+        blacklist_fn=blacklist_device_info,
         priority_fn=priority_device_info,
     )
 
@@ -259,7 +252,7 @@ def main(config):
 
             # Check for auto update
             if step % 15 == 0 and config.auto_update == "yes":
-                compute.util.try_update()
+                util.try_update()
 
             step += 1
             time.sleep(1)
