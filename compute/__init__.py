@@ -16,11 +16,50 @@
 # DEALINGS IN THE SOFTWARE.
 
 # Define the version of the template module.
-__version__ = "1.0.5"
+__version__ = "1.1.0"
+
+import string
+
 version_split = __version__.split(".")
 __spec_version__ = (1000 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
+
+pow_timeout = 30  # Time before the proof of work requests will time out. time unit = seconds
+pow_min_difficulty = 6  # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
+pow_max_difficulty = 9  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
+pow_default_mode = "1410"  # Model used: sha_256 + salt
+pow_default_chars = str(string.ascii_letters + string.digits)
+pow_default_mask = "?1?1?1?1?1?1"
+pow_max_possible_score = 41  # 41 is the current max reasonable possible value considering the highest available difficulty and lowest time.
+
+default_hashcat_location = "/usr/local/bin/hashcat"
+
+priority_perfinfo = 1
+priority_challenge = 2
+priority_allocate = 3
 
 # Import all submodules.
 from . import protocol
 from . import reward
+from . import subtensor_utils
 from . import util
+
+
+SUSPECTED_MALICIOUS_COLDKEYS = []
+SUSPECTED_MALICIOUS_HOTKEYS = [
+    "5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A",
+    "5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL",
+    "5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft",
+    "5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW",
+    "5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm",
+    "5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1",
+    "5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky",
+    "5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv",
+    "5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW",
+    "5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE",
+    "5E2RkNBMCrdfgpnXHuiC22osAxiw6fSgZ1iEVLqWMXSpSKac",
+    "5DaLy2qQRNsmbutQ7Havj49CoZSKksQSRkCLJsiknH8GcsN2",
+    "5GNNB5kZfo6F9hqwXvaRfYdTuJPSzrXbtABzwoL499jPNBjt",
+    "5GVjcJLQboN5NcQoP4x8oqovjAiEizdscoocWo9HBYYmPdR3",
+    "5FswTe5bbs9n1SzaGpzUd6sDfnzdPfWVS2MwDWNbAneeT15k",
+    "5F4bqDZkx79hCxmbbsVMuq312EW9hQLvsBzKsAJgcEqpb8L9",
+]
