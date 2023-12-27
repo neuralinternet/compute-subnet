@@ -166,10 +166,10 @@ def check_hashcat_available(hashcat_path: str = "hashcat"):
     try:
         process = subprocess.run([hashcat_path, "--version"], capture_output=True, check=True)
         if process and process.stdout:
-            bt.logging(f"Version of hashcat found: {process.stdout}")
+            bt.logging.info(f"Version of hashcat found: {process.stdout}")
         return True
     except subprocess.CalledProcessError:
-        bt.logging(
+        bt.logging.error(
             f"Hashcat is not available or not installed on the machine. Please make sure hashcat is available in your PATH or give the explicit location using the following argument: --hashcat.path"
         )
         exit()
