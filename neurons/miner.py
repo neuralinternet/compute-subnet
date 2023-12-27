@@ -17,7 +17,6 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
-
 # Step 1: Import necessary libraries and modules
 import os
 import traceback
@@ -125,6 +124,8 @@ def main(config):
     p.check_cuda_availability()
 
     hashcat_path = config.hashcat_path
+
+    compute.util.check_hashcat_available(hashcat_path=hashcat_path)
 
     # Each miner gets a unique identity (UID) in the network for differentiation.
     my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)

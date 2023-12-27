@@ -21,12 +21,12 @@ import codecs
 import os
 import re
 import subprocess
-import sys
 from os import path
 
 import bittensor as bt
 import git
 import requests
+import sys
 
 
 def version2number(version):
@@ -160,3 +160,16 @@ def try_update():
 
 def parse_list(input_string):
     return ast.literal_eval(input_string)
+
+
+def check_hashcat_available(hashcat_path: str = "hashcat"):
+    try:
+        process = subprocess.run([hashcat_path, "--version"], capture_output=True, check=True)
+        if process and process.stdout:
+            bt.logging(f"Version of hashcat found: {process.stdout}")
+        return True
+    except subprocess.CalledProcessError:
+        bt.logging(
+            f"Hashcat is not available or not installed on the machine. Please make sure hashcat is available in your PATH or give the explicit location using the following argument: --hashcat.path"
+        )
+        return False
