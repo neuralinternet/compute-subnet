@@ -19,20 +19,23 @@
 
 import argparse
 import ast
+import asyncio
 import os
-import sys
-import time
 import traceback
 from typing import List
 
 import bittensor as bt
+import sys
+import time
 import torch
 from cryptography.fernet import Fernet
 
 import Validator.app_generator as ag
-import Validator.calculate_score as cs
+import Validator.calculate_pow_score as cps
 import Validator.database as db
+import Validator.pow as pow
 import compute
+from neurons import env
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -40,30 +43,8 @@ sys.path.append(parent_dir)
 blacklisted_hotkeys_set: set = set()
 blacklisted_coldkeys_set: set = set()
 
-SUSPECTED_MALICIOUS_COLDKEYS = []
-SUSPECTED_MALICIOUS_HOTKEYS = [
-    "5HZ1ATsziEMDm1iUqNWQatfEDb1JSNf37AiG8s3X4pZzoP3A",
-    "5H679r89XawDrMhwKGH1jgWMZQ5eeJ8RM9SvUmwCBkNPvSCL",
-    "5FnMHpqYo1MfgFLax6ZTkzCZNrBJRjoWE5hP35QJEGdZU6ft",
-    "5H3tiwVEdqy9AkQSLxYaMewwZWDi4PNNGxzKsovRPUuuvALW",
-    "5E6oa5hS7a6udd9LUUsbBkvzeiWDCgyA2kGdj6cXMFdjB7mm",
-    "5DFaj2o2R4LMZ2zURhqEeFKXvwbBbAPSPP7EdoErYc94ATP1",
-    "5H3padRmkFMJqZQA8HRBZUkYY5aKCTQzoR8NwqDfWFdTEtky",
-    "5HBqT3dhKWyHEAFDENsSCBJ1ntyRdyEDQWhZo1JKgMSrAhUv",
-    "5FAH7UesJRwwLMkVVknW1rsh9MQMUo78d5Qyx3KpFpL5A7LW",
-    "5GUJBJmSJtKPbPtUgALn4h34Ydc1tjrNfD1CT4akvcZTz1gE",
-    "5E2RkNBMCrdfgpnXHuiC22osAxiw6fSgZ1iEVLqWMXSpSKac",
-    "5DaLy2qQRNsmbutQ7Havj49CoZSKksQSRkCLJsiknH8GcsN2",
-    "5GNNB5kZfo6F9hqwXvaRfYdTuJPSzrXbtABzwoL499jPNBjt",
-    "5GVjcJLQboN5NcQoP4x8oqovjAiEizdscoocWo9HBYYmPdR3",
-    "5FswTe5bbs9n1SzaGpzUd6sDfnzdPfWVS2MwDWNbAneeT15k",
-    "5F4bqDZkx79hCxmbbsVMuq312EW9hQLvsBzKsAJgcEqpb8L9"
-]
-
-
-def parse_list(input_string):
-    """Very temporary TODO move to utils."""
-    return ast.literal_eval(input_string)
+pow_responses = {}
+pow_benchmark = {}
 
 
 # Step 2: Set up the configuration parser
@@ -82,9 +63,9 @@ def get_config():
     )
     parser.add_argument(
         "--blacklisted.hotkeys",
-        type=parse_list,
+        type=compute.util.parse_list,
         dest="blacklisted_hotkeys",
-        help="The list of the blacklisted hotkeys int the following format: \"['hotkey_x', '...']\"",
+        help="The list of the blacklisted hotkeys in the following format: \"['hotkey_x', '...']\"",
         default=[],
     )
     parser.add_argument(
@@ -96,10 +77,17 @@ def get_config():
     )
     parser.add_argument(
         "--blacklisted.coldkeys",
-        type=parse_list,
+        type=compute.util.parse_list,
         dest="blacklisted_coldkeys",
         help="The list of the blacklisted coldkeys int the following format: \"['coldkeys_x', '...']\"",
         default=[],
+    )
+    parser.add_argument(
+        "--harware.list",
+        action="store_true",
+        dest="harware_list",
+        help="Perform the old perfInfo method - usefull only as personal benchmark but it doesnt affect score.",
+        default=False,
     )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -112,11 +100,11 @@ def get_config():
     config = bt.config(parser)
 
     if config.blacklist_suspected_hotkeys:
-        for blacklisted_hotkey in SUSPECTED_MALICIOUS_HOTKEYS:
+        for blacklisted_hotkey in compute.SUSPECTED_MALICIOUS_HOTKEYS:
             config.blacklisted_hotkeys.append(blacklisted_hotkey)
 
     if config.blacklisted_coldkeys:
-        for blacklisted_hotkey in SUSPECTED_MALICIOUS_COLDKEYS:
+        for blacklisted_hotkey in compute.SUSPECTED_MALICIOUS_COLDKEYS:
             config.blacklisted_hotkeys.append(blacklisted_hotkey)
 
     # Step 3: Set up logging directory
@@ -150,7 +138,7 @@ def filter_axons(axons_list, uids_list):
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
 
-        if ip_address not in valid_ip_addresses:
+        if ip_address not in valid_ip_addresses and (not env.IP or ip_address in env.IP):
             valid_ip_addresses.add(ip_address)
             filtered_axons.append(axon)
             filtered_uids.append(uids_list[index])
@@ -200,9 +188,43 @@ def get_valid_tensors(metagraph):
     return tensors
 
 
-def main(config):
+def get_queryable(metagraph, uids):
+    queryable_uids = get_valid_queryable_uids(metagraph, uids)
+    queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
+    axons_list, uids_list, hotkeys_list = filter_axons(
+        axons_list=queryable_axons,
+        uids_list=queryable_uids,
+    )
+    return axons_list, uids_list, hotkeys_list
+
+
+async def execute_pow_request(dendrite, uid, axon, password, _hash, _salt, mode, chars, mask, pow_responses, pow_benchmark):
+    start_time = time.time()
+    response = dendrite.query(
+        axon,
+        compute.protocol.Challenge(
+            challenge_hash=_hash,
+            challenge_salt=_salt,
+            challenge_mode=mode,
+            challenge_chars=chars,
+            challenge_mask=mask,
+        ),
+        timeout=compute.pow_timeout,
+    )
+    elapsed_time = time.time() - start_time
+    pow_responses[uid] = response
+
+    if password != response.get("password"):
+        pow_benchmark[uid] = {"success": False, "elapsed_time": elapsed_time}
+    else:
+        pow_benchmark[uid] = {"success": True, "elapsed_time": elapsed_time}
+
+
+async def main(config):
     global blacklisted_hotkeys_set
     global blacklisted_coldkeys_set
+    global pow_responses
+    global pow_benchmark
 
     # Set up logging with the provided configuration and directory.
     bt.logging(config=config, logging_dir=config.full_path)
@@ -234,20 +256,13 @@ def main(config):
     blacklisted_hotkeys_set = {blacklisted_hotkey for blacklisted_hotkey in config.blacklisted_hotkeys}
     blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
+    harware_list = config.harware_list
+
     # Step 5: Connect the validator to the network
-    if wallet.hotkey.ss58_address not in metagraph.hotkeys:
-        bt.logging.error(f"\nYour validator: {wallet} if not registered to chain connection: {subtensor} \nRun btcli register and try again.")
-        exit()
-    else:
-        # Each miner gets a unique identity (UID) in the network for differentiation.
-        my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
-        bt.logging.info(f"Running validator on uid: {my_subnet_uid}")
+    _ = compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="validator")
 
     # Step 6: Set up initial scoring weights for validation
     bt.logging.info("Building validation weights.")
-
-    # Initialize alpha
-    alpha = 0.9
 
     # Initialize weights for each miner, store current uids.
     last_uids = metagraph.uids.tolist()
@@ -291,22 +306,54 @@ def main(config):
                 bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
+                # Filter axons with stake and ip address.
+                axons_list, uids_list, hotkeys_list = get_queryable(metagraph=metagraph, uids=uids)
+
+                tasks = []
+                pow_responses = {}
+                pow_benchmark = {}
+                pow_request = {}
+                for index, uid in enumerate(uids_list):
+                    password, _hash, _salt, mode, chars, mask = pow.run_validator_pow()
+                    pow_request[uid] = (password, _hash, _salt, mode, chars, mask, compute.pow_min_difficulty)
+                    tasks.append(
+                        execute_pow_request(dendrite, uid, axons_list[index], password, _hash, _salt, mode, chars, mask, pow_responses, pow_benchmark)
+                    )
+
+                await asyncio.gather(*tasks)
+
+                # TODO update db accordingly with pow results
+                # db.update(...)
+
+                # Calculate score
+                score_uid_dict = {}
+                for index, uid in enumerate(metagraph.uids):
+                    try:
+                        uid_index = uids_list.index(uid)
+                        score = cps.score(pow_benchmark[index], pow_request[index][-1], axons_list[uid_index].hotkey)
+                    except (ValueError, KeyError):
+                        score = 0
+
+                    scores[index] = score
+                    score_uid_dict[uid.item()] = scores[index].item()
+
+                bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
+
+            if step % 15 == 0:
                 # Check for auto update
                 if config.auto_update == "yes":
                     compute.util.try_update()
-                # Filter axons with stake and ip address.
-                queryable_uids = get_valid_queryable_uids(metagraph, uids)
-                queryable_axons = [metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids]
-                axons_list, uids_list, hotkeys_list = filter_axons(
-                    axons_list=queryable_axons,
-                    uids_list=queryable_uids,
-                )
 
-                # Prepare app_data for benchmarking
-                # Generate secret key for app
+            if step % 20 == 0:
+                # Frequently check if the validator is still registered otherwise, kill the validator
+                _ = compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="validator")
+
+            if step % 30 == 0 and harware_list:
+                # # Prepare app_data for benchmarking
+                # # Generate secret key for app
                 secret_key = Fernet.generate_key()
                 cipher_suite = Fernet(secret_key)
-                # Compile the script and generate an exe.
+                # # Compile the script and generate an exe.
                 ag.run(secret_key)
                 try:
                     main_dir = os.path.dirname(os.path.abspath(__file__))
@@ -319,49 +366,28 @@ def main(config):
                     bt.logging.error(f"{e}")
                     continue
                 # Query the miners for benchmarking
-                bt.logging.info(f"🆔 Benchmarking uids : {uids_list}")
+                bt.logging.info(f"🆔 Hardware list of uids : {uids_list}")
                 responses: List[compute.protocol.PerfInfo] = dendrite.query(
                     axons_list,
                     compute.protocol.PerfInfo(perf_input=repr(app_data)),
-                    timeout=120,
+                    timeout=60,
                 )
 
                 # Format responses and save them to benchmark_responses
-                benchmark_responses = []
+                harware_list_responses = []
                 for index, response in enumerate(responses):
                     try:
                         if response:
                             binary_data = ast.literal_eval(response)  # Convert str to binary data
                             decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                            benchmark_responses.append(decoded_data)
+                            harware_list_responses.append(decoded_data)
                         else:
-                            benchmark_responses.append({})
-                    except Exception as e:
-                        # bt.logging.error(f"Error parsing response: {e}")
-                        benchmark_responses.append({})
+                            harware_list_responses.append({})
+                    except Exception as _:
+                        harware_list_responses.append({})
 
-                bt.logging.info(f"✅ Benchmark results : {benchmark_responses}")
-
-                db.update(hotkeys_list, benchmark_responses)
-
-                # Calculate score
-                score_uid_dict = {}
-                for index, uid in enumerate(metagraph.uids):
-                    score = 0
-                    try:
-                        uid_index = uids_list.index(uid)
-                        score = cs.score(benchmark_responses[uid_index], axons_list[uid_index].hotkey)
-                        score = min(score, 100)
-                    except (ValueError, KeyError):
-                        score = 0
-
-                    # Update the global score of the miner.
-                    # This score contributes to the miner's weight in the network.
-                    # A higher weight means that the miner has been consistently responding correctly.
-                    scores[index] = alpha * scores[index] + (1 - alpha) * score
-                    score_uid_dict[uid.item()] = scores[index].item()
-
-                bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
+                db.update(hotkeys_list, harware_list_responses)
+                bt.logging.info(f"🔢 Hardware list responses : {harware_list_responses}")
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block
@@ -404,4 +430,4 @@ if __name__ == "__main__":
     # Parse the configuration.
     config = get_config()
     # Run the main function.
-    main(config)
+    asyncio.run(main(config=config))

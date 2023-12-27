@@ -17,7 +17,8 @@
 
 import bittensor as bt
 
-class PerfInfo( bt.Synapse ):
+
+class PerfInfo(bt.Synapse):
     """
     A simple performance information protocol representation which uses bt.Synapse as its base.
     This protocol helps in handling performance information request and response communication between
@@ -28,9 +29,9 @@ class PerfInfo( bt.Synapse ):
     - perf_output: A dictionary with the detailed information of cpu, gpu, hard disk and ram.
     """
 
-    perf_input: str = ''
+    perf_input: str = ""
 
-    perf_output: str = ''
+    perf_output: str = ""
     """
     Request output, filled by recieving axon.
     Example: {"CPU":{'count' : 4, 'vendor_id_raw' : 'AuthenticAMD', ...}}
@@ -54,7 +55,8 @@ class PerfInfo( bt.Synapse ):
         """
         return self.perf_output
 
-class Allocate( bt.Synapse ):
+
+class Allocate(bt.Synapse):
     """
     A simple Allocate protocol representation which uses bt.Synapse as its base.
     This protocol helps in handling Allocate request and response communication between
@@ -84,10 +86,35 @@ class Allocate( bt.Synapse ):
         - dict: The deserialized response, which in this case is the value of output.
 
         Example:
-        Assuming a Allocate instance has a output value of {}:
+        Assuming a Allocate instance has an output value of {}:
         >>> allocate_instance = Allocate()
         >>> allocate_instance.output = {}
         >>> allocate_instance.deserialize()
         {}
+        """
+        return self.output
+
+
+class Challenge(bt.Synapse):
+    # Query parameters
+    challenge_hash: str = ""
+    challenge_salt: str = ""
+    challenge_mode: str = ""
+    challenge_chars: str = ""
+    challenge_mask: str = ""
+
+    output: dict = {}
+
+    def deserialize(self) -> dict:
+        """
+        Returns:
+        - dict: The deserialized response, which in this case is the value of output.
+
+        Example:
+        Assuming a Challenge instance has an output value of {}:
+        >>> challenge_instance = Challenge()
+        >>> challenge_instance.output = {}
+        >>> challenge_instance.deserialize()
+        {"password": None, "error": f"Hashcat execution failed with code {process.returncode}: {stderr}"}
         """
         return self.output

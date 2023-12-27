@@ -39,19 +39,53 @@ shared resources.
 
 This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements.
 
-## Install Bittensor
+## Bittensor
 
 ```bash
 $ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)"
 ```
 
-## Install Dependencies
+## Dependencies
 
 ```bash
 git clone https://github.com/neuralinternet/Compute-Subnet.git
 cd Compute-Subnet
 python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
+```
+
+## Hashcat
+
+```bash
+# Recommended hashcat version >= v6.2.5
+apt -y install ocl-icd-libopencl1 pocl-opencl-icd  # in case you have missing requirements
+apt -y install hashcat
+hashcat --version
+```
+
+## Install Cuda
+
+```bash
+# Recommended cuda version: 12.3
+wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
+dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
+cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+apt-get update
+apt-get -y install cuda-toolkit-12-3
+apt-get -y install -y cuda-drivers
+apt-get -y install -y nvidia-kernel-open-545
+
+export CUDA_VERSION=cuda-12.3
+export PATH=$PATH:/usr/local/$CUDA_VERSION/bin
+export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
+
+echo "PATH=$PATH">>~/.bashrc
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
+
+nvidia-smi
+nvcc --version
+
+# Version should match
 ```
 
 ## Setup Docker for Miner
@@ -123,6 +157,8 @@ computational capacity, efficiency, and hardware quality. This score then determ
 network, directly influencing their potential rewards and standing.
 This scoring process, implemented through a Python script, considers various factors including CPU, GPU, hard disk, and
 RAM performance. The script's structure and logic are outlined below:
+
+**SCORE CALCULATION BELOW IS DEPRECATED**
 
 1. **Score Calculation Function:**
     - The `score` function aggregates performance data from different hardware components.
@@ -273,8 +309,9 @@ for example:
 
 </div>
 
-### Options
+## Validators options
 
+---
 Flags that you can use with the validator script.
 
 - `--blacklisted.hotkeys`
@@ -292,7 +329,38 @@ Flags that you can use with the validator script.
     - Description: Automatically use the list of internal suspected hotkeys.
     - Default: `True`
 
+
+## Miners options
+
 ---
+
+- `--whitelist.hotkeys`
+    - Description: List of hotkeys to blacklist.
+    - Default: `[]`
+    - usage: `--whitelist.hotkeys "['hotkey_x', '...']"`
+- `--hashcat.path`
+    - Description: The path of the hashcat binary.
+    - Default: `/usr/local/bin/hashcat`
+    - usage: `--hashcat.path the/path/of/hashcat/binary"`
+
+
+## Benchmarking the machine
+
+```bash
+hashcat -b -m 1410
+```
+
+Output
+```
+Speed.#1.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
+Speed.#2.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
+...
+...
+```
+
+Recommended difficulty: >= 7500 MH/s.
+
+Difficulty will increase over time.
 
 ## License
 
