@@ -172,4 +172,4 @@ def check_hashcat_available(hashcat_path: str = "hashcat"):
         bt.logging(
             f"Hashcat is not available or not installed on the machine. Please make sure hashcat is available in your PATH or give the explicit location using the following argument: --hashcat.path"
         )
-        return False
+        exit()
