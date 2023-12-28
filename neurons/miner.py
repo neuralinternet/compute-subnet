@@ -50,6 +50,13 @@ def get_config():
     parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
     parser.add_argument("--auto_update", default="yes", help="Auto update")
     parser.add_argument(
+        "--miner.whitelist.not.enough.stake",
+        action="store_true",
+        dest="miner_whitelist_not_enough_stake",
+        help="Whitelist the validators without enough stake.",
+        default=False,
+    )
+    parser.add_argument(
         "--whitelist.hotkeys",
         type=compute.util.parse_list,
         dest="whitelist_hotkeys",
@@ -134,6 +141,9 @@ def main(config):
     metagraph = subtensor.metagraph(config.netuid)
     bt.logging.info(f"Metagraph: {metagraph}")
 
+    # Allow validators that are not permitted by stake
+    miner_whitelist_not_enough_stake = config.miner_whitelist_not_enough_stake
+
     compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="miner")
 
     p.check_cuda_availability()
@@ -159,7 +169,7 @@ def main(config):
         index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
         stake = metagraph.S[index].item()
 
-        if stake < 1024:
+        if stake < 1024 and not miner_whitelist_not_enough_stake:
             bt.logging.trace(f"Not enough stake {stake}")
             return True, "Not enough stake!"
 

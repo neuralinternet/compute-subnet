@@ -286,7 +286,10 @@ Flags that you can use with the validator script.
     - Description: Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information.
     - Default: ``
     - usage: `--hashcat.extended.options "-O"`
-
+- `--miner.whitelist.not.enough.stake`
+    - Description: Whitelist the validators without enough stake.
+    - Default: `False`
+    - usage: `--miner.whitelist.not.enough.stake`
 
 ## Benchmarking the machine
 
