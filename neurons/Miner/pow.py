@@ -17,6 +17,7 @@ import subprocess
 from typing import Union
 
 import bittensor as bt
+import time
 
 import compute
 
@@ -49,6 +50,7 @@ def run_hashcat(
     hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
+    start_time = time.time()
     unknown_error_message = f"run_hashcat execution failed"
     try:
         process = subprocess.run(
@@ -65,6 +67,22 @@ def run_hashcat(
                 bt.logging.debug(f"Challenge {result} found !")
                 return {"password": result, "error": None}
         else:
+            if process.returncode == 255:
+                # It means: Already an instance running.
+                # Retry with new timeout
+                time.sleep(1)
+                execution_time = time.time() - start_time
+                return run_miner_pow(
+                    _hash,
+                    salt,
+                    mode,
+                    chars,
+                    mask,
+                    int(timeout - execution_time),
+                    hashcat_path,
+                    hashcat_workload_profile,
+                    hashcat_extended_options,
+                )
             error_message = f"Hashcat execution failed with code {process.returncode}: {process.stderr}"
             bt.logging.warning(error_message)
             return {"password": None, "error": error_message}

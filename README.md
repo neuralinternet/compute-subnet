@@ -111,6 +111,8 @@ Once you have done so, you can run the miner and validator with the following co
 
 ## Running Miner
 
+A dedicated medium article is available [here](https://medium.com/@neuralinternet/how-to-run-a-compute-miner-82498b93e7e1)
+
 Miners contribute processing resources, notably GPU (Graphics Processing Unit) and CPU (Central Processing Unit)
 instances, to facilitate optimal performance in essential GPU and CPU-based computing tasks. The system operates on a
 performance-based reward mechanism, where miners are incentivized through a tiered reward structure correlated to the
@@ -268,8 +270,8 @@ Flags that you can use with the validator script.
     - usage: `--hardware.list`
 - `--validator.challenge.batch.size`
     - Description: Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries.
-    - Default: `256`
-    - usage: `--validator.challenge.batch.size 64`
+    - Default: `64`
+    - usage: `--validator.challenge.batch.size 32`
 
 ## Miners options
 
