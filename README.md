@@ -1,51 +1,37 @@
-<div align="center">
-
-# **Compute Subnet** <!-- omit in toc -->
+# Compute Subnet
 
 [![Discord Chat](https://img.shields.io/discord/308323056592486420.svg)](https://discord.gg/bittensor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
 
-### The Incentivized Internet <!-- omit in toc -->
+### The Incentivized Internet
 
 [Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Research](https://bittensor.com/whitepaper)
 
-</div>
+This repository contains all the necessary files and functions to define Bittensor's Compute Subnet. It enables running miners on netuid 15 in Bittensor's test network.
 
----
+## Introduction
 
-This repo contains all the necessary files and functions to define Bittensor's Compute Subnet. You can try running
-miners on netuid 15 in Bittensor's test network.
+This repository serves as a compute-composable subnet, integrating various cloud platforms (e.g., Runpod, Lambda, AWS) into a cohesive unit. Its purpose is to enable higher-level cloud platforms to offer seamless compute composability across different underlying platforms. With the proliferation of cloud platforms, there's a growing need for a subnet that can seamlessly integrate these platforms, allowing efficient resource sharing and allocation. This compute-composable subnet empowers nodes to contribute computational power, with validators ensuring the integrity and efficiency of the shared resources.
 
-# Introduction
+### File Structure
 
-This repository is a compute-composable subnet. This subnet has integrated various cloud platforms (e.g., Runpod,
-Lambda, AWS) into a cohesive unit, enabling higher-level cloud platforms to offer seamless compute composability across
-different underlying platforms. With the proliferation of cloud platforms, there's a need for a subnet that can
-seamlessly integrate these platforms, allowing for efficient resource sharing and allocation. This compute-composable
-subnet will enable nodes to contribute computational power, with validators ensuring the integrity and efficiency of the
-shared resources.
+- `compute/protocol.py`: Defines the wire-protocol used by miners and validators.
+- `neurons/miner.py`: Defines the miner's behavior in responding to requests from validators.
+- `neurons/validator.py`: Defines the validator's behavior in requesting information from miners and determining scores.
 
-- `compute/protocol.py`: The file where the wire-protocol used by miners and validators is defined.
-- `neurons/miner.py`: This script which defines the miner's behavior, i.e., how the miner responds to requests from
-  validators.
-- `neurons/validator.py`: This script which defines the validator's behavior, i.e., how the validator requests
-  information from miners and determines scores.
-
----
-
-# Installation
+## Installation
 
 This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements.
 
-## Bittensor
+### Bittensor
 
 ```bash
-$ /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)"
 ```
 
-## Dependencies
+## Dependencies - Validators / Miners
 
 ```bash
 git clone https://github.com/neuralinternet/Compute-Subnet.git
@@ -54,7 +40,9 @@ python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
 ```
 
-## Hashcat (Only for miners)
+## Extra dependencies - Miners
+
+### Hashcat
 
 ```bash
 # Recommended hashcat version >= v6.2.5
@@ -63,7 +51,7 @@ apt -y install hashcat
 hashcat --version
 ```
 
-## Cuda (Only for miners)
+### Cuda
 
 ```bash
 # Recommended cuda version: 12.3
@@ -82,27 +70,44 @@ export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
 echo "PATH=$PATH">>~/.bashrc
 echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
 
+reboot  # Changes might need a restart depending on the system
+
 nvidia-smi
 nvcc --version
 
 # Version should match
 ```
 
-## Setup Docker for Miner
+### Docker
 
-To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu) and start the docker service by
-running `sudo systemctl start docker` and `sudo apt install at`.
+To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu) and start the docker service.
 
-</div>
+```bash
+sudo apt install docker.io -y
+sudo apt install docker-compose -y
+sudo systemctl start docker
+sudo apt install at
+docker run hello-world  # Must not return you any error.
+```
+
+### Running subtensor locally
+
+```bash
+git clone https://github.com/opentensor/subtensor.git
+cd subtensor
+docker-compose up --detach
+```
+
+If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
+
 
 ---
 
 # Running a Miner / Validator
 
-Prior to running a miner or validator, you
-must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md)
-and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). Once
-you have done so, you can run the miner and validator with the following commands.
+Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md)
+and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). 
+Once you have done so, you can run the miner and validator with the following commands.
 
 ## Running Miner
 
@@ -158,114 +163,45 @@ network, directly influencing their potential rewards and standing.
 This scoring process, implemented through a Python script, considers various factors including CPU, GPU, hard disk, and
 RAM performance. The script's structure and logic are outlined below:
 
-**SCORE CALCULATION BELOW IS DEPRECATED**
+## Understanding the Score Calculation Process
 
-1. **Score Calculation Function:**
-    - The `score` function aggregates performance data from different hardware components.
-    - It calculates individual scores for CPU, GPU, hard disk, and RAM.
-    - These scores are then weighted and summed to produce a total score.
-    - A registration bonus is applied if the miner is registered, enhancing the total score.
+**Scoring system has been updated, if you want to check the old hardware mechanism:** [Hardware scoring](docs/hardware_scoring.md)
 
-2. **Component-Specific Scoring Functions:**
-    - `get_cpu_score`, `get_gpu_score`, `get_hard_disk_score`, and `get_ram_score` are functions dedicated to
-      calculating scores for each respective hardware component.
-    - These functions consider the count, frequency, capacity, and speed of each component, applying a specific level
-      value for normalization.
-    - The scores are derived based on the efficiency and capacity of the hardware.
+The score calculation function determines a miner's performance based on various factors:
 
-3. **Weight Assignment:**
-    - The script defines weights for each hardware component's score, signifying their importance in the overall
-      performance.
-    - GPU has the highest weight (0.55), reflecting its significance in mining operations.
-    - CPU, hard disk, and RAM have lower weights (0.2, 0.1, and 0.15, respectively).
+**Successful Problem Resolution**: It first checks if the problem was solved successfully. If not, the score remains at zero.
 
-4. **Registration Check:**
-    - The `check_if_registered` function verifies if a miner is registered using an external API (`wandb.Api()`).
-    - Registered miners receive a bonus to their total score, incentivizing official registration in the network.
+**Problem Difficulty**: This measures the complexity of the solved task. The code restricts this difficulty to a maximum allowed value.
 
-5. **Score Aggregation:**
-    - The individual scores are combined into a numpy array, `score_list`.
-    - The weights are also arranged in an array, `weight_list`.
-    - The final score is calculated using a dot product of these arrays, multiplied by 10, and then adjusted with the
-      registration bonus.
+**Weighting Difficulty and Elapsed Time**: The function assigns a weight to both the difficulty of the solved problem (75%) and the time taken to solve it (25%).
 
-6. **Handling Multiple CPUs/GPUs:**
-    - The scoring functions for CPUs (`get_cpu_score`) and GPUs (`get_gpu_score`) are designed to process data that can
-      represent multiple units.
-    - For CPUs, the `count` variable in `cpu_info` represents the number of CPU cores or units available. The score is
-      calculated based on the cumulative capability, taking into account the total count and frequency of all CPU cores.
-    - For GPUs, similar logic applies. The script can handle data representing multiple GPUs, calculating a cumulative
-      score based on their collective capacity and speed.
+**Exponential Rewards for Difficulty**: Higher problem difficulty leads to more significant rewards. An exponential formula is applied to increase rewards based on difficulty.
 
-7. **CPU Scoring (Multiple CPUs):**
-    - The CPU score is computed by multiplying the total number of CPU cores (`count`) by their average
-      frequency (`frequency`), normalized against a predefined level.
-    - This approach ensures that configurations with multiple CPUs are appropriately rewarded for their increased
-      processing power.
+**Allocation Bonus**: Miners that has allocated machine receive an additional bonus added to their final score.
 
-8. **GPU Scoring (Multiple GPUs):**
-    - The GPU score is calculated by considering the total capacity (`capacity`) and the average speed (average
-      of `graphics_speed` and `memory_speed`) of all GPUs in the system.
-    - The score reflects the aggregate performance capabilities of all GPUs, normalized against a set level.
-    - This method effectively captures the enhanced computational power provided by multiple GPU setups.
+**Effect of Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score.
 
-9. **Aggregated Performance Assessment:**
-    - The final score calculation in the `score` function integrates the individual scores from CPU, GPU, hard disk, and
-      RAM.
-    - This integration allows the scoring system to holistically assess the collective performance of all hardware
-      components, including scenarios with multiple CPUs and GPUs.
-
-10. **Implications for Miners:**
-
-- Miners with multiple GPUs and/or CPUs stand to gain a higher score due to the cumulative calculation of their
-  hardware's capabilities.
-- This approach incentivizes miners to enhance their hardware setup with additional CPUs and GPUs, thereby contributing
-  more processing power to the network.
-
-The weight assignments are as follows:
-
-- **GPU Weight:** 0.55
-- **CPU Weight:** 0.2
-- **Hard Disk Weight:** 0.1
-- **RAM Weight:** 0.15
+- Max Score = 1e5
+- Score = Lowest Difficulty + (Difficulty Weight * Problem Difficulty) + (Elapsed Time * 1 / (1 + Elapsed Time) * 10000) + Allocation Bonus
+- Normalized Score = (Score / Max Score) * 100
 
 ### Example 1: Miner A's Hardware Scores and Weighted Total
 
-1. **CPU Score:** Calculated as `(2 cores * 3.0 GHz) / 1024 / 50`.
-2. **GPU Score:** Calculated as `(8 GB * (1 GHz + 1 GHz) / 2) / 200000`.
-3. **Hard Disk Score:** Calculated as `(500 GB * (100 MB/s + 100 MB/s) / 2) / 1000000`.
-4. **RAM Score:** Calculated as `(16 GB * 2 GB/s) / 200000`.
+- **Successful Problem Resolution**: True
+- **Elapsed Time**: 4 seconds
+- **Problem Difficulty**: 6
+- **Allocation**: True
 
-Now, applying the weights:
-
-- Total Score = (CPU Score × 0.2) + (GPU Score × 0.55) + (Hard Disk Score × 0.1) + (RAM Score × 0.15)
-- If registered, add a registration bonus.
+Score = 8.2865
 
 ### Example 2: Miner B's Hardware Scores and Weighted Total
 
-1. **CPU Score:** Calculated as `(4 cores * 2.5 GHz) / 1024 / 50`.
-2. **GPU Score:** Calculated as `((6 GB + 6 GB) * (1.5 GHz + 1.2 GHz) / 2) / 200000`.
-3. **Hard Disk Score:** Calculated as `(1 TB * (200 MB/s + 150 MB/s) / 2) / 1000000`.
-4. **RAM Score:** Calculated as `(32 GB * 3 GB/s) / 200000`.
+- **Successful Problem Resolution**: True
+- **Elapsed Time**: 16 seconds
+- **Problem Difficulty**: 8
+- **Allocation**: True
 
-Applying the weights:
-
-- Total Score = (CPU Score × 0.2) + (GPU Score × 0.55) + (Hard Disk Score × 0.1) + (RAM Score × 0.15)
-- Since Miner B is not registered, no registration bonus is added.
-
-### Impact of Weights on Total Score
-
-- The GPU has the highest weight (0.55), signifying its paramount importance in mining tasks, which are often
-  GPU-intensive. Miners with powerful GPUs will thus receive a significantly higher portion of their total score from
-  the GPU component.
-- The CPU, while important, has a lower weight (0.2), reflecting its lesser but still vital role in the mining process.
-- The hard disk and RAM have the lowest weights (0.1 and 0.15, respectively), indicating their supportive but less
-  critical roles compared to GPU and CPU.
-
-It is important to note that the role of validators, in contrast to miners, does not require the integration of GPU
-instances. Their function revolves around data integrity and accuracy verification, involving relatively modest network
-traffic and lower computational demands. As a result, their hardware requirements are less intensive, focusing more on
-stability and reliability rather than high-performance computation.
+Score = 24.835058823529412
 
 ```bash
 # To run the validator
@@ -307,8 +243,6 @@ in `register.py` and running this script: https://github.com/neuralinternet/Comp
 for example:
 ```{'cpu':{'count':1}, 'gpu':{'count':1}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
 
-</div>
-
 ## Validators options
 
 ---
@@ -328,7 +262,14 @@ Flags that you can use with the validator script.
 - `--blacklist.suspected.coldkeys`
     - Description: Automatically use the list of internal suspected hotkeys.
     - Default: `True`
-
+- `--hardware.list`
+    - Description: Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.
+    - Default: `False`
+    - usage: `--hardware.list`
+- `--validator.challenge.batch.size`
+    - Description: Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries.
+    - Default: `256`
+    - usage: `--validator.challenge.batch.size 64`
 
 ## Miners options
 
@@ -342,7 +283,18 @@ Flags that you can use with the validator script.
     - Description: The path of the hashcat binary.
     - Default: `/usr/local/bin/hashcat`
     - usage: `--hashcat.path the/path/of/hashcat/binary"`
-
+- `--hashcat.workload.profile`
+    - Description: Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information.
+    - Default: `3`
+    - usage: `--hashcat.workload.profile 2"`
+- `--hashcat.extended.options`
+    - Description: Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information.
+    - Default: ``
+    - usage: `--hashcat.extended.options "-O"`
+- `--miner.whitelist.not.enough.stake`
+    - Description: Whitelist the validators without enough stake.
+    - Default: `False`
+    - usage: `--miner.whitelist.not.enough.stake`
 
 ## Benchmarking the machine
 

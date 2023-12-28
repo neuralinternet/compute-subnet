@@ -82,11 +82,18 @@ def get_config():
         default=[],
     )
     parser.add_argument(
-        "--harware.list",
+        "--hardware.list",
         action="store_true",
-        dest="harware_list",
-        help="Perform the old perfInfo method - usefull only as personal benchmark but it doesnt affect score.",
+        dest="hardware_list",
+        help="Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.",
         default=False,
+    )
+    parser.add_argument(
+        "--validator.challenge.batch.size",
+        type=int,
+        dest="validator_challenge_batch_size",
+        help="For lower hardware specifications you might want to use a different batch_size.",
+        default=256,
     )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -152,12 +159,12 @@ def is_blacklisted(neuron):
 
     # Blacklist coldkeys that are blacklisted by user
     if coldkey in blacklisted_coldkeys_set:
-        bt.logging.debug(f"Blacklisted recognized coldkey {coldkey} - with hotkey: {hotkey}")
+        bt.logging.trace(f"Blacklisted recognized coldkey {coldkey} - with hotkey: {hotkey}")
         return True
 
     # Blacklist coldkeys that are blacklisted by user or by set of hotkeys
     if hotkey in blacklisted_hotkeys_set:
-        bt.logging.debug(f"Blacklisted recognized hotkey {hotkey}")
+        bt.logging.trace(f"Blacklisted recognized hotkey {hotkey}")
         # Add the coldkey attached to this hotkey in the blacklisted coldkeys
         blacklisted_coldkeys_set.add(coldkey)
         return True
@@ -255,7 +262,9 @@ async def main(config):
     blacklisted_hotkeys_set = {blacklisted_hotkey for blacklisted_hotkey in config.blacklisted_hotkeys}
     blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
-    harware_list = config.harware_list
+    # Get custom validator arguments
+    validator_challenge_batch_size = config.validator_challenge_batch_size
+    hardware_list = config.hardware_list
 
     # Step 5: Connect the validator to the network
     _ = compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="validator")
@@ -266,6 +275,9 @@ async def main(config):
     # Initialize weights for each miner, store current uids.
     last_uids = metagraph.uids.tolist()
     scores = torch.zeros(len(last_uids), dtype=torch.float32)
+    bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
+    # Progressively decrease the score to 0 in case miners failed few challenges instead of immediate 0.
+    decay_factor = 0.8
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
@@ -285,41 +297,30 @@ async def main(config):
                 # Sync scores with metagraph
                 # Get the current uids of all miners in the network.
                 uids = metagraph.uids.tolist()
-                # Create new_scores with current metagraph
-                new_scores = torch.zeros(len(uids), dtype=torch.float32)
-
-                for index, uid in enumerate(uids):
-                    try:
-                        last_index = last_uids.index(uid)
-                        new_scores[index] = scores[last_index]
-                    except ValueError:
-                        # New node
-                        new_scores[index] = 0
-                last_uids = uids
 
                 # Set the weights of validators to zero.
-                scores = new_scores * (metagraph.total_stake < 1.024e3)
+                scores = scores * (metagraph.total_stake < 1.024e3)
                 # Set the weight to zero for all nodes without assigned IP addresses.
                 scores = scores * torch.Tensor(get_valid_tensors(metagraph=metagraph))
 
-                bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
+                bt.logging.info(f"🔢 Re-Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
                 # Filter axons with stake and ip address.
                 axons_list, uids_list, hotkeys_list = get_queryable(metagraph=metagraph, uids=uids)
 
-                tasks = []
                 pow_responses = {}
                 pow_benchmark = {}
                 pow_request = {}
-                for index, uid in enumerate(uids_list):
-                    password, _hash, _salt, mode, chars, mask = pow.run_validator_pow()
-                    pow_request[uid] = (password, _hash, _salt, mode, chars, mask, compute.pow_min_difficulty)
-                    tasks.append(
-                        execute_pow_request(dendrite, uid, axons_list[index], password, _hash, _salt, mode, chars, mask, pow_responses, pow_benchmark)
-                    )
+                for i in range(0, len(uids_list), validator_challenge_batch_size):
+                    tasks = []
+                    for index, uid in enumerate(uids_list[i : i + validator_challenge_batch_size]):
+                        axons = axons_list[i + index]
+                        password, _hash, _salt, mode, chars, mask = pow.run_validator_pow()
+                        pow_request[uid] = (password, _hash, _salt, mode, chars, mask, compute.pow_min_difficulty)
+                        tasks.append(execute_pow_request(dendrite, uid, axons, password, _hash, _salt, mode, chars, mask, pow_responses, pow_benchmark))
 
-                await asyncio.gather(*tasks)
+                    await asyncio.gather(*tasks)
 
                 # TODO update db accordingly with pow results
                 # db.update(...)
@@ -327,13 +328,15 @@ async def main(config):
                 # Calculate score
                 score_uid_dict = {}
                 for index, uid in enumerate(metagraph.uids):
+                    previous_score = scores[index]
                     try:
                         uid_index = uids_list.index(uid)
                         score = cps.score(pow_benchmark[index], pow_request[index][-1], axons_list[uid_index].hotkey)
                     except (ValueError, KeyError):
                         score = 0
 
-                    scores[index] = score
+                    decayed_score = previous_score * decay_factor
+                    scores[index] = max(decayed_score, score) if decayed_score > 1 and score > 1 else score
                     score_uid_dict[uid.item()] = scores[index].item()
 
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
@@ -347,7 +350,7 @@ async def main(config):
                 # Frequently check if the validator is still registered otherwise, kill the validator
                 _ = compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="validator")
 
-            if step % 30 == 0 and harware_list:
+            if step % 30 == 0 and hardware_list:
                 # # Prepare app_data for benchmarking
                 # # Generate secret key for app
                 secret_key = Fernet.generate_key()
@@ -373,20 +376,20 @@ async def main(config):
                 )
 
                 # Format responses and save them to benchmark_responses
-                harware_list_responses = []
+                hardware_list_responses = []
                 for index, response in enumerate(responses):
                     try:
                         if response:
                             binary_data = ast.literal_eval(response)  # Convert str to binary data
                             decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                            harware_list_responses.append(decoded_data)
+                            hardware_list_responses.append(decoded_data)
                         else:
-                            harware_list_responses.append({})
+                            hardware_list_responses.append({})
                     except Exception as _:
-                        harware_list_responses.append({})
+                        hardware_list_responses.append({})
 
-                db.update(hotkeys_list, harware_list_responses)
-                bt.logging.info(f"🔢 Hardware list responses : {harware_list_responses}")
+                db.update(hotkeys_list, hardware_list_responses)
+                bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
 
             # Periodically update the weights on the Bittensor blockchain.
             current_block = subtensor.block

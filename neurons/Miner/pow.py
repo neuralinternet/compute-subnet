@@ -39,11 +39,20 @@ def hashcat_verify(_hash, output) -> Union[str, None]:
 
 
 def run_hashcat(
-    _hash: str, salt: str, mode: str, chars: str, mask: str, timeout: int = compute.pow_timeout, hashcat_path: str = compute.default_hashcat_location
+    _hash: str,
+    salt: str,
+    mode: str,
+    chars: str,
+    mask: str,
+    timeout: int = compute.pow_timeout,
+    hashcat_path: str = compute.default_hashcat_location,
+    hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
+    hashcat_extended_options: str = "",
 ):
+    unknown_error_message = f"run_hashcat execution failed"
     try:
         process = subprocess.run(
-            [hashcat_path, f"{_hash}:{salt}", "-a", "3", "-m", mode, "-1", str(chars), mask, "-w", "3", "-O"],
+            [hashcat_path, f"{_hash}:{salt}", "-a", "3", "-m", mode, "-1", str(chars), mask, "-w", hashcat_workload_profile, hashcat_extended_options],
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -56,14 +65,39 @@ def run_hashcat(
                 bt.logging.debug(f"Challenge {result} found !")
                 return {"password": result, "error": None}
         else:
-            return {"password": None, "error": f"Hashcat execution failed with code {process.returncode}: {process.stderr}"}
+            error_message = f"Hashcat execution failed with code {process.returncode}: {process.stderr}"
+            bt.logging.warning(error_message)
+            return {"password": None, "error": error_message}
 
     except subprocess.TimeoutExpired:
-        return {"password": None, "error": "Hashcat execution timed out"}
+        error_message = f"Hashcat execution timed out"
+        bt.logging.warning(error_message)
+        return {"password": None, "error": error_message}
     except Exception as e:
-        return {"password": None, "error": f"run_hashcat execution failed with exception: {e}"}
+        bt.logging.warning(f"{unknown_error_message}: {e}")
+        return {"password": None, "error": f"{unknown_error_message}: {e}"}
+    bt.logging.warning(f"{unknown_error_message}: no exceptions")
+    return {"password": None, "error": f"{unknown_error_message}: no exceptions"}
 
 
-def run_miner_pow(_hash: str, salt: str, mode: str, chars: str, mask: str, hashcat_path: str = compute.default_hashcat_location):
-    result = run_hashcat(_hash=_hash, salt=salt, mode=mode, chars=chars, mask=mask, hashcat_path=hashcat_path)
+def run_miner_pow(
+    _hash: str,
+    salt: str,
+    mode: str,
+    chars: str,
+    mask: str,
+    hashcat_path: str = compute.default_hashcat_location,
+    hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
+    hashcat_extended_options: str = "",
+):
+    result = run_hashcat(
+        _hash=_hash,
+        salt=salt,
+        mode=mode,
+        chars=chars,
+        mask=mask,
+        hashcat_path=hashcat_path,
+        hashcat_workload_profile=hashcat_workload_profile,
+        hashcat_extended_options=hashcat_extended_options,
+    )
     return result
