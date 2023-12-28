@@ -16,7 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 # Define the version of the template module.
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 import string
 

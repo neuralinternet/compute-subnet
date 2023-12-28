@@ -72,16 +72,16 @@ def run_hashcat(
                 # Retry with new timeout
                 time.sleep(1)
                 execution_time = time.time() - start_time
-                return run_miner_pow(
-                    _hash,
-                    salt,
-                    mode,
-                    chars,
-                    mask,
-                    int(timeout - execution_time),
-                    hashcat_path,
-                    hashcat_workload_profile,
-                    hashcat_extended_options,
+                return run_hashcat(
+                    _hash=_hash,
+                    salt=salt,
+                    mode=mode,
+                    chars=chars,
+                    mask=mask,
+                    timeout=int(timeout - execution_time),
+                    hashcat_path=hashcat_path,
+                    hashcat_workload_profile=hashcat_workload_profile,
+                    hashcat_extended_options=hashcat_extended_options,
                 )
             error_message = f"Hashcat execution failed with code {process.returncode}: {process.stderr}"
             bt.logging.warning(error_message)
