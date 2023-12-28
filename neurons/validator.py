@@ -93,7 +93,7 @@ def get_config():
         type=int,
         dest="validator_challenge_batch_size",
         help="For lower hardware specifications you might want to use a different batch_size.",
-        default=256,
+        default=64,
     )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
@@ -277,7 +277,7 @@ async def main(config):
     scores = torch.zeros(len(last_uids), dtype=torch.float32)
     bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
     # Progressively decrease the score to 0 in case miners failed few challenges instead of immediate 0.
-    decay_factor = 0.65
+    decay_factor = 0.75
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
@@ -335,12 +335,12 @@ async def main(config):
                     except (ValueError, KeyError):
                         score = 0
 
-                    if previous_score > score < 0.75:
+                    if previous_score > score < 0.1:
                         decayed_score = previous_score * decay_factor
                     else:
                         decayed_score = score
 
-                    scores[index] = decayed_score if decayed_score > 0.75 else score
+                    scores[index] = decayed_score if decayed_score > 0.1 else score
                     score_uid_dict[uid.item()] = scores[index].item()
 
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")

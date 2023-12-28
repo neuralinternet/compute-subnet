@@ -270,8 +270,8 @@ Flags that you can use with the validator script.
     - usage: `--hardware.list`
 - `--validator.challenge.batch.size`
     - Description: Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries.
-    - Default: `256`
-    - usage: `--validator.challenge.batch.size 64`
+    - Default: `64`
+    - usage: `--validator.challenge.batch.size 32`
 
 ## Miners options
 
