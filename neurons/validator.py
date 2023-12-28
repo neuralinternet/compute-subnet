@@ -335,14 +335,12 @@ async def main(config):
                     except (ValueError, KeyError):
                         score = 0
 
-                    if 0.75 > score < previous_score:
+                    if previous_score > score < 0.75:
                         decayed_score = previous_score * decay_factor
-                    elif score < 0.75:
-                        decayed_score = score
                     else:
                         decayed_score = score
 
-                    scores[index] = decayed_score
+                    scores[index] = decayed_score if decayed_score > 0.75 else score
                     score_uid_dict[uid.item()] = scores[index].item()
 
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
