@@ -88,6 +88,13 @@ def get_config():
         help="Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.",
         default=False,
     )
+    parser.add_argument(
+        "--validator.challenge.batch.size",
+        type=int,
+        dest="validator_challenge_batch_size",
+        help="For lower hardware specifications you might want to use a different batch_size.",
+        default=256,
+    )
 
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
@@ -255,6 +262,8 @@ async def main(config):
     blacklisted_hotkeys_set = {blacklisted_hotkey for blacklisted_hotkey in config.blacklisted_hotkeys}
     blacklisted_coldkeys_set = {blacklisted_coldkey for blacklisted_coldkey in config.blacklisted_coldkeys}
 
+    # Get custom validator arguments
+    validator_challenge_batch_size = config.validator_challenge_batch_size
     hardware_list = config.hardware_list
 
     # Step 5: Connect the validator to the network
@@ -300,14 +309,12 @@ async def main(config):
                 # Filter axons with stake and ip address.
                 axons_list, uids_list, hotkeys_list = get_queryable(metagraph=metagraph, uids=uids)
 
-                tasks = []
                 pow_responses = {}
                 pow_benchmark = {}
                 pow_request = {}
-                batch_size = 64
-                for i in range(0, len(uids_list), batch_size):
+                for i in range(0, len(uids_list), validator_challenge_batch_size):
                     tasks = []
-                    for index, uid in enumerate(uids_list[i : i + batch_size]):
+                    for index, uid in enumerate(uids_list[i : i + validator_challenge_batch_size]):
                         axons = axons_list[i + index]
                         password, _hash, _salt, mode, chars, mask = pow.run_validator_pow()
                         pow_request[uid] = (password, _hash, _salt, mode, chars, mask, compute.pow_min_difficulty)
