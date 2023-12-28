@@ -70,6 +70,8 @@ export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
 echo "PATH=$PATH">>~/.bashrc
 echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
 
+reboot  # Changes might need a restart depending on the system
+
 nvidia-smi
 nvcc --version
 
