@@ -90,12 +90,14 @@ docker run hello-world  # Must not return you any error.
 
 ### Running subtensor locally
 
-#### Run Subtensor locally
 ```bash
 git clone https://github.com/opentensor/subtensor.git
 cd subtensor
 docker-compose up --detach
 ```
+
+If you have more complicated needs, see the [subtensor](https://github.com/opentensor/subtensor/) repo for more details and understanding.
+
 
 ---
 
@@ -177,9 +179,9 @@ The score calculation function determines a miner's performance based on various
 
 **Effect of Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score.
 
-Max Score = 1e5
-Score = Lowest Difficulty + (Difficulty Weight * Problem Difficulty) + (Elapsed Time * 1 / (1 + Elapsed Time) * 10000) + Allocation Bonus
-Normalized Score = (Score / Max Score) * 100
+- Max Score = 1e5
+- Score = Lowest Difficulty + (Difficulty Weight * Problem Difficulty) + (Elapsed Time * 1 / (1 + Elapsed Time) * 10000) + Allocation Bonus
+- Normalized Score = (Score / Max Score) * 100
 
 ### Example 1: Miner A's Hardware Scores and Weighted Total
 
