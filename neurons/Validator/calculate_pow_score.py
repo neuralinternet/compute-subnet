@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 
+import bittensor as bt
 import wandb
 
 import compute
@@ -58,7 +59,8 @@ def score(response, difficulty, hotkey):
         max_score = 1e5
         normalized_score = (final_score / max_score) * 100
         return min(normalized_score, compute.pow_max_possible_score)
-    except Exception as _:
+    except Exception as e:
+        bt.logging.error(f"An error occurred while calculating score for the following hotkey - {hotkey}: {e}")
         return 0
 
 

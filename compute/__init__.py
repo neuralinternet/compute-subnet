@@ -32,6 +32,7 @@ pow_default_mask = "?1?1?1?1?1?1"
 pow_max_possible_score = 41  # 41 is the current max reasonable possible value considering the highest available difficulty and lowest time.
 
 default_hashcat_location = "hashcat"
+default_hashcat_workload_profile = "3"
 
 priority_perfinfo = 1
 priority_challenge = 2

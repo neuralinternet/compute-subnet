@@ -266,6 +266,9 @@ async def main(config):
     # Initialize weights for each miner, store current uids.
     last_uids = metagraph.uids.tolist()
     scores = torch.zeros(len(last_uids), dtype=torch.float32)
+    bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
+    # Progressively decrease the score to 0 in case miners failed few challenges instead of immediate 0.
+    decay_factor = 0.8
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
@@ -285,24 +288,13 @@ async def main(config):
                 # Sync scores with metagraph
                 # Get the current uids of all miners in the network.
                 uids = metagraph.uids.tolist()
-                # Create new_scores with current metagraph
-                new_scores = torch.zeros(len(uids), dtype=torch.float32)
-
-                for index, uid in enumerate(uids):
-                    try:
-                        last_index = last_uids.index(uid)
-                        new_scores[index] = scores[last_index]
-                    except ValueError:
-                        # New node
-                        new_scores[index] = 0
-                last_uids = uids
 
                 # Set the weights of validators to zero.
-                scores = new_scores * (metagraph.total_stake < 1.024e3)
+                scores = scores * (metagraph.total_stake < 1.024e3)
                 # Set the weight to zero for all nodes without assigned IP addresses.
                 scores = scores * torch.Tensor(get_valid_tensors(metagraph=metagraph))
 
-                bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
+                bt.logging.info(f"🔢 Re-Initialized scores : {scores.tolist()}")
 
             if step % 10 == 0:
                 # Filter axons with stake and ip address.
@@ -327,13 +319,15 @@ async def main(config):
                 # Calculate score
                 score_uid_dict = {}
                 for index, uid in enumerate(metagraph.uids):
+                    previous_score = scores[index]
                     try:
                         uid_index = uids_list.index(uid)
                         score = cps.score(pow_benchmark[index], pow_request[index][-1], axons_list[uid_index].hotkey)
                     except (ValueError, KeyError):
                         score = 0
 
-                    scores[index] = score
+                    decayed_score = previous_score * decay_factor
+                    scores[index] = max(decayed_score, score) if decayed_score > 1 and score > 1 else score
                     score_uid_dict[uid.item()] = scores[index].item()
 
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")

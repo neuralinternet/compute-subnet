@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import argparse
+
 # Step 1: Import necessary libraries and modules
 import os
 import traceback
@@ -61,6 +62,20 @@ def get_config():
         dest="hashcat_path",
         help="The path of the hashcat binary.",
         default=compute.default_hashcat_location,
+    )
+    parser.add_argument(
+        "--hashcat.workload.profile",
+        type=str,
+        dest="hashcat_workload_profile",
+        help="Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information.",
+        default=compute.default_hashcat_workload_profile,
+    )
+    parser.add_argument(
+        "--hashcat.extended.options",
+        type=str,
+        dest="hashcat_extended_options",
+        help="Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information.",
+        default="",
     )
     # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
     bt.subtensor.add_args(parser)
@@ -124,6 +139,8 @@ def main(config):
     p.check_cuda_availability()
 
     hashcat_path = config.hashcat_path
+    hashcat_workload_profile = config.hashcat_workload_profile
+    hashcat_extended_options = config.hashcat_extended_options
 
     compute.util.check_hashcat_available(hashcat_path=hashcat_path)
 
@@ -217,6 +234,8 @@ def main(config):
             chars=synapse.challenge_chars,
             mask=synapse.challenge_mask,
             hashcat_path=hashcat_path,
+            hashcat_workload_profile=hashcat_workload_profile,
+            hashcat_extended_options=hashcat_extended_options,
         )
         synapse.output = result
         return synapse
