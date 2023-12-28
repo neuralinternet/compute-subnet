@@ -111,6 +111,8 @@ Once you have done so, you can run the miner and validator with the following co
 
 ## Running Miner
 
+A dedicated medium article is available [here](https://medium.com/@neuralinternet/how-to-run-a-compute-miner-82498b93e7e1)
+
 Miners contribute processing resources, notably GPU (Graphics Processing Unit) and CPU (Central Processing Unit)
 instances, to facilitate optimal performance in essential GPU and CPU-based computing tasks. The system operates on a
 performance-based reward mechanism, where miners are incentivized through a tiered reward structure correlated to the

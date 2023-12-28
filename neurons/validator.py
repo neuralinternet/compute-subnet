@@ -277,7 +277,7 @@ async def main(config):
     scores = torch.zeros(len(last_uids), dtype=torch.float32)
     bt.logging.info(f"🔢 Initialized scores : {scores.tolist()}")
     # Progressively decrease the score to 0 in case miners failed few challenges instead of immediate 0.
-    decay_factor = 0.8
+    decay_factor = 0.65
 
     curr_block = subtensor.block
     last_updated_block = curr_block - (curr_block % 100)
@@ -335,8 +335,14 @@ async def main(config):
                     except (ValueError, KeyError):
                         score = 0
 
-                    decayed_score = previous_score * decay_factor
-                    scores[index] = max(decayed_score, score) if decayed_score > 1 and score > 1 else score
+                    if 0.75 > score < previous_score:
+                        decayed_score = previous_score * decay_factor
+                    elif score < 0.75:
+                        decayed_score = score
+                    else:
+                        decayed_score = score
+
+                    scores[index] = decayed_score
                     score_uid_dict[uid.item()] = scores[index].item()
 
                 bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
