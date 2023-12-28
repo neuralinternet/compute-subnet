@@ -35,7 +35,6 @@ import Validator.calculate_pow_score as cps
 import Validator.database as db
 import Validator.pow as pow
 import compute
-from neurons import env
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
@@ -138,7 +137,7 @@ def filter_axons(axons_list, uids_list):
     for index, axon in enumerate(axons_list):
         ip_address = axon.ip
 
-        if ip_address not in valid_ip_addresses and (not env.IP or ip_address in env.IP):
+        if ip_address not in valid_ip_addresses:
             valid_ip_addresses.add(ip_address)
             filtered_axons.append(axon)
             filtered_uids.append(uids_list[index])
