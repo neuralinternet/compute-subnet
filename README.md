@@ -54,7 +54,7 @@ python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
 ```
 
-## Hashcat
+## Hashcat (Only for miners)
 
 ```bash
 # Recommended hashcat version >= v6.2.5
@@ -63,7 +63,7 @@ apt -y install hashcat
 hashcat --version
 ```
 
-## Install Cuda
+## Cuda (Only for miners)
 
 ```bash
 # Recommended cuda version: 12.3
