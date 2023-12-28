@@ -81,9 +81,20 @@ nvcc --version
 To run a miner, you must [install](https://docs.docker.com/engine/install/ubuntu) and start the docker service.
 
 ```bash
+sudo apt install docker.io -y
+sudo apt install docker-compose -y
 sudo systemctl start docker
 sudo apt install at
 docker run hello-world  # Must not return you any error.
+```
+
+### Running subtensor locally
+
+#### Run Subtensor locally
+```bash
+git clone https://github.com/opentensor/subtensor.git
+cd subtensor
+docker-compose up --detach
 ```
 
 ---
@@ -247,6 +258,10 @@ Flags that you can use with the validator script.
 - `--blacklist.suspected.coldkeys`
     - Description: Automatically use the list of internal suspected hotkeys.
     - Default: `True`
+- `--hardware.list`
+    - Description: Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.
+    - Default: `False`
+    - usage: `--hardware.list`
 
 
 ## Miners options

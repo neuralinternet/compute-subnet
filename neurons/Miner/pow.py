@@ -49,6 +49,7 @@ def run_hashcat(
     hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
+    unknown_error_message = f"run_hashcat execution failed"
     try:
         process = subprocess.run(
             [hashcat_path, f"{_hash}:{salt}", "-a", "3", "-m", mode, "-1", str(chars), mask, "-w", hashcat_workload_profile, hashcat_extended_options],
@@ -73,9 +74,10 @@ def run_hashcat(
         bt.logging.warning(error_message)
         return {"password": None, "error": error_message}
     except Exception as e:
-        error_message = f"run_hashcat execution failed with exception: {e}"
-        bt.logging.warning(error_message)
-        return {"password": None, "error": error_message}
+        bt.logging.warning(f"{unknown_error_message}: {e}")
+        return {"password": None, "error": f"{unknown_error_message}: {e}"}
+    bt.logging.warning(f"{unknown_error_message}: no exceptions")
+    return {"password": None, "error": f"{unknown_error_message}: no exceptions"}
 
 
 def run_miner_pow(
