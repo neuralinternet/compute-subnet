@@ -167,7 +167,7 @@ RAM performance. The script's structure and logic are outlined below:
 
 ## Understanding the Score Calculation Process
 
-**Scoring system has been updated, if you want to check the old hardware mechanism:** [Hardware scoring](docs/hardware_scoring.md)
+**The scoring system has been updated, if you want to check the old hardware mechanism:** [Hardware scoring](docs/hardware_scoring.md)
 
 The score calculation function determines a miner's performance based on various factors:
 
@@ -179,7 +179,7 @@ The score calculation function determines a miner's performance based on various
 
 **Exponential Rewards for Difficulty**: Higher problem difficulty leads to more significant rewards. An exponential formula is applied to increase rewards based on difficulty.
 
-**Allocation Bonus**: Miners that has allocated machine receive an additional bonus added to their final score.
+**Allocation Bonus**: Miners that have allocated machine receive an additional bonus added to their final score.
 
 **Effect of Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score.
 
@@ -278,7 +278,7 @@ Flags that you can use with the validator script.
 ---
 
 - `--whitelist.hotkeys`
-    - Description: List of hotkeys to blacklist.
+    - Description: List of hotkeys to whitelist.
     - Default: `[]`
     - usage: `--whitelist.hotkeys "['hotkey_x', '...']"`
 - `--hashcat.path`
