@@ -9,7 +9,7 @@
 
 [Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Research](https://bittensor.com/whitepaper)
 
-This repository contains all the necessary files and functions to define Bittensor's Compute Subnet. It enables running miners on netuid 15 in Bittensor's test network.
+This repository contains all the necessary files and functions to define Bittensor's Compute Subnet. It enables running miners on netuid 15 in Bittensor's test network or netuid 27 in Bittensor's main network.
 
 ## Introduction
 
