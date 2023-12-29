@@ -16,21 +16,23 @@ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABI
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 """
-import ast
 import codecs
 import os
 import re
 import subprocess
+import sys
 from os import path
 
 import bittensor as bt
 import git
 import requests
-import sys
 
 
-def version2number(version):
-    return int(version.replace(".", "").replace("-", "").replace("_", ""))
+def version2number(version: str):
+    if version and type(version) is str:
+        version = version.split(".")
+        return (100 * int(version[0])) + (10 * int(version[1])) + (1 * int(version[2]))
+    return None
 
 
 def get_remote_version():
@@ -52,7 +54,8 @@ def get_local_version():
     try:
         # loading version from __init__.py
         here = path.abspath(path.dirname(__file__))
-        with codecs.open(os.path.join(here, "__init__.py"), encoding="utf-8") as init_file:
+        parent = here.rsplit("/", 1)[0]
+        with codecs.open(os.path.join(parent, "__init__.py"), encoding="utf-8") as init_file:
             version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", init_file.read(), re.M)
             version_string = version_match.group(1)
         return version_string
@@ -79,9 +82,8 @@ def update_repo():
 
         origin = repo.remotes.origin
 
-        # origin.fetch()
         if repo.is_dirty(untracked_files=True):
-            bt.logging.error("Update failed: Uncommited changes detected. Please commit changes")
+            bt.logging.error("Update failed: Uncommited changes detected. Please commit changes or run `git stash`")
             return False
         try:
             bt.logging.info("Try pulling remote repository")
@@ -118,11 +120,6 @@ def handle_merge_conflict(repo):
         return False
 
 
-def version2number(version_string):
-    version_digits = version_string.split(".")
-    return 100 * version_digits[0] + 10 * version_digits[1] + version_digits[2]
-
-
 def restart_app():
     bt.logging.info("👩‍🦱app restarted due to the update")
 
@@ -141,6 +138,7 @@ def try_update_packages():
 
         python_executable = sys.executable
         subprocess.check_call([python_executable], "-m", "pip", "install", "-r", requirements_path)
+        subprocess.check_call([python_executable], "-m", "pip", "install", "-e", ".")
         bt.logging.info("📦Updating packages finished.")
 
     except Exception as e:
@@ -158,18 +156,14 @@ def try_update():
         bt.logging.info(f"Try updating failed {e}")
 
 
-def parse_list(input_string):
-    return ast.literal_eval(input_string)
-
-
-def check_hashcat_available(hashcat_path: str = "hashcat"):
+def check_hashcat_version(hashcat_path: str = "hashcat"):
     try:
         process = subprocess.run([hashcat_path, "--version"], capture_output=True, check=True)
         if process and process.stdout:
-            bt.logging.info(f"Version of hashcat found: {process.stdout}")
+            bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}")
         return True
     except subprocess.CalledProcessError:
         bt.logging.error(
-            f"Hashcat is not available or not installed on the machine. Please make sure hashcat is available in your PATH or give the explicit location using the following argument: --hashcat.path"
+            f"Hashcat is not available nor installed on the machine. Please make sure hashcat is available in your PATH or give the explicit location using the following argument: --miner.hashcat.path"
         )
         exit()

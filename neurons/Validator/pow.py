@@ -26,12 +26,17 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import compute
 
 
+def generate_blake2b_512_hash(data):
+    hash_object = hashlib.blake2b(data, digest_size=64)
+    return hash_object.hexdigest()
+
+
 def gen_hash(password):
-    salt = secrets.token_hex(16)
+    salt = secrets.token_hex(8)
     salted_password = password + salt
     data = salted_password.encode("utf-8")
-    hash_result = hashlib.sha256(data).hexdigest()
-    return hash_result, salt
+    hash_result = hashlib.blake2b(data).hexdigest()
+    return f"$BLAKE2${hash_result}", salt
 
 
 def gen_random_string(available_chars=compute.pow_default_chars, length=compute.pow_min_difficulty):
@@ -52,8 +57,9 @@ def gen_random_string(available_chars=compute.pow_default_chars, length=compute.
 def gen_password(length=compute.pow_min_difficulty):
     try:
         password = gen_random_string(length=length)
+        _mask = "".join(["?1" for _ in range(length)])
         _hash, _salt = gen_hash(password)
-        return password, _hash, _salt
+        return password, _hash, _salt, _mask
     except Exception as e:
         bt.logging.error(f"Error during PoW generation (gen_password): {e}")
         return None
@@ -63,5 +69,5 @@ def run_validator_pow(length=compute.pow_min_difficulty):
     """
     Don't worry this function is fast enough for validator to use CPUs
     """
-    password, _hash, _salt = gen_password(length=length)
-    return password, _hash, _salt, compute.pow_default_mode, compute.pow_default_chars, compute.pow_default_mask
+    password, _hash, _salt, _mask = gen_password(length=length)
+    return password, _hash, _salt, compute.pow_default_mode, compute.pow_default_chars, _mask
