@@ -30,11 +30,10 @@ validator_permit_stake = 1.024e3  # Stake amount to be a permitted validator
 # Validators static vars
 pow_timeout = 60  # Time before the proof of work requests will time out. time unit = seconds
 pow_min_difficulty = 5  # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
-pow_max_difficulty = 8  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
-# pow_default_mode = "1410"  # Model: sha256($pass.$salt)
+pow_max_difficulty = 7  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
 pow_default_mode = "610"  # Model: BLAKE2b-512($pass.$salt)
 pow_default_chars = str(string.ascii_letters + string.digits + "!@#$%^&*()-_+=[]{};:,.<>/")
-pow_max_possible_score = 50  # 50 is the current max reasonable possible value considering the highest available difficulty and lowest time.
+pow_max_possible_score = 15  # Max reasonable possible score considering the static difficulty, registration and lowest time.
 
 # Miners static vars
 miner_priority_perfinfo = 1  # Lowest priority

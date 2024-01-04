@@ -47,7 +47,7 @@ class Validator:
 
     scores: Tensor
 
-    score_decay_factor = 0.5
+    score_decay_factor = 0.25
     score_limit = 0.5
 
     _queryable_uids: Dict[int, bt.AxonInfo]
