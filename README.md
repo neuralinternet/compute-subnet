@@ -45,9 +45,12 @@ python3 -m pip install -e .
 ### Hashcat
 
 ```bash
-# Recommended hashcat version >= v6.2.5
-apt -y install ocl-icd-libopencl1 pocl-opencl-icd  # in case you have missing requirements
-apt -y install hashcat
+# Minimal hashcat version >= v6.2.6
+wget https://hashcat.net/files/hashcat-6.2.6.tar.gz
+tar xzvf hashcat-6.2.6.tar.gz
+cd hashcat-6.2.6/
+make
+make install  # prefixed by sudo if not in the sudoers
 hashcat --version
 ```
 
