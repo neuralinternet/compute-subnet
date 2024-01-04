@@ -16,88 +16,53 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import argparse
-
-# Step 1: Import necessary libraries and modules
+import json
 import os
 import traceback
 import typing
 
 import bittensor as bt
-import sys
 import time
 
 import Miner.allocate as al
 import Miner.performance as pf
 import Miner.pow as p
-
-parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(parent_dir)
-
 import compute
+from compute.protocol import PerfInfo, Allocate, Challenge
+from compute.utils.parser import ComputeArgPaser
+from compute.utils.subtensor import is_registered
+from compute.utils.version import get_remote_version, check_hashcat_version, try_update, version2number
 
-
-whitelisted_hotkeys_set: set = set()
+whitelist_args_hotkeys_set: set = set()
+whitelist_version_hotkeys_set: set = set()
+blacklist_args_hotkeys_set: set = set()
+blacklist_version_hotkeys_set: set = set()
+exploiters_hotkeys_set: set = set()
 
 
 def get_config():
-    global whitelisted_hotkeys_set
+    global whitelist_args_hotkeys_set
+    global whitelist_version_hotkeys_set
 
-    # Step 2: Set up the configuration parser
+    # Step 1: Set up the configuration parser
     # This function initializes the necessary command-line arguments.
-    parser = argparse.ArgumentParser()
+    parser = ComputeArgPaser(description="This script aims to help miners with the compute subnet.")
     # Adds override arguments for network and netuid.
-    parser.add_argument("--netuid", type=int, default=1, help="The chain subnet uid.")
-    parser.add_argument("--auto_update", default="yes", help="Auto update")
-    parser.add_argument(
-        "--miner.whitelist.not.enough.stake",
-        action="store_true",
-        dest="miner_whitelist_not_enough_stake",
-        help="Whitelist the validators without enough stake.",
-        default=False,
-    )
-    parser.add_argument(
-        "--whitelist.hotkeys",
-        type=compute.util.parse_list,
-        dest="whitelist_hotkeys",
-        help="The list of the whitelist hotkeys in the following format: \"['hotkey_x', '...']\"",
-        default=[],
-    )
-    parser.add_argument(
-        "--hashcat.path",
-        type=str,
-        dest="hashcat_path",
-        help="The path of the hashcat binary.",
-        default=compute.default_hashcat_location,
-    )
-    parser.add_argument(
-        "--hashcat.workload.profile",
-        type=str,
-        dest="hashcat_workload_profile",
-        help="Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information.",
-        default=compute.default_hashcat_workload_profile,
-    )
-    parser.add_argument(
-        "--hashcat.extended.options",
-        type=str,
-        dest="hashcat_extended_options",
-        help="Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information.",
-        default="",
-    )
-    # Adds subtensor specific arguments i.e. --subtensor.chain_endpoint ... --subtensor.network ...
-    bt.subtensor.add_args(parser)
-    # Adds logging specific arguments i.e. --logging.debug ..., --logging.trace .. or --logging.logging_dir ...
-    bt.logging.add_args(parser)
-    # Adds wallet specific arguments i.e. --wallet.name ..., --wallet.hotkey ./. or --wallet.path ...
-    bt.wallet.add_args(parser)
-    # Adds axon specific arguments i.e. --axon.port ...
-    bt.axon.add_args(parser)
+
     # Activating the parser to read any command-line inputs.
     config = bt.config(parser)
 
     if config.whitelist_hotkeys:
         for hotkey in config.whitelist_hotkeys:
-            whitelisted_hotkeys_set.add(hotkey)
+            whitelist_args_hotkeys_set.add(hotkey)
+
+    if config.blacklist_hotkeys:
+        for hotkey in config.blacklist_hotkeys:
+            blacklist_args_hotkeys_set.add(hotkey)
+
+    if config.blacklist_exploiters:
+        for key in compute.SUSPECTED_EXPLOITERS_HOTKEYS:
+            exploiters_hotkeys_set.add(key)
 
     # Step 3: Set up logging directory
     # Logging captures events for diagnosis or understanding miner's behavior.
@@ -114,6 +79,67 @@ def get_config():
     if not os.path.exists(config.full_path):
         os.makedirs(config.full_path, exist_ok=True)
     return config
+
+
+def get_valid_queryable_uids(metagraph):
+    uids = metagraph.uids.tolist()
+    valid_uids = []
+    for index, uid in enumerate(uids):
+        if metagraph.total_stake[index]:
+            valid_uids.append(uid)
+    return valid_uids
+
+
+def get_queryable_axons(metagraph):
+    queryable_uids = get_valid_queryable_uids(metagraph)
+    queryable_axons = {metagraph.uids.tolist().index(uid): metagraph.axons[metagraph.uids.tolist().index(uid)] for uid in queryable_uids}
+    return queryable_axons
+
+
+def get_valid_validator_uids(metagraph: bt.metagraph):
+    uids = metagraph.uids.tolist()
+    valid_uids = []
+    for index, uid in enumerate(uids):
+        if metagraph.total_stake[index] > compute.validator_permit_stake:
+            valid_uids.append(uid)
+    return valid_uids
+
+
+def get_valid_validator(config, subtensor: bt.subtensor, metagraph: bt.metagraph):
+    valid_validator_uids = get_valid_validator_uids(metagraph=metagraph)
+    valid_validator = []
+    for uid in valid_validator_uids:
+        neuron = subtensor.neuron_for_uid(uid, config.netuid)
+        hotkey = neuron.hotkey
+        version = neuron.prometheus_info.version
+        valid_validator.append((uid, hotkey, version))
+
+    return valid_validator
+
+
+def get_valid_hotkeys(config, subtensor: bt.subtensor, metagraph: bt.metagraph):
+    try:
+        latest_version = version2number(get_remote_version())
+
+        if latest_version is None:
+            bt.logging.error(f"Github API call failed or version string is incorrect!")
+
+        valid_validators = get_valid_validator(config=config, subtensor=subtensor, metagraph=metagraph)
+        for uid, hotkey, version in valid_validators:
+            try:
+                if version != latest_version and latest_version != None:
+                    bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
+                    continue
+
+                if hotkey not in whitelist_version_hotkeys_set:
+                    whitelist_version_hotkeys_set.add(hotkey)
+            except Exception:
+                bt.logging.debug(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+
+        bt.logging.info(f"Total valid validator hotkeys = {whitelist_version_hotkeys_set}")
+
+    except json.JSONDecodeError:
+        bt.logging.debug(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
 
 # Main takes the config and starts the miner.
@@ -144,15 +170,15 @@ def main(config):
     # Allow validators that are not permitted by stake
     miner_whitelist_not_enough_stake = config.miner_whitelist_not_enough_stake
 
-    compute.subtensor_utils.is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="miner")
+    is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="miner")
 
     p.check_cuda_availability()
 
-    hashcat_path = config.hashcat_path
-    hashcat_workload_profile = config.hashcat_workload_profile
-    hashcat_extended_options = config.hashcat_extended_options
+    hashcat_path = config.miner_hashcat_path
+    hashcat_workload_profile = config.miner_hashcat_workload_profile
+    hashcat_extended_options = config.miner_hashcat_extended_options
 
-    compute.util.check_hashcat_available(hashcat_path=hashcat_path)
+    check_hashcat_version(hashcat_path=hashcat_path)
 
     # Each miner gets a unique identity (UID) in the network for differentiation.
     my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
@@ -160,57 +186,76 @@ def main(config):
 
     # Step 5: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
-    def base_blacklist(synapse: typing.Union[compute.protocol.PerfInfo, compute.protocol.Allocate, compute.protocol.Challenge]) -> typing.Tuple[bool, str]:
-        if synapse.dendrite.hotkey not in metagraph.hotkeys:
+    def base_blacklist(synapse: typing.Union[PerfInfo, Allocate, Challenge]) -> typing.Tuple[bool, str]:
+        hotkey = synapse.dendrite.hotkey
+        synapse_type = type(synapse).__name__
+
+        if hotkey not in metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
-            bt.logging.trace(f"Blacklisting unrecognized hotkey {synapse.dendrite.hotkey}")
+            bt.logging.trace(f"Blacklisting unrecognized hotkey {hotkey}")
             return True, "Unrecognized hotkey"
 
-        index = metagraph.hotkeys.index(synapse.dendrite.hotkey)
+        index = metagraph.hotkeys.index(hotkey)
         stake = metagraph.S[index].item()
 
-        if stake < 1024 and not miner_whitelist_not_enough_stake:
+        if stake < compute.validator_permit_stake and not miner_whitelist_not_enough_stake:
             bt.logging.trace(f"Not enough stake {stake}")
             return True, "Not enough stake!"
 
-        if len(whitelisted_hotkeys_set) > 0 and synapse.dendrite.hotkey not in whitelisted_hotkeys_set:
+        if len(whitelist_args_hotkeys_set) > 0 and hotkey not in whitelist_args_hotkeys_set:
             return True, "Not whitelisted"
+
+        if len(blacklist_args_hotkeys_set) > 0 and hotkey in blacklist_args_hotkeys_set:
+            return True, "Blacklisted hotkey"
+
+        # Blacklist entities that are not up-to-date
+        if hotkey in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0:
+            return (
+                True,
+                f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
+            )
+
+        if hotkey in exploiters_hotkeys_set:
+            return (
+                True,
+                f"Blacklisted a {synapse_type} request from an exploiter hotkey: {hotkey}",
+            )
 
         bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
         return False, "Hotkey recognized!"
 
-    def base_priority(synapse: typing.Union[compute.protocol.PerfInfo, compute.protocol.Allocate, compute.protocol.Challenge]) -> float:
+    def base_priority(synapse: typing.Union[PerfInfo, Allocate, Challenge]) -> float:
         caller_uid = metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
         priority = float(metagraph.S[caller_uid])  # Return the stake as the priority.
         bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority)
         return priority
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_perfInfo(synapse: compute.protocol.PerfInfo) -> typing.Tuple[bool, str]:
+    def blacklist_perfInfo(synapse: PerfInfo) -> typing.Tuple[bool, str]:
         return base_blacklist(synapse)
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_perfInfo(synapse: compute.protocol.PerfInfo) -> float:
-        return base_priority(synapse) + compute.priority_perfinfo
+    def priority_perfInfo(synapse: PerfInfo) -> float:
+        return base_priority(synapse) + compute.miner_priority_perfinfo
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def perfInfo(synapse: compute.protocol.PerfInfo) -> compute.protocol.PerfInfo:
+    def perfInfo(synapse: PerfInfo) -> PerfInfo:
         app_data = synapse.perf_input
         synapse.perf_output = pf.get_respond(app_data)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_allocate(synapse: compute.protocol.Allocate) -> typing.Tuple[bool, str]:
+    def blacklist_allocate(synapse: Allocate) -> typing.Tuple[bool, str]:
         return base_blacklist(synapse)
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_allocate(synapse: compute.protocol.Allocate) -> float:
-        return base_priority(synapse) + compute.priority_allocate
+    def priority_allocate(synapse: Allocate) -> float:
+        return base_priority(synapse) + compute.miner_priority_allocate
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
-    def allocate(synapse: compute.protocol.Allocate) -> compute.protocol.Allocate:
+    def allocate(synapse: Allocate) -> Allocate:
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
         checking = synapse.checking
@@ -226,16 +271,16 @@ def main(config):
         return synapse
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_challenge(synapse: compute.protocol.Challenge) -> typing.Tuple[bool, str]:
+    def blacklist_challenge(synapse: Challenge) -> typing.Tuple[bool, str]:
         return base_blacklist(synapse)
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_challenge(synapse: compute.protocol.Challenge) -> float:
-        return base_priority(synapse) + compute.priority_challenge
+    def priority_challenge(synapse: Challenge) -> float:
+        return base_priority(synapse) + compute.miner_priority_challenge
 
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
-    def challenge(synapse: compute.protocol.Challenge) -> compute.protocol.Challenge:
+    def challenge(synapse: Challenge) -> Challenge:
         bt.logging.info(f"Received challenge (hash, salt): ({synapse.challenge_hash}, {synapse.challenge_salt})")
         result = p.run_miner_pow(
             _hash=synapse.challenge_hash,
@@ -280,6 +325,8 @@ def main(config):
     bt.logging.info(f"Starting axon server on port: {config.axon.port}")
     axon.start()
 
+    get_valid_hotkeys(config=config, subtensor=subtensor, metagraph=metagraph)
+
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
@@ -288,6 +335,7 @@ def main(config):
             # Periodically update our knowledge of the network graph.
             if step % 5 == 0:
                 metagraph = subtensor.metagraph(config.netuid)
+
                 log = (
                     f"Step:{step} | "
                     f"Block:{metagraph.block.item()} | "
@@ -299,9 +347,14 @@ def main(config):
                     f"Emission:{metagraph.E[my_subnet_uid]}"
                 )
                 bt.logging.info(log)
+
+            if step % compute.miner_whitelist_validator_steps_for == 0:
+                get_valid_hotkeys(config=config, subtensor=subtensor, metagraph=metagraph)
+
             # Check for auto update
             if step % 30 == 0 and config.auto_update == "yes":
-                compute.util.try_update()
+                try_update()
+
             step += 1
             time.sleep(1)
 

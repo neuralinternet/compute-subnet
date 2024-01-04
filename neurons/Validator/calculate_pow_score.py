@@ -39,24 +39,23 @@ def score(response, difficulty, hotkey):
         difficulty = min(difficulty, compute.pow_max_difficulty)
 
         # Define base weights for the PoW
-        difficulty_weight = 0.75
-        time_elapsed_weight = 0.25
+        difficulty_weight = 0.5
+        time_elapsed_weight = 0.5
 
         # Apply exponential rewards for difficulty
-        initial_reward = 6
-        difficulty_reward = initial_reward * (1 + (difficulty**4))
+        difficulty_reward = difficulty * (1 + (difficulty**6))
 
         # Apply a bonus for registered miners
-        registration_bonus = check_if_registered(hotkey) * 100
+        registration_bonus = check_if_registered(hotkey) * 20000
 
         # Modifier for elapsed time effect
-        time_modifier = 1 / (1 + elapsed_time) * 10000
+        time_modifier = 1 / (1 + elapsed_time) * 200000
 
         # Calculate the score
         final_score = difficulty_reward + (difficulty_weight * difficulty) + (time_elapsed_weight * time_modifier) + registration_bonus
 
         # Normalize the score
-        max_score = 1e5
+        max_score = 1e6
         normalized_score = (final_score / max_score) * 100
         return min(normalized_score, compute.pow_max_possible_score)
     except Exception as e:

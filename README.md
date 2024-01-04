@@ -45,9 +45,12 @@ python3 -m pip install -e .
 ### Hashcat
 
 ```bash
-# Recommended hashcat version >= v6.2.5
-apt -y install ocl-icd-libopencl1 pocl-opencl-icd  # in case you have missing requirements
-apt -y install hashcat
+# Minimal hashcat version >= v6.2.6
+wget https://hashcat.net/files/hashcat-6.2.6.tar.gz
+tar xzvf hashcat-6.2.6.tar.gz
+cd hashcat-6.2.6/
+make
+make install  # prefixed by sudo if not in the sudoers
 hashcat --version
 ```
 
@@ -61,12 +64,13 @@ cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
 apt-get update
 apt-get -y install cuda-toolkit-12-3
 apt-get -y install -y cuda-drivers
-apt-get -y install -y nvidia-kernel-open-545
 
+# Valid for x64 architecture. Consult nvidia documentation for any other architecture.
 export CUDA_VERSION=cuda-12.3
 export PATH=$PATH:/usr/local/$CUDA_VERSION/bin
 export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
 
+echo "">>~/.bashrc
 echo "PATH=$PATH">>~/.bashrc
 echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
 
@@ -245,63 +249,40 @@ in `register.py` and running this script: https://github.com/neuralinternet/Comp
 for example:
 ```{'cpu':{'count':1}, 'gpu':{'count':1}, 'hard_disk':{'capacity':10737418240}, 'ram':{'capacity':1073741824}}```
 
+## Options
+
+All the list arguments are now using coma separator.
+
+- `--netuid`: (Optional) The chain subnet uid. Default: 27.
+- `--auto_update`: (Optional) Auto update the repository. Default: True.
+- `--blacklist.exploiters`: (Optional) Automatically use the list of internal exploiters hotkeys. Default: True.
+- `--blacklist.hotkeys <hotkey_0,hotkey_1,...>`: (Optional) List of hotkeys to blacklist. Default: [].
+- `--blacklist.coldkeys <coldkey_0,coldkey_1,...>`: (Optional) List of coldkeys to blacklist. Default: [].
+- `--whitelist.hotkeys <hotkey_0,hotkey_1,...>`: (Optional) List of hotkeys to whitelist. Default: [].
+- `--whitelist.coldkeys <coldkey_0,coldkey_1,...>`: (Optional) List of coldkeys to whitelist. Default: [].
+
 ## Validators options
 
 ---
 Flags that you can use with the validator script.
 
-- `--blacklisted.hotkeys`
-    - Description: List of hotkeys to blacklist.
-    - Default: `[]`
-    - usage: `--blacklisted.hotkeys "['hotkey_x', '...']"`
-- `--blacklist.suspected.hotkeys`
-    - Description: Automatically use the list of internal suspected hotkeys.
-    - Default: `True`
-- `--blacklisted.coldkeys`
-    - Description: List of coldkeys to blacklist.
-    - Default: `[]`
-    - usage: `--blacklisted.coldkeys "['coldkey_x', '...']"`
-- `--blacklist.suspected.coldkeys`
-    - Description: Automatically use the list of internal suspected hotkeys.
-    - Default: `True`
-- `--hardware.list`
-    - Description: Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.
-    - Default: `False`
-    - usage: `--hardware.list`
-- `--validator.challenge.batch.size`
-    - Description: Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries.
-    - Default: `64`
-    - usage: `--validator.challenge.batch.size 32`
+- `--validator.whitelist.unrecognized`: (Optional) Whitelist the unrecognized miners. Default: False.
+- `--validator.perform.hardware.query`: (Optional) Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score. Default: False.
+- `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
 
 ## Miners options
 
 ---
 
-- `--whitelist.hotkeys`
-    - Description: List of hotkeys to whitelist.
-    - Default: `[]`
-    - usage: `--whitelist.hotkeys "['hotkey_x', '...']"`
-- `--hashcat.path`
-    - Description: The path of the hashcat binary.
-    - Default: `/usr/local/bin/hashcat`
-    - usage: `--hashcat.path the/path/of/hashcat/binary"`
-- `--hashcat.workload.profile`
-    - Description: Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information.
-    - Default: `3`
-    - usage: `--hashcat.workload.profile 2"`
-- `--hashcat.extended.options`
-    - Description: Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information.
-    - Default: ``
-    - usage: `--hashcat.extended.options "-O"`
-- `--miner.whitelist.not.enough.stake`
-    - Description: Whitelist the validators without enough stake.
-    - Default: `False`
-    - usage: `--miner.whitelist.not.enough.stake`
+- `--miner.hashcat.path <path>`: (Optional) The path of the hashcat binary. Default: hashcat.
+- `--miner.hashcat.workload.profile <profile>`: (Optional) Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information. Default: 3.
+- `--miner.hashcat.extended.options <options>`: (Optional) Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information. Default: ''.
+- `--miner.whitelist.not.enough.stake`: (Optional) Whitelist the validators without enough stake. Default: False.
 
 ## Benchmarking the machine
 
 ```bash
-hashcat -b -m 1410
+hashcat -b -m 610
 ```
 
 Output
@@ -312,7 +293,7 @@ Speed.#2.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
 ...
 ```
 
-Recommended difficulty: >= 7500 MH/s.
+Recommended minimum hashrate for the current difficulty: >= 4500 MH/s.
 
 Difficulty will increase over time.
 

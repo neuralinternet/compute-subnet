@@ -13,6 +13,7 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
+import shlex
 import subprocess
 from typing import Union
 
@@ -46,32 +47,46 @@ def run_hashcat(
     chars: str,
     mask: str,
     timeout: int = compute.pow_timeout,
-    hashcat_path: str = compute.default_hashcat_location,
-    hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
+    hashcat_path: str = compute.miner_hashcat_location,
+    hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
     start_time = time.time()
     unknown_error_message = f"run_hashcat execution failed"
     try:
-        process = subprocess.run(
-            [hashcat_path, f"{_hash}:{salt}", "-a", "3", "-m", mode, "-1", str(chars), mask, "-w", hashcat_workload_profile, hashcat_extended_options],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        command = [
+            hashcat_path,
+            f"{_hash}:{salt}",
+            "-a",
+            "3",
+            "-D",
+            "2",
+            "-m",
+            mode,
+            "-1",
+            str(chars),
+            mask,
+            "-w",
+            hashcat_workload_profile,
+            hashcat_extended_options,
+        ]
+        command_str = " ".join(shlex.quote(arg) for arg in command)
+        bt.logging.trace(command_str)
+        process = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+
+        execution_time = time.time() - start_time
 
         # If hashcat returns a valid result
         if process.returncode == 0:
             if process.stdout:
                 result = hashcat_verify(_hash, process.stdout)
-                bt.logging.debug(f"Challenge {result} found !")
-                return {"password": result, "error": None}
+                bt.logging.success(f"Challenge {result} found in {execution_time} seconds !")
+                return {"password": result, "local_execution_time": execution_time, "error": None}
         else:
             if process.returncode == 255:
                 # It means: Already an instance running.
                 # Retry with new timeout
                 time.sleep(1)
-                execution_time = time.time() - start_time
                 return run_hashcat(
                     _hash=_hash,
                     salt=salt,
@@ -85,17 +100,19 @@ def run_hashcat(
                 )
             error_message = f"Hashcat execution failed with code {process.returncode}: {process.stderr}"
             bt.logging.warning(error_message)
-            return {"password": None, "error": error_message}
+            return {"password": None, "local_execution_time": execution_time, "error": error_message}
 
     except subprocess.TimeoutExpired:
+        execution_time = time.time() - start_time
         error_message = f"Hashcat execution timed out"
         bt.logging.warning(error_message)
-        return {"password": None, "error": error_message}
+        return {"password": None, "local_execution_time": execution_time, "error": error_message}
     except Exception as e:
+        execution_time = time.time() - start_time
         bt.logging.warning(f"{unknown_error_message}: {e}")
-        return {"password": None, "error": f"{unknown_error_message}: {e}"}
+        return {"password": None, "local_execution_time": execution_time, "error": f"{unknown_error_message}: {e}"}
     bt.logging.warning(f"{unknown_error_message}: no exceptions")
-    return {"password": None, "error": f"{unknown_error_message}: no exceptions"}
+    return {"password": None, "local_execution_time": execution_time, "error": f"{unknown_error_message}: no exceptions"}
 
 
 def run_miner_pow(
@@ -104,8 +121,8 @@ def run_miner_pow(
     mode: str,
     chars: str,
     mask: str,
-    hashcat_path: str = compute.default_hashcat_location,
-    hashcat_workload_profile: str = compute.default_hashcat_workload_profile,
+    hashcat_path: str = compute.miner_hashcat_location,
+    hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
     result = run_hashcat(
