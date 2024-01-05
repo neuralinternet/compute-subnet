@@ -47,7 +47,7 @@ class Validator:
 
     scores: Tensor
 
-    score_decay_factor = 0.25
+    score_decay_factor = 0.334
     score_limit = 0.5
 
     _queryable_uids: Dict[int, bt.AxonInfo]
@@ -222,10 +222,10 @@ class Validator:
                 if step % 10 == 0:
                     self.sync_local()
 
-                # Perform pow queries, between ~ 8 and 12 minutes
+                # Perform pow queries, between ~ 10 and 14 minutes
                 if step % step_pseudo_rdm == 0:
                     # Prepare the next random step the validators will challenge again
-                    step_pseudo_rdm = random.randint(80, 120)
+                    step_pseudo_rdm = random.randint(100, 140)
 
                     # Filter axons with stake and ip address.
                     self._queryable_uids = self.get_queryable()
@@ -282,8 +282,8 @@ class Validator:
                     # Frequently check if the validator is still registered
                     is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
 
-                # ~ every 10 minutes
-                if step % 100 == 0 and self.validator_perform_hardware_query:
+                # ~ every 20 minutes
+                if step % 200 == 0 and self.validator_perform_hardware_query:
                     # # Prepare app_data for benchmarking
                     # # Generate secret key for app
                     secret_key = Fernet.generate_key()
