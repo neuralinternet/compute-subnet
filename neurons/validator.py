@@ -42,8 +42,10 @@ from compute.utils.version import try_update, get_local_version
 
 
 class Validator:
+    pow_requests: dict = {}
     pow_responses: dict = {}
     pow_benchmark: dict = {}
+    new_pow_benchmark: dict = {}
 
     scores: Tensor
 
@@ -230,7 +232,8 @@ class Validator:
                     # Filter axons with stake and ip address.
                     self._queryable_uids = self.get_queryable()
 
-                    pow_request = {}
+                    self.pow_requests = {}
+                    self.new_pow_benchmark = {}
 
                     async def run_pow():
                         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
@@ -239,7 +242,7 @@ class Validator:
                                 try:
                                     axon = self._queryable_uids[_uid]
                                     password, _hash, _salt, mode, chars, mask = run_validator_pow()
-                                    pow_request[_uid] = (password, _hash, _salt, mode, chars, mask, pow_min_difficulty)
+                                    self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, pow_min_difficulty)
                                     tasks.append(self.execute_pow_request(_uid, axon, password, _hash, _salt, mode, chars, mask))
                                 except KeyError:
                                     continue
@@ -247,6 +250,7 @@ class Validator:
 
                     self.loop.run_until_complete(run_pow())
 
+                    self.pow_benchmark = self.new_pow_benchmark
                     # Logs benchmarks for the validators
                     bt.logging.info("🔢 Results benchmarking:")
                     for uid, benchmark in self.pow_benchmark.items():
@@ -260,7 +264,11 @@ class Validator:
                     for uid in self.uids:
                         previous_score = self.scores[uid]
                         try:
-                            score = cps.score(self.pow_benchmark[uid], pow_request[uid][-1], self._queryable_uids[uid].hotkey)
+                            score = cps.score(
+                                self.pow_benchmark[uid],
+                                self.pow_requests[uid][-1],
+                                self._queryable_uids[uid].hotkey,
+                            )
                         except (ValueError, KeyError):
                             score = 0
 
@@ -454,9 +462,9 @@ class Validator:
         self.pow_responses[uid] = response
 
         if password != response.get("password"):
-            self.pow_benchmark[uid] = {"success": False, "elapsed_time": elapsed_time}
+            self.new_pow_benchmark[uid] = {"success": False, "elapsed_time": elapsed_time}
         else:
-            self.pow_benchmark[uid] = {"success": True, "elapsed_time": elapsed_time}
+            self.new_pow_benchmark[uid] = {"success": True, "elapsed_time": elapsed_time}
 
 
 def main():
