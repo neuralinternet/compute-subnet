@@ -20,12 +20,12 @@ import codecs
 import os
 import re
 import subprocess
-import sys
 from os import path
 
 import bittensor as bt
 import git
 import requests
+import sys
 
 
 def version2number(version: str):
@@ -35,14 +35,14 @@ def version2number(version: str):
     return None
 
 
-def get_remote_version():
+def get_remote_version(pattern: str = "__version__"):
     url = "https://raw.githubusercontent.com/neuralinternet/Compute-Subnet/main/compute/__init__.py"
     response = requests.get(url)
 
     if response.status_code == 200:
         lines = response.text.split("\n")
         for line in lines:
-            if line.startswith("__version__"):
+            if line.startswith(pattern):
                 version_info = line.split("=")[1].strip(" \"'").replace('"', "")
                 return version_info
     else:

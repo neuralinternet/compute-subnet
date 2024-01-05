@@ -19,6 +19,7 @@ import string
 
 # Define the version of the template module.
 __version__ = "1.2.0"
+__minimal_validator_version__ = "1.2.0"
 __version_signature__ = "393329"
 
 version_split = __version__.split(".")

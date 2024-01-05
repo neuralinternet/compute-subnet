@@ -36,7 +36,6 @@ from compute.utils.version import get_remote_version, check_hashcat_version, try
 whitelist_args_hotkeys_set: set = set()
 whitelist_version_hotkeys_set: set = set()
 blacklist_args_hotkeys_set: set = set()
-blacklist_version_hotkeys_set: set = set()
 exploiters_hotkeys_set: set = set()
 
 
@@ -118,28 +117,30 @@ def get_valid_validator(config, subtensor: bt.subtensor, metagraph: bt.metagraph
 
 
 def get_valid_hotkeys(config, subtensor: bt.subtensor, metagraph: bt.metagraph):
+    whitelist_version_hotkeys_set.clear()
     try:
-        latest_version = version2number(get_remote_version())
+        latest_version = version2number(get_remote_version(pattern="__minimal_validator_version__"))
 
         if latest_version is None:
             bt.logging.error(f"Github API call failed or version string is incorrect!")
+            return
 
         valid_validators = get_valid_validator(config=config, subtensor=subtensor, metagraph=metagraph)
         for uid, hotkey, version in valid_validators:
             try:
-                if version != latest_version and latest_version != None:
-                    bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
+                if version >= latest_version:
+                    bt.logging.debug(f"Version signature match for hotkey : {hotkey}")
+                    whitelist_version_hotkeys_set.add(hotkey)
                     continue
 
-                if hotkey not in whitelist_version_hotkeys_set:
-                    whitelist_version_hotkeys_set.add(hotkey)
+                bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
             except Exception:
-                bt.logging.debug(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+                bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
         bt.logging.info(f"Total valid validator hotkeys = {whitelist_version_hotkeys_set}")
 
     except json.JSONDecodeError:
-        bt.logging.debug(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+        bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
 
 # Main takes the config and starts the miner.
@@ -209,7 +210,8 @@ def main(config):
             return True, "Blacklisted hotkey"
 
         # Blacklist entities that are not up-to-date
-        if hotkey in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0:
+        print(hotkey not in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0)
+        if hotkey not in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0:
             return (
                 True,
                 f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
@@ -325,8 +327,6 @@ def main(config):
     bt.logging.info(f"Starting axon server on port: {config.axon.port}")
     axon.start()
 
-    get_valid_hotkeys(config=config, subtensor=subtensor, metagraph=metagraph)
-
     # This loop maintains the miner's operations until intentionally stopped.
     bt.logging.info(f"Starting main loop")
     step = 0
@@ -334,7 +334,7 @@ def main(config):
         try:
             # Periodically update our knowledge of the network graph.
             if step % 5 == 0:
-                metagraph = subtensor.metagraph(config.netuid)
+                metagraph.sync(subtensor=subtensor)
 
                 log = (
                     f"Step:{step} | "
@@ -352,7 +352,7 @@ def main(config):
                 get_valid_hotkeys(config=config, subtensor=subtensor, metagraph=metagraph)
 
             # Check for auto update
-            if step % 30 == 0 and config.auto_update == "yes":
+            if step % 100 == 0 and config.auto_update == "yes":
                 try_update()
 
             step += 1

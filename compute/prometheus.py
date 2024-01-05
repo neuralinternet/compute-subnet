@@ -75,11 +75,14 @@ def prometheus_extrinsic(
 
     bittensor.logging.info("Checking Prometheus...")
     neuron = subtensor.get_neuron_for_pubkey_and_subnet(wallet.hotkey.ss58_address, netuid=netuid)
-    if subtensor.block - neuron.last_update > 200000:
-        # Needs to re-update neuron
+
+    curr_block = subtensor.block - (subtensor.block % 100)
+    last_update = curr_block - neuron.last_update
+    if last_update > 100:
+        bittensor.logging.info("Needs to re-update neuron...")
         neuron_up_to_date = None
     else:
-        # Neuron has been updated less than 20 minutes ago
+        bittensor.logging.info("Neuron has been updated less than 100 blocks ago...")
         neuron_up_to_date = not neuron.is_null and call_params == {
             "version": compute.__version_as_int__,
             "ip": net.ip_to_int(neuron.prometheus_info.ip),
