@@ -210,7 +210,6 @@ def main(config):
             return True, "Blacklisted hotkey"
 
         # Blacklist entities that are not up-to-date
-        print(hotkey not in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0)
         if hotkey not in whitelist_version_hotkeys_set and len(whitelist_version_hotkeys_set) > 0:
             return (
                 True,
