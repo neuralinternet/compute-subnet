@@ -32,13 +32,13 @@ from torch._C._te import Tensor
 import Validator.app_generator as ag
 import Validator.calculate_pow_score as cps
 import Validator.database as db
+from Validator.pow import run_validator_pow
 from compute import pow_min_difficulty, pow_timeout, SUSPECTED_EXPLOITERS_HOTKEYS, SUSPECTED_EXPLOITERS_COLDKEYS
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, PerfInfo, Allocate
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered
 from compute.utils.version import try_update, get_local_version
-from neurons.Validator.pow import run_validator_pow
 
 
 class Validator:
