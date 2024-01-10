@@ -33,7 +33,7 @@ import Validator.app_generator as ag
 import Validator.calculate_pow_score as cps
 import Validator.database as db
 from Validator.pow import run_validator_pow
-from compute import pow_min_difficulty, pow_timeout, SUSPECTED_EXPLOITERS_HOTKEYS, SUSPECTED_EXPLOITERS_COLDKEYS
+from compute import pow_min_difficulty, pow_timeout, SUSPECTED_EXPLOITERS_HOTKEYS, SUSPECTED_EXPLOITERS_COLDKEYS, __version_as_int__, weights_rate_limit
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, PerfInfo, Allocate
 from compute.utils.parser import ComputeArgPaser
@@ -49,7 +49,7 @@ class Validator:
 
     scores: Tensor
 
-    score_decay_factor = 0.334
+    score_decay_factor = 0.11
     score_limit = 0.5
 
     _queryable_uids: Dict[int, bt.AxonInfo]
@@ -224,10 +224,10 @@ class Validator:
                 if step % 10 == 0:
                     self.sync_local()
 
-                # Perform pow queries, between ~ 10 and 14 minutes
+                # Perform pow queries, between ~ 8 and 12 minutes
                 if step % step_pseudo_rdm == 0:
                     # Prepare the next random step the validators will challenge again
-                    step_pseudo_rdm = random.randint(100, 140)
+                    step_pseudo_rdm = random.randint(80, 120)
 
                     # Filter axons with stake and ip address.
                     self._queryable_uids = self.get_queryable()
@@ -333,7 +333,7 @@ class Validator:
                     bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
 
                 # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
-                if current_block - self.last_updated_block > 100:
+                if current_block - self.last_updated_block > weights_rate_limit:
                     self.set_weights()
                     self.last_updated_block = current_block
 
@@ -363,6 +363,7 @@ class Validator:
             wallet=self.wallet,  # Wallet to sign set weights using hotkey.
             uids=self.metagraph.uids,  # Uids of the miners to set weights for.
             weights=weights,  # Weights to set for the miners.
+            version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
         if result:
