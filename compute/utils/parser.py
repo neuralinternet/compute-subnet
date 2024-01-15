@@ -92,6 +92,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="For lower hardware specifications you might want to use a different batch_size.",
             default=64,
         )
+        self.add_argument(
+            "--validator.force.update.prometheus",
+            action="store_true",
+            dest="force_update_prometheus",
+            help="Force the try-update of prometheus version. Default: False.",
+            default=False,
+        )
 
     def add_miner_argument(self):
         self.add_argument(
