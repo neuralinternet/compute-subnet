@@ -127,10 +127,10 @@ class Validator:
 
         # Step 3: Connect the validator to the network
         # Check if hotkey is registered
-        is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
+        self.validator_subnet_uid = is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
 
         # Initialize the prometheus transaction
-        self.init_prometheus()
+        self.init_prometheus(force_update=self.config.force_update_prometheus)
 
         # Step 4: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
@@ -171,7 +171,7 @@ class Validator:
         # Return the parsed config.
         return config
 
-    def init_prometheus(self):
+    def init_prometheus(self, force_update: bool = False):
         """
         Register the prometheus information on metagraph.
         :return: bool
@@ -181,6 +181,7 @@ class Validator:
             wallet=self.wallet,
             port=bt.defaults.axon.port,
             netuid=self.config.netuid,
+            force_update=force_update,
         )
         if success:
             bt.logging.success(prefix="Prometheus served", sufix=f"<blue>Current version: {get_local_version()}</blue>")
@@ -289,6 +290,11 @@ class Validator:
                         try_update()
                     # Frequently check if the validator is still registered
                     is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
+                    # Frequently check if the validator has a prometheus info updated
+                    subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
+                    current_version = __version_as_int__
+                    if subnet_prometheus_version != current_version:
+                        self.init_prometheus(force_update=True)
 
                 # ~ every 20 minutes
                 if step % 200 == 0 and self.validator_perform_hardware_query:
@@ -337,7 +343,15 @@ class Validator:
                     self.set_weights()
                     self.last_updated_block = current_block
 
-                bt.logging.info(f"Validator running at block {current_block}...")
+                log = (
+                    f"Step:{step} | "
+                    f"Block:{self.metagraph.block.item()} | "
+                    f"Stake:{self.metagraph.S[self.validator_subnet_uid]} | "
+                    f"Rank:{self.metagraph.R[self.validator_subnet_uid]} | "
+                    f"vTrust:{self.metagraph.validator_trust[self.validator_subnet_uid]} | "
+                    f"Emission:{self.metagraph.E[self.validator_subnet_uid]}"
+                )
+                bt.logging.info(log)
                 step += 1
 
                 # Sleep for a duration equivalent to half a block time (i.e., time between successive blocks).

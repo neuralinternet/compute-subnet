@@ -193,6 +193,7 @@ class ComputeSubnetSubtensor(subtensor):
         netuid: int,
         wait_for_inclusion: bool = False,
         wait_for_finalization: bool = True,
+        force_update: bool = False,
     ) -> bool:
         return prometheus_extrinsic(
             self,
@@ -201,6 +202,7 @@ class ComputeSubnetSubtensor(subtensor):
             netuid=netuid,
             wait_for_inclusion=wait_for_inclusion,
             wait_for_finalization=wait_for_finalization,
+            force_update=force_update,
         )
 
 

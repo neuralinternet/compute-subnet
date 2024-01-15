@@ -31,6 +31,7 @@ def prometheus_extrinsic(
     ip: int = None,
     wait_for_inclusion: bool = False,
     wait_for_finalization=True,
+    force_update: bool = False,
 ) -> bool:
     r"""Subscribes a bittensor endpoint to the subtensor chain.
     Args:
@@ -50,6 +51,8 @@ def prometheus_extrinsic(
         wait_for_finalization (bool):
             if set, waits for the extrinsic to be finalized on the chain before returning true,
             or returns false if the extrinsic fails to be finalized within the timeout.
+        force_update (bool):
+            If set, force the try-update of prometheus version.
     Returns:
         success (bool):
             flag is true if extrinsic was finalized or included in the block.
@@ -78,7 +81,7 @@ def prometheus_extrinsic(
 
     curr_block = subtensor.block - (subtensor.block % 100)
     last_update = curr_block - neuron.last_update
-    if last_update > 100:
+    if last_update > 100 or force_update:
         bittensor.logging.info("Needs to re-update neuron...")
         neuron_up_to_date = None
     else:

@@ -269,6 +269,7 @@ Flags that you can use with the validator script.
 - `--validator.whitelist.unrecognized`: (Optional) Whitelist the unrecognized miners. Default: False.
 - `--validator.perform.hardware.query`: (Optional) Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score. Default: False.
 - `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
+- `--validator.force.update.prometheus`: (Optional) Force the try-update of prometheus version. Default: False.
 
 ## Miners options
 
