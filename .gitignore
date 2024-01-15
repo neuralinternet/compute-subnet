@@ -239,3 +239,6 @@ fabric.properties
 
 # Validators db.
 database.db
+
+# PerfInfo generated app
+neurons/Miner/app
