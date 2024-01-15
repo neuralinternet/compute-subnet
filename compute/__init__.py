@@ -18,15 +18,15 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.2.2"
-__minimal_validator_version__ = "1.2.0"
-__version_signature__ = "393329"
+__version__ = "1.2.3"
+__minimal_validator_version__ = "1.2.3"
 
 version_split = __version__.split(".")
 __version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
 
 # General static vars
 validator_permit_stake = 1.024e3  # Stake amount to be a permitted validator
+weights_rate_limit = 100
 
 # Validators static vars
 pow_timeout = 60  # Time before the proof of work requests will time out. time unit = seconds

@@ -23,6 +23,7 @@ import typing
 
 import bittensor as bt
 import time
+import torch
 
 import Miner.allocate as al
 import Miner.performance as pf
@@ -143,6 +144,25 @@ def get_valid_hotkeys(config, subtensor: bt.subtensor, metagraph: bt.metagraph):
         bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
 
+def set_weights(config, subtensor, wallet, metagraph, miner_subnet_uid):
+    chain_weights = torch.zeros(subtensor.subnetwork_n(netuid=config.netuid))
+    chain_weights[miner_subnet_uid] = 1
+    # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
+    # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
+    result = subtensor.set_weights(
+        netuid=config.netuid,  # Subnet to set weights on.
+        wallet=wallet,  # Wallet to sign set weights using hotkey.
+        uids=metagraph.uids,  # Uids of the miners to set weights for.
+        weights=chain_weights,  # Weights to set for the miners.
+        version_key=compute.__version_as_int__,
+        wait_for_inclusion=False,
+    )
+    if result:
+        bt.logging.success("Successfully set weights.")
+    else:
+        bt.logging.error("Failed to set weights.")
+
+
 # Main takes the config and starts the miner.
 def main(config):
     # Activating Bittensor's logging with the set configurations.
@@ -171,7 +191,8 @@ def main(config):
     # Allow validators that are not permitted by stake
     miner_whitelist_not_enough_stake = config.miner_whitelist_not_enough_stake
 
-    is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="miner")
+    miner_subnet_uid = is_registered(wallet=wallet, metagraph=metagraph, subtensor=subtensor, entity="miner")
+    bt.logging.info(f"Running miner on uid: {miner_subnet_uid}")
 
     p.check_cuda_availability()
 
@@ -181,9 +202,8 @@ def main(config):
 
     check_hashcat_version(hashcat_path=hashcat_path)
 
-    # Each miner gets a unique identity (UID) in the network for differentiation.
-    my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
-    bt.logging.info(f"Running miner on uid: {my_subnet_uid}")
+    current_block = subtensor.block
+    last_updated_block = current_block - (current_block % 100)
 
     # Step 5: Set up miner functionalities
     # The following functions control the miner's response to incoming requests.
@@ -331,6 +351,8 @@ def main(config):
     step = 0
     while True:
         try:
+            current_block = subtensor.block
+
             # Periodically update our knowledge of the network graph.
             if step % 5 == 0:
                 metagraph.sync(subtensor=subtensor)
@@ -338,12 +360,12 @@ def main(config):
                 log = (
                     f"Step:{step} | "
                     f"Block:{metagraph.block.item()} | "
-                    f"Stake:{metagraph.S[my_subnet_uid]} | "
-                    f"Rank:{metagraph.R[my_subnet_uid]} | "
-                    f"Trust:{metagraph.T[my_subnet_uid]} | "
-                    f"Consensus:{metagraph.C[my_subnet_uid] } | "
-                    f"Incentive:{metagraph.I[my_subnet_uid]} | "
-                    f"Emission:{metagraph.E[my_subnet_uid]}"
+                    f"Stake:{metagraph.S[miner_subnet_uid]} | "
+                    f"Rank:{metagraph.R[miner_subnet_uid]} | "
+                    f"Trust:{metagraph.T[miner_subnet_uid]} | "
+                    f"Consensus:{metagraph.C[miner_subnet_uid] } | "
+                    f"Incentive:{metagraph.I[miner_subnet_uid]} | "
+                    f"Emission:{metagraph.E[miner_subnet_uid]}"
                 )
                 bt.logging.info(log)
 
@@ -353,6 +375,11 @@ def main(config):
             # Check for auto update
             if step % 100 == 0 and config.auto_update == "yes":
                 try_update()
+
+            # Ensure miner is still active, ~ every 20 minutes
+            if current_block - last_updated_block > compute.weights_rate_limit:
+                set_weights(config=config, subtensor=subtensor, wallet=wallet, metagraph=metagraph, miner_subnet_uid=miner_subnet_uid)
+                last_updated_block = current_block
 
             step += 1
             time.sleep(1)
