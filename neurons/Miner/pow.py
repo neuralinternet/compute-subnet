@@ -50,8 +50,10 @@ def run_hashcat(
     hashcat_path: str = compute.miner_hashcat_location,
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
+    initial_start_time=None,
 ):
-    start_time = time.time()
+    start_time = time.time() if not initial_start_time else initial_start_time
+
     unknown_error_message = f"run_hashcat execution failed"
     try:
         command = [
@@ -97,6 +99,7 @@ def run_hashcat(
                     hashcat_path=hashcat_path,
                     hashcat_workload_profile=hashcat_workload_profile,
                     hashcat_extended_options=hashcat_extended_options,
+                    initial_start_time=start_time,
                 )
             error_message = f"Hashcat execution failed with code {process.returncode}: {process.stderr}"
             bt.logging.warning(error_message)
