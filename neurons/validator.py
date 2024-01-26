@@ -20,8 +20,9 @@ import ast
 import asyncio
 import os
 import random
+import threading
 import traceback
-from typing import List, Dict, Union
+from typing import Dict, Tuple, List
 
 import bittensor as bt
 import time
@@ -30,27 +31,33 @@ from cryptography.fernet import Fernet
 from torch._C._te import Tensor
 
 import Validator.app_generator as ag
-import Validator.calculate_pow_score as cps
-import Validator.database as db
-from Validator.pow import run_validator_pow
+from Validator.pow import run_validator_pow, gen_hash
 from compute import pow_min_difficulty, pow_timeout, SUSPECTED_EXPLOITERS_HOTKEYS, SUSPECTED_EXPLOITERS_COLDKEYS, __version_as_int__, weights_rate_limit
 from compute.axon import ComputeSubnetSubtensor
-from compute.protocol import Challenge, PerfInfo, Allocate
+from compute.protocol import Challenge, Specs
+from compute.utils.db import ComputeDb
 from compute.utils.parser import ComputeArgPaser
-from compute.utils.subtensor import is_registered
-from compute.utils.version import try_update, get_local_version
+from compute.utils.subtensor import is_registered, get_current_block
+from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
+from neurons.Validator.calculate_pow_score import calc_score
+from neurons.Validator.database.allocate import update_miner_details
+from neurons.Validator.database.challenge import update_challenge_details, select_challenge_stats
 
 
 class Validator:
+    blocks_done: set = set()
     pow_requests: dict = {}
     pow_responses: dict = {}
     pow_benchmark: dict = {}
     new_pow_benchmark: dict = {}
+    pow_benchmark_success: dict = {}
 
     scores: Tensor
 
     score_decay_factor = 0.11
     score_limit = 0.5
+
+    validator_subnet_uid: int
 
     _queryable_uids: Dict[int, bt.AxonInfo]
 
@@ -81,6 +88,10 @@ class Validator:
     @property
     def queryable_hotkeys(self):
         return [axon.hotkey for axon in self._queryable_uids.values()]
+
+    @property
+    def current_block(self):
+        return get_current_block(subtensor=self.subtensor)
 
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
@@ -125,24 +136,21 @@ class Validator:
         self.validator_challenge_batch_size = self.config.validator_challenge_batch_size
         self.validator_perform_hardware_query = self.config.validator_perform_hardware_query
 
-        # Step 3: Connect the validator to the network
-        # Check if hotkey is registered
-        self.validator_subnet_uid = is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
-
-        # Initialize the prometheus transaction
-        self.init_prometheus(force_update=self.config.force_update_prometheus)
+        # Initialize the local db
+        self.db = ComputeDb()
 
         # Step 4: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.uids: list = self.metagraph.uids.tolist()
         self.last_uids: list = self.uids.copy()
         self.init_scores()
+        self.sync_status()
 
-        self.curr_block = self.subtensor.block
-        self.last_updated_block = self.curr_block - (self.curr_block % 100)
+        self.last_updated_block = self.current_block - (self.current_block % 100)
 
-        # Init the event loop.
-        self.loop = asyncio.get_event_loop()
+        # Init the thread.
+        self.lock = threading.Lock()
+        self.threads: List[threading.Thread] = []
 
     @staticmethod
     def init_config():
@@ -193,6 +201,11 @@ class Validator:
         self.scores = torch.zeros(len(self.uids), dtype=torch.float32)
         bt.logging.info(f"🔢 Initialized scores : {self.scores.tolist()}")
 
+    def init_local(self):
+        bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
+        self._metagraph = self.subtensor.metagraph(self.config.netuid)
+        self.uids = self.metagraph.uids.tolist()
+
     def sync_scores(self):
         # Set the weights of validators to zero.
         self.scores = self.scores * (self.metagraph.total_stake < 1.024e3)
@@ -200,162 +213,184 @@ class Validator:
         self.scores = self.scores * torch.Tensor(self.get_valid_tensors(metagraph=self.metagraph))
         bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
 
+        # Fetch scoring stats
+        stats = select_challenge_stats(self.db)
+
+        # Calculate score
+        score_uid_dict = {}
+        for uid in self.uids:
+            previous_score = self.scores[uid]
+            try:
+                score = calc_score(stats[uid][0], hotkey=stats[uid][1])
+            except (ValueError, KeyError):
+                score = 0
+
+            if previous_score > score < self.score_limit:
+                decayed_score = previous_score * self.score_decay_factor
+            else:
+                decayed_score = score
+
+            self.scores[uid] = decayed_score if decayed_score > self.score_limit else score
+            score_uid_dict[uid] = self.scores[uid].item()
+
+        bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
+
     def sync_local(self):
         """
         Resync our local state with the latest state from the blockchain.
         Sync scores with metagraph.
         Get the current uids of all miners in the network.
         """
-        bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
-        self.sync_scores()
-        self._metagraph = self.subtensor.metagraph(self.config.netuid)
+        self.metagraph.sync(subtensor=self.subtensor)
         self.uids = self.metagraph.uids.tolist()
 
-    def start(self):
+    def sync_status(self):
+        # Check if the validator is still registered
+        self.validator_subnet_uid = is_registered(
+            wallet=self.wallet,
+            metagraph=self.metagraph,
+            subtensor=self.subtensor,
+            entity="validator",
+        )
+
+        # Check for auto update
+        if self.config.auto_update:
+            try_update()
+
+        # Check if the validator has the prometheus info updated
+        subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
+        current_version = __version_as_int__
+        if subnet_prometheus_version != current_version:
+            self.init_prometheus(force_update=True)
+
+    async def start(self):
         """The Main Validation Loop"""
+
         # Step 5: Perform queries to miners, scoring, and weight
+        block_next_challenge = 1
+        block_next_hardware_info = 1
+
         bt.logging.info("Starting validator loop.")
-
-        step = 0
-        step_pseudo_rdm = 20
         while True:
-            current_block = self.subtensor.block
             try:
-                # Sync the subtensor state with the blockchain, every ~ 1 minute
-                if step % 10 == 0:
-                    self.sync_local()
+                self.sync_local()
 
-                # Perform pow queries, between ~ 8 and 12 minutes
-                if step % step_pseudo_rdm == 0:
-                    # Prepare the next random step the validators will challenge again
-                    step_pseudo_rdm = random.randint(80, 120)
+                if self.current_block not in self.blocks_done:
+                    self.blocks_done.add(self.current_block)
 
-                    # Filter axons with stake and ip address.
-                    self._queryable_uids = self.get_queryable()
+                    # Perform pow queries
+                    if self.current_block % block_next_challenge == 0:
+                        # Next block the validators will challenge again.
+                        block_next_challenge = self.current_block + random.randint(40, 80)  # between ~ 8 and 16 minutes
+                        bt.logging.info(f"Next challenge query: {block_next_challenge}")
 
-                    self.pow_requests = {}
-                    self.new_pow_benchmark = {}
+                        # Filter axons with stake and ip address.
+                        self._queryable_uids = self.get_queryable()
 
-                    async def run_pow():
+                        self.pow_requests = {}
+                        self.new_pow_benchmark = {}
+
+                        # async def run_pow():
                         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
-                            tasks = []
+                            self.threads = []
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                                 try:
                                     axon = self._queryable_uids[_uid]
                                     password, _hash, _salt, mode, chars, mask = run_validator_pow()
                                     self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, pow_min_difficulty)
-                                    tasks.append(self.execute_pow_request(_uid, axon, password, _hash, _salt, mode, chars, mask))
+                                    self.threads.append(
+                                        threading.Thread(
+                                            target=self.execute_pow_request,
+                                            args=(_uid, axon, _hash, _salt, mode, chars, mask),
+                                            name=f"th_execute_pow_request-{_uid}",
+                                            daemon=True,
+                                        )
+                                    )
                                 except KeyError:
                                     continue
-                            await asyncio.gather(*tasks)
 
-                    self.loop.run_until_complete(run_pow())
+                        for thread in self.threads:
+                            thread.start()
 
-                    self.pow_benchmark = self.new_pow_benchmark
-                    # Logs benchmarks for the validators
-                    bt.logging.info("🔢 Results benchmarking:")
-                    for uid, benchmark in self.pow_benchmark.items():
-                        bt.logging.info(f"{uid}: {benchmark}")
+                        for thread in self.threads:
+                            thread.join()
 
-                    # TODO update db accordingly with pow results
-                    # db.update(...)
+                        self.pow_benchmark = self.new_pow_benchmark
+                        self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() if v["success"] is True and v["elapsed_time"] < pow_timeout}
 
-                    # Calculate score
-                    score_uid_dict = {}
-                    for uid in self.uids:
-                        previous_score = self.scores[uid]
+                        # Logs benchmarks for the validators
+                        bt.logging.info("🔢 Results benchmarking:")
+                        for uid, benchmark in self.pow_benchmark_success.items():
+                            bt.logging.info(f"{uid}: {benchmark}")
+
+                        pow_benchmarks_list = [{**values, "difficulty": pow_min_difficulty, "uid": uid} for uid, values in self.pow_benchmark.items()]
+                        update_challenge_details(self.db, pow_benchmarks_list)
+
+                        self.sync_scores()
+
+                    if self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query:
+                        block_next_hardware_info = self.current_block + 100  # ~ every 20 minutes
+                        bt.logging.info(f"Next specs call: {block_next_hardware_info}")
+
+                        # # Prepare app_data for benchmarking
+                        # # Generate secret key for app
+                        secret_key = Fernet.generate_key()
+                        cipher_suite = Fernet(secret_key)
+                        # # Compile the script and generate an exe.
+                        ag.run(secret_key)
                         try:
-                            score = cps.score(
-                                self.pow_benchmark[uid],
-                                self.pow_requests[uid][-1],
-                                self._queryable_uids[uid].hotkey,
-                            )
-                        except (ValueError, KeyError):
-                            score = 0
+                            main_dir = os.path.dirname(os.path.abspath(__file__))
+                            file_name = os.path.join(main_dir, "Validator/dist/script")
+                            # Read the exe file and save it to app_data.
+                            with open(file_name, "rb") as file:
+                                # Read the entire content of the EXE file
+                                app_data = file.read()
+                        except Exception as e:
+                            bt.logging.error(f"{e}")
+                            continue
+                        # Query the miners for benchmarking
+                        bt.logging.info(f"🆔 Hardware list of uids : {self.queryable_uids}")
+                        responses = self.dendrite.query(
+                            self.queryable_axons,
+                            Specs(specs_input=repr(app_data)),
+                            timeout=60,
+                        )
 
-                        if previous_score > score < self.score_limit:
-                            decayed_score = previous_score * self.score_decay_factor
-                        else:
-                            decayed_score = score
-
-                        self.scores[uid] = decayed_score if decayed_score > self.score_limit else score
-                        score_uid_dict[uid] = self.scores[uid].item()
-
-                    bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
-
-                # ~ every 5 minutes
-                if step % 50 == 0:
-                    # Check for auto update
-                    if self.config.auto_update:
-                        try_update()
-                    # Frequently check if the validator is still registered
-                    is_registered(wallet=self.wallet, metagraph=self.metagraph, subtensor=self.subtensor, entity="validator")
-                    # Frequently check if the validator has a prometheus info updated
-                    subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
-                    current_version = __version_as_int__
-                    if subnet_prometheus_version != current_version:
-                        self.init_prometheus(force_update=True)
-
-                # ~ every 20 minutes
-                if step % 200 == 0 and self.validator_perform_hardware_query:
-                    # # Prepare app_data for benchmarking
-                    # # Generate secret key for app
-                    secret_key = Fernet.generate_key()
-                    cipher_suite = Fernet(secret_key)
-                    # # Compile the script and generate an exe.
-                    ag.run(secret_key)
-                    try:
-                        main_dir = os.path.dirname(os.path.abspath(__file__))
-                        file_name = os.path.join(main_dir, "Validator/dist/script")
-                        # Read the exe file and save it to app_data.
-                        with open(file_name, "rb") as file:
-                            # Read the entire content of the EXE file
-                            app_data = file.read()
-                    except Exception as e:
-                        bt.logging.error(f"{e}")
-                        continue
-                    # Query the miners for benchmarking
-                    bt.logging.info(f"🆔 Hardware list of uids : {self.queryable_uids}")
-                    responses: List[Union[PerfInfo, Allocate, Challenge]] = self.dendrite.query(
-                        self.queryable_axons,
-                        PerfInfo(perf_input=repr(app_data)),
-                        timeout=120,
-                    )
-
-                    # Format responses and save them to benchmark_responses
-                    hardware_list_responses = []
-                    for index, response in enumerate(responses):
-                        try:
-                            if response:
-                                binary_data = ast.literal_eval(response)  # Convert str to binary data
-                                decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                                hardware_list_responses.append(decoded_data)
-                            else:
+                        # Format responses and save them to benchmark_responses
+                        hardware_list_responses = []
+                        for index, response in enumerate(responses):
+                            try:
+                                if response:
+                                    binary_data = ast.literal_eval(response)  # Convert str to binary data
+                                    decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
+                                    hardware_list_responses.append(decoded_data)
+                                else:
+                                    hardware_list_responses.append({})
+                            except Exception as _:
                                 hardware_list_responses.append({})
-                        except Exception as _:
-                            hardware_list_responses.append({})
 
-                    db.update(self.queryable_hotkeys, hardware_list_responses)
-                    bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
+                        update_miner_details(self.db, self.queryable_hotkeys, hardware_list_responses)
+                        bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
 
-                # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
-                if current_block - self.last_updated_block > weights_rate_limit:
-                    self.set_weights()
-                    self.last_updated_block = current_block
+                    # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
+                    if self.current_block - self.last_updated_block > weights_rate_limit:
+                        self.sync_scores()
+                        self.set_weights()
+                        self.last_updated_block = self.current_block
+                        self.blocks_done.clear()
+                        self.blocks_done.add(self.current_block)
+                        self.sync_status()
 
-                log = (
-                    f"Step:{step} | "
-                    f"Block:{self.metagraph.block.item()} | "
-                    f"Stake:{self.metagraph.S[self.validator_subnet_uid]} | "
-                    f"Rank:{self.metagraph.R[self.validator_subnet_uid]} | "
-                    f"vTrust:{self.metagraph.validator_trust[self.validator_subnet_uid]} | "
-                    f"Emission:{self.metagraph.E[self.validator_subnet_uid]}"
+                bt.logging.info(
+                    (
+                        f"Block:{self.current_block} | "
+                        f"Stake:{self.metagraph.S[self.validator_subnet_uid]} | "
+                        f"Rank:{self.metagraph.R[self.validator_subnet_uid]} | "
+                        f"vTrust:{self.metagraph.validator_trust[self.validator_subnet_uid]} | "
+                        f"Emission:{self.metagraph.E[self.validator_subnet_uid]}"
+                    )
                 )
-                bt.logging.info(log)
-                step += 1
-
-                # Sleep for a duration equivalent to half a block time (i.e., time between successive blocks).
-                time.sleep(bt.__blocktime__ / 2)
+                time.sleep(1)
 
             # If we encounter an unexpected error, log it for debugging.
             except RuntimeError as e:
@@ -375,7 +410,7 @@ class Validator:
         result = self.subtensor.set_weights(
             netuid=self.config.netuid,  # Subnet to set weights on.
             wallet=self.wallet,  # Wallet to sign set weights using hotkey.
-            uids=self.metagraph.uids,  # Uids of the miners to set weights for.
+            uids=self.uids,  # Uids of the miners to set weights for.
             weights=weights,  # Weights to set for the miners.
             version_key=__version_as_int__,
             wait_for_inclusion=False,
@@ -387,16 +422,20 @@ class Validator:
 
     # Filter the axons with uids_list, remove those with the same IP address.
     @staticmethod
-    def filter_axons(queryable_tuple_uids_axons):
+    def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         # Set to keep track of unique identifiers
         valid_ip_addresses = set()
+
+        # Get the minimal miner version
+        # latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
+        latest_version = version2number(get_remote_version())
 
         # List to store filtered axons
         dict_filtered_axons = {}
         for uid, axon in queryable_tuple_uids_axons:
             ip_address = axon.ip
 
-            if ip_address not in valid_ip_addresses:
+            if ip_address not in valid_ip_addresses and (latest_version and axon.version >= latest_version):
                 valid_ip_addresses.add(ip_address)
                 dict_filtered_axons[uid] = axon
 
@@ -460,9 +499,10 @@ class Validator:
         dict_filtered_axons = self.filter_axons(queryable_tuple_uids_axons=queryable)
         return dict_filtered_axons
 
-    async def execute_pow_request(self, uid, axon, password, _hash, _salt, mode, chars, mask):
+    def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask):
+        dendrite = bt.dendrite(wallet=self.wallet)
         start_time = time.time()
-        response = self.dendrite.query(
+        response = dendrite.query(
             axon,
             Challenge(
                 challenge_hash=_hash,
@@ -474,12 +514,13 @@ class Validator:
             timeout=pow_timeout,
         )
         elapsed_time = time.time() - start_time
-        self.pow_responses[uid] = response
-
-        if password != response.get("password"):
-            self.new_pow_benchmark[uid] = {"success": False, "elapsed_time": elapsed_time}
-        else:
-            self.new_pow_benchmark[uid] = {"success": True, "elapsed_time": elapsed_time}
+        response_password = response.get("password", "")
+        hashed_response = gen_hash(response_password, _salt)[0]
+        success = True if _hash == hashed_response else False
+        result_data = {"ss58_address": axon.hotkey, "success": success, "elapsed_time": elapsed_time}
+        with self.lock:
+            self.pow_responses[uid] = response
+            self.new_pow_benchmark[uid] = result_data
 
 
 def main():
@@ -489,7 +530,8 @@ def main():
     This function initializes and runs the neuron. It handles the main loop, state management, and interaction
     with the Bittensor network.
     """
-    Validator().start()
+    validator = Validator()
+    asyncio.run(validator.start())
 
 
 if __name__ == "__main__":

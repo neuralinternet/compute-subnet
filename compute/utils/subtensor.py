@@ -18,11 +18,21 @@
 
 import bittensor as bt
 
+from compute.utils.cache import ttl_cache
 
-def is_registered(wallet, metagraph, subtensor, entity: str = "validator"):
+bt_blocktime = bt.__blocktime__
+
+
+@ttl_cache(maxsize=1, ttl=bt_blocktime)
+def get_current_block(subtensor: bt.subtensor) -> int:
+    return subtensor.block
+
+
+@ttl_cache(maxsize=1, ttl=bt_blocktime)
+def is_registered(wallet: bt.wallet, metagraph: bt.metagraph, subtensor: bt.subtensor, entity: str = "validator"):
     if wallet.hotkey.ss58_address not in metagraph.hotkeys:
         bt.logging.error(f"\nYour {entity}: {wallet} is not registered to chain connection: {subtensor} \nRun btcli register and try again.")
-        exit()
+        exit(1)
     else:
         # Each miner gets a unique identity (UID) in the network for differentiation.
         my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)

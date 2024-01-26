@@ -82,7 +82,7 @@ class ComputeArgPaser(argparse.ArgumentParser):
             "--validator.perform.hardware.query",
             action="store_true",
             dest="validator_perform_hardware_query",
-            help="Perform the old perfInfo method - useful only as personal benchmark, but it doesn't affect score.",
+            help="Perform the specs method - useful for allocation attempts.",
             default=False,
         )
         self.add_argument(
@@ -128,6 +128,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             dest="miner_whitelist_not_enough_stake",
             help="Whitelist the validators without enough stake. Default: False.",
             default=False,
+        )
+        self.add_argument(
+            "--miner.whitelist.version",
+            action="store_true",
+            dest="miner_whitelist_version",
+            help="Populate and use a whitelist for the validators using the last version of the code. Default: True.",
+            default=True,
         )
 
     @staticmethod
