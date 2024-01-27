@@ -32,16 +32,26 @@ from torch._C._te import Tensor
 
 import Validator.app_generator as ag
 from Validator.pow import run_validator_pow, gen_hash
-from compute import pow_min_difficulty, pow_timeout, SUSPECTED_EXPLOITERS_HOTKEYS, SUSPECTED_EXPLOITERS_COLDKEYS, __version_as_int__, weights_rate_limit
+from compute import (
+    pow_min_difficulty,
+    pow_timeout,
+    SUSPECTED_EXPLOITERS_HOTKEYS,
+    SUSPECTED_EXPLOITERS_COLDKEYS,
+    __version_as_int__,
+    weights_rate_limit,
+    validator_whitelist_miners_threshold,
+)
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, Specs
 from compute.utils.db import ComputeDb
+from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details
 from neurons.Validator.database.challenge import update_challenge_details, select_challenge_stats
+from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
 
 class Validator:
@@ -52,10 +62,10 @@ class Validator:
     new_pow_benchmark: dict = {}
     pow_benchmark_success: dict = {}
 
-    scores: Tensor
+    total_current_miners: int = 0
 
-    score_decay_factor = 0.11
-    score_limit = 0.5
+    scores: Tensor
+    stats: dict
 
     validator_subnet_uid: int
 
@@ -92,6 +102,10 @@ class Validator:
     @property
     def current_block(self):
         return get_current_block(subtensor=self.subtensor)
+
+    @property
+    def miners_items_to_set(self):
+        return set((uid, hotkey) for uid, hotkey in self.miners.items()) if self.miners else None
 
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
@@ -138,6 +152,7 @@ class Validator:
 
         # Initialize the local db
         self.db = ComputeDb()
+        self.miners: dict = select_miners(self.db)
 
         # Step 4: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
@@ -199,7 +214,12 @@ class Validator:
 
     def init_scores(self):
         self.scores = torch.zeros(len(self.uids), dtype=torch.float32)
+        # Set the weights of validators to zero.
+        self.scores = self.scores * (self.metagraph.total_stake < 1.024e3)
+        # Set the weight to zero for all nodes without assigned IP addresses.
+        self.scores = self.scores * torch.Tensor(self.get_valid_tensors(metagraph=self.metagraph))
         bt.logging.info(f"🔢 Initialized scores : {self.scores.tolist()}")
+        self.sync_scores()
 
     def init_local(self):
         bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
@@ -207,33 +227,23 @@ class Validator:
         self.uids = self.metagraph.uids.tolist()
 
     def sync_scores(self):
-        # Set the weights of validators to zero.
-        self.scores = self.scores * (self.metagraph.total_stake < 1.024e3)
-        # Set the weight to zero for all nodes without assigned IP addresses.
-        self.scores = self.scores * torch.Tensor(self.get_valid_tensors(metagraph=self.metagraph))
-        bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
-
         # Fetch scoring stats
-        stats = select_challenge_stats(self.db)
+        self.stats = select_challenge_stats(self.db)
+
+        for key, values in self.stats.items():
+            bt.logging.trace(key, values)
 
         # Calculate score
-        score_uid_dict = {}
         for uid in self.uids:
-            previous_score = self.scores[uid]
             try:
-                score = calc_score(stats[uid][0], hotkey=stats[uid][1])
+                hotkey = self.stats[uid].get("ss58_address")
+                score = calc_score(self.stats[uid], hotkey=hotkey)
             except (ValueError, KeyError):
                 score = 0
 
-            if previous_score > score < self.score_limit:
-                decayed_score = previous_score * self.score_decay_factor
-            else:
-                decayed_score = score
+            self.scores[uid] = score
 
-            self.scores[uid] = decayed_score if decayed_score > self.score_limit else score
-            score_uid_dict[uid] = self.scores[uid].item()
-
-        bt.logging.info(f"🔢 Updated scores : {score_uid_dict}")
+        bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
 
     def sync_local(self):
         """
@@ -269,6 +279,8 @@ class Validator:
         # Step 5: Perform queries to miners, scoring, and weight
         block_next_challenge = 1
         block_next_hardware_info = 1
+        block_next_sync_status = 1
+        block_next_set_weights = self.current_block + weights_rate_limit
 
         bt.logging.info("Starting validator loop.")
         while True:
@@ -278,11 +290,16 @@ class Validator:
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
+                    bt.logging.info(f"Next challenge query : #{block_next_challenge}")
+                    if self.validator_perform_hardware_query:
+                        bt.logging.info(f"Next specs query: #{block_next_hardware_info}")
+                    bt.logging.info(f"Next sync_status call: #{block_next_sync_status}")
+                    bt.logging.info(f"Next set_weights call: #{block_next_set_weights}")
+
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0:
                         # Next block the validators will challenge again.
                         block_next_challenge = self.current_block + random.randint(40, 80)  # between ~ 8 and 16 minutes
-                        bt.logging.info(f"Next challenge query: {block_next_challenge}")
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
@@ -290,7 +307,6 @@ class Validator:
                         self.pow_requests = {}
                         self.new_pow_benchmark = {}
 
-                        # async def run_pow():
                         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
                             self.threads = []
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
@@ -319,7 +335,7 @@ class Validator:
                         self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() if v["success"] is True and v["elapsed_time"] < pow_timeout}
 
                         # Logs benchmarks for the validators
-                        bt.logging.info("🔢 Results benchmarking:")
+                        bt.logging.info("🔢 Results success benchmarking:")
                         for uid, benchmark in self.pow_benchmark_success.items():
                             bt.logging.info(f"{uid}: {benchmark}")
 
@@ -329,8 +345,7 @@ class Validator:
                         self.sync_scores()
 
                     if self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query:
-                        block_next_hardware_info = self.current_block + 100  # ~ every 20 minutes
-                        bt.logging.info(f"Next specs call: {block_next_hardware_info}")
+                        block_next_hardware_info = self.current_block + 125  # ~ every 25 minutes
 
                         # # Prepare app_data for benchmarking
                         # # Generate secret key for app
@@ -372,14 +387,18 @@ class Validator:
                         update_miner_details(self.db, self.queryable_hotkeys, hardware_list_responses)
                         bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
 
+                    if self.current_block % block_next_sync_status == 0:
+                        block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
+                        self.sync_status()
+
                     # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
                     if self.current_block - self.last_updated_block > weights_rate_limit:
+                        block_next_set_weights = self.current_block + weights_rate_limit
                         self.sync_scores()
                         self.set_weights()
                         self.last_updated_block = self.current_block
                         self.blocks_done.clear()
                         self.blocks_done.add(self.current_block)
-                        self.sync_status()
 
                 bt.logging.info(
                     (
@@ -420,26 +439,52 @@ class Validator:
         else:
             bt.logging.error("Failed to set weights.")
 
-    # Filter the axons with uids_list, remove those with the same IP address.
+    def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
+        if queryable_tuple_uids_axons:
+            for uid, axon in queryable_tuple_uids_axons:
+                if (uid, axon.hotkey) not in self.miners_items_to_set:
+                    try:
+                        bt.logging.info(f"Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
+                        purge_miner_entries(self.db, uid, self.miners[uid])
+                    except KeyError:
+                        pass
+                    bt.logging.info(f"Setting up new miner {uid}-{axon.hotkey}.")
+                    update_miners(self.db, [(uid, axon.hotkey)]),
+                    self.miners[uid] = axon.hotkey
+        else:
+            bt.logging.warning(f"No queryable miners.")
+
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
+        """Filter the axons with uids_list, remove those with the same IP address."""
         # Set to keep track of unique identifiers
         valid_ip_addresses = set()
-
-        # Get the minimal miner version
-        # latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
-        latest_version = version2number(get_remote_version())
 
         # List to store filtered axons
         dict_filtered_axons = {}
         for uid, axon in queryable_tuple_uids_axons:
             ip_address = axon.ip
 
-            if ip_address not in valid_ip_addresses and (latest_version and axon.version >= latest_version):
+            if ip_address not in valid_ip_addresses:
                 valid_ip_addresses.add(ip_address)
                 dict_filtered_axons[uid] = axon
 
         return dict_filtered_axons
+
+    def filter_axon_version(self, dict_filtered_axons: dict):
+        # Get the minimal miner version
+        # TODO REACTIVE THIS FOR LAST PUSH
+        # latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
+        latest_version = version2number(get_remote_version())
+        if percent(len(dict_filtered_axons), self.total_current_miners) <= validator_whitelist_miners_threshold:
+            bt.logging.info(f"More than {100 - validator_whitelist_miners_threshold}% miners are currently using an old version.")
+            return dict_filtered_axons
+
+        dict_filtered_axons_version = {}
+        for uid, axon in dict_filtered_axons.items():
+            if latest_version and axon.version >= latest_version:
+                dict_filtered_axons_version[uid] = axon
+        return dict_filtered_axons_version
 
     def is_blacklisted(self, neuron: bt.NeuronInfoLite):
         coldkey = neuron.coldkey
@@ -496,7 +541,12 @@ class Validator:
 
     def get_queryable(self):
         queryable = self.get_valid_queryable()
+
+        # Execute a cleanup of the stats and miner information if the miner has been dereg
+        self.sync_miners_info(queryable)
+
         dict_filtered_axons = self.filter_axons(queryable_tuple_uids_axons=queryable)
+        dict_filtered_axons = self.filter_axon_version(dict_filtered_axons=dict_filtered_axons)
         return dict_filtered_axons
 
     def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask):
@@ -515,7 +565,7 @@ class Validator:
         )
         elapsed_time = time.time() - start_time
         response_password = response.get("password", "")
-        hashed_response = gen_hash(response_password, _salt)[0]
+        hashed_response = gen_hash(response_password, _salt)[0] if response_password else ""
         success = True if _hash == hashed_response else False
         result_data = {"ss58_address": axon.hotkey, "success": success, "elapsed_time": elapsed_time}
         with self.lock:

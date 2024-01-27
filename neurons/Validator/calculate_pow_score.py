@@ -23,21 +23,15 @@ import compute
 
 __all__ = ["calc_score"]
 
-
-def percent(a, b):
-    if b == 0:
-        return 0
-    return (a / b) * 100
+from compute.utils.math import percent, percent_yield
 
 
-def percent_yield(a, b):
-    if a == 0:
-        return 100
-    return ((b - a) / a) * 100
-
-
-def normalise(val, min_value, max_value):
+def normalize(val, min_value, max_value):
     return (val - min_value) / (max_value - min_value)
+
+
+def prevent_none(val):
+    return 0 if not val else val
 
 
 # Calculate score based on the performance information
@@ -52,13 +46,13 @@ def calc_score(response, hotkey, mock=False):
     :return:
     """
     try:
-        challenge_attempts = response["challenge_attempts"]
-        challenge_successes = response["challenge_successes"]
-        challenge_failed = response["challenge_failed"]
-        challenge_elapsed_time_avg = response["challenge_elapsed_time_avg"]
-        challenge_difficulty_avg = response["challenge_difficulty_avg"]
+        challenge_attempts = prevent_none(response["challenge_attempts"])
+        challenge_successes = prevent_none(response["challenge_successes"])
+        challenge_failed = prevent_none(response["challenge_failed"])
+        challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
+        challenge_difficulty_avg = prevent_none(response["challenge_difficulty_avg"])
 
-        if challenge_failed >= 10:
+        if challenge_failed >= 10 or challenge_successes == 0:
             return 0
 
         # Define base weights for the PoW
@@ -88,7 +82,7 @@ def calc_score(response, hotkey, mock=False):
         final_score = successes + difficulty + time_elapsed + registration_bonus - failed_penalty
 
         # Normalize the score
-        normalized_score = normalise(final_score, 0, 100)
+        normalized_score = normalize(final_score, 0, 100)
         return normalized_score
     except Exception as e:
         bt.logging.error(f"An error occurred while calculating score for the following hotkey - {hotkey}: {e}")

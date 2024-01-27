@@ -64,6 +64,6 @@ def run_validator_pow(length=compute.pow_min_difficulty):
     """
     Don't worry this function is fast enough for validator to use CPUs
     """
-    available_chars = random.sample(compute.pow_default_chars, len(compute.pow_default_chars) // 2)
+    available_chars = "".join(random.sample(compute.pow_default_chars, len(compute.pow_default_chars) // 6))
     password, _hash, _salt, _mask = gen_password(available_chars=available_chars, length=length)
-    return password, _hash, _salt, compute.pow_default_mode, compute.pow_default_chars, _mask
+    return password, _hash, _salt, compute.pow_default_mode, available_chars, _mask

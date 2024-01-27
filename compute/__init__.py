@@ -31,10 +31,11 @@ weights_rate_limit = 100
 
 # Validators static vars
 pow_timeout = 30  # Time before the proof of work requests will time out. time unit = seconds
-pow_min_difficulty = 5  # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
-pow_max_difficulty = 7  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
+pow_min_difficulty = 6  # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
+pow_max_difficulty = 12  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
 pow_default_mode = "610"  # Model: BLAKE2b-512($pass.$salt)
 pow_default_chars = str(string.ascii_letters + string.digits + "!@#$%^&*()-_+=[]{};:,.<>/")
+validator_whitelist_miners_threshold = 40  # Percentage ratio for whitelisting validators up to date
 
 # Miners static vars
 miner_priority_specs = 1  # Lowest priority
@@ -42,7 +43,8 @@ miner_priority_challenge = 2  # Medium priority
 miner_priority_allocate = 3  # The highest priority
 miner_hashcat_location = "hashcat"
 miner_hashcat_workload_profile = "3"
-miner_whitelist_validator_steps_for = 300  # Number of steps while a validator is whitelisted thanks to his version signature (~5minutes)
+miner_whitelist_validators_steps_for = 300  # Number of steps while a validator is whitelisted thanks to his version signature (~5minutes)
+miner_whitelist_validators_threshold = 40  # Percentage ratio for whitelisting validators up to date
 
 SUSPECTED_EXPLOITERS_COLDKEYS = []
 SUSPECTED_EXPLOITERS_HOTKEYS = [
@@ -67,4 +69,4 @@ SUSPECTED_EXPLOITERS_HOTKEYS = [
 # TODO feat(Validators): Implement the dynamic difficulty.
 # TODO feat(Validators/Miners): Random hashes used for challenge ? maybe not necessary thanks to Blake algo.
 # TODO feat(Miners): Remove docker requirement, to support containerized providers.
-# TODO tech-debt: Partially done: Run black everywhere. Use Classes instead of big main and unclassified methods.
+# TODO Partially done: Run black everywhere. Use Classes instead of big main and unclassified methods.

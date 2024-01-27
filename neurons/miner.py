@@ -15,7 +15,6 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import asyncio
 import json
 import os
 import threading
@@ -30,6 +29,7 @@ import websocket
 import compute
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
+from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block
 from compute.utils.version import check_hashcat_version, try_update, version2number, get_remote_version
@@ -48,12 +48,11 @@ class Miner:
     whitelist_hotkeys_version: set = set()
     exploiters_hotkeys_set: set
 
-    semaphore: asyncio.Semaphore
-    lock: asyncio.Lock
-
     th_synchronize: threading.Thread
     th_update_repo: threading.Thread
     th_valid_hotkeys: threading.Thread
+
+    total_current_validator: int = 0
 
     _axon: bt.axon
 
@@ -152,6 +151,12 @@ class Miner:
                             continue
 
                         valid_validators = self.get_valid_validator()
+
+                        if percent(len(valid_validators), self.total_current_validator) <= compute.miner_whitelist_validators_threshold:
+                            bt.logging.info(
+                                f"Less than {compute.miner_whitelist_validators_threshold}% validators are currently using the last minimal accepted version."
+                            )
+
                         for uid, hotkey, version in valid_validators:
                             try:
                                 if version >= latest_version:
@@ -191,7 +196,7 @@ class Miner:
                 try:
                     with self.lck_synchronize:
                         self.metagraph.sync(subtensor=self.subtensor)
-                except (websocket.WebSocketTimeoutException, websocket.WebSocketProtocolException, OSError) as e:
+                except (websocket.WebSocketException, OSError) as e:
                     bt.logging.warning(f"{e} <<< (can be ignored if you don't have it often)")
 
                 if self.current_block not in self.blocks_done:
@@ -387,7 +392,7 @@ class Miner:
 
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
     def challenge(self, synapse: Challenge) -> Challenge:
-        bt.logging.info(f"Received challenge (hash, salt): ({synapse.challenge_hash}, {synapse.challenge_salt})")
+        bt.logging.info(f"Received challenge (hash, salt, chars): ({synapse.challenge_hash}, {synapse.challenge_salt}, {synapse.challenge_chars})")
         result = run_miner_pow(
             _hash=synapse.challenge_hash,
             salt=synapse.challenge_salt,
@@ -413,6 +418,7 @@ class Miner:
 
     def get_valid_validator(self):
         valid_validator_uids = self.get_valid_validator_uids()
+        self.total_current_validator = len(valid_validator_uids)
         valid_validator = []
         for uid in valid_validator_uids:
             neuron = self.subtensor.neuron_for_uid(uid, self.config.netuid)

@@ -22,6 +22,18 @@ from compute.utils.db import ComputeDb
 
 
 def select_challenge_stats(db: ComputeDb) -> dict:
+    """
+    :param db:
+    :return: {
+        (uid): {
+            "ss58_address": ss58_address,
+            "challenge_attempts": challenge_attempts,
+            "challenge_successes": challenge_successes,
+            "challenge_failed": int(challenge_failed) if challenge_failed else 0,
+            "challenge_elapsed_time_avg": challenge_elapsed_time_avg,
+            "challenge_difficulty_avg": challenge_difficulty_avg,
+        }
+    """
     cursor = db.get_cursor()
     cursor.execute(
         """
@@ -68,8 +80,8 @@ LEFT JOIN (
     stats = {}
     for result in results:
         uid, ss58_address, challenge_attempts, challenge_successes, challenge_elapsed_time_avg, challenge_difficulty_avg, challenge_failed = result
-        pk = (uid, ss58_address)
-        stats[pk] = {
+        stats[uid] = {
+            "ss58_address": ss58_address,
             "challenge_attempts": challenge_attempts,
             "challenge_successes": challenge_successes,
             "challenge_failed": int(challenge_failed) if challenge_failed else 0,
@@ -129,32 +141,5 @@ def update_challenge_details(db: ComputeDb, pow_benchmarks: list):
     except Exception as e:
         db.conn.rollback()
         bt.logging.error(f"Error while updating challenge_details: {e}")
-    finally:
-        cursor.close()
-
-
-def purge_challenge_entries(db: ComputeDb, uid: str, hotkey: str):
-    """
-    When a pair of (uid and hotkey) changed, it means miner got deregister,
-    we need to vacuum all entries corresponding to this miner.
-    :param db:
-    :param uid:
-    :param hotkey:
-    :return:
-    """
-    cursor = db.get_cursor()
-    try:
-        cursor.execute(
-            "DELETE FROM miner WHERE uid = ? AND ss58_address = ?",
-            (uid, hotkey),
-        )
-        db.conn.commit()
-
-        if cursor.rowcount > 0:
-            bt.logging.info(f"Entries for UID '{uid}' and Hotkey '{hotkey}' purged successfully.")
-        else:
-            bt.logging.info(f"No matching entries found for UID '{uid}' and Hotkey '{hotkey}'. No deletion performed.")
-    except Exception as e:
-        bt.logging.error(f"Error while purging entries: {e}")
     finally:
         cursor.close()
