@@ -29,7 +29,7 @@ import sys
 
 
 def get_remote_version_to_number(pattern: str = "__version__"):
-    latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
+    latest_version = version2number(get_remote_version(pattern=pattern))
     if not latest_version:
         bt.logging.error(f"Github API call failed or version string is incorrect!")
     return latest_version
