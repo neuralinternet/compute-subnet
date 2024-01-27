@@ -339,7 +339,7 @@ class Validator:
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0:
                         # Next block the validators will challenge again.
-                        block_next_challenge = self.current_block + random.randint(40, 80)  # between ~ 8 and 16 minutes
+                        block_next_challenge = self.current_block + random.randint(50, 80)  # between ~ 10 and 16 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
