@@ -336,7 +336,7 @@ class Validator:
                     self.print_next_info(not block_next_challenge == 1, block_next_challenge, "challenge")
                     self.print_next_info(not block_next_sync_status == 1, block_next_sync_status, "sync_status")
                     self.print_next_info(not block_next_set_weights == 1, block_next_set_weights, "set_weights")
-                    self.print_next_info(self.validator_perform_hardware_query or not block_next_hardware_info == 1, block_next_hardware_info, "specs")
+                    self.print_next_info(not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info, "specs")
 
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0:
