@@ -379,11 +379,11 @@ class Validator:
 
                         # Logs benchmarks for the validators
                         if len(self.pow_benchmark_success) > 0:
-                            bt.logging.info("🔢 Results success benchmarking:")
+                            bt.logging.info("✅ Results success benchmarking:")
                             for uid, benchmark in self.pow_benchmark_success.items():
                                 bt.logging.info(f"{uid}: {benchmark}")
                         else:
-                            bt.logging.warning("🔢 Results success benchmarking: All miners failed. There must have been a problem.")
+                            bt.logging.warning("❌ Benchmarking: All miners failed. There must have been a problem.")
 
                         pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
                         update_challenge_details(self.db, pow_benchmarks_list)
@@ -410,7 +410,7 @@ class Validator:
                             bt.logging.error(f"{e}")
                             continue
                         # Query the miners for benchmarking
-                        bt.logging.info(f"🆔 Hardware list of uids : {self.queryable_uids}")
+                        bt.logging.info(f"💻 Hardware list of uids : {self.queryable_uids}")
                         responses = self.dendrite.query(
                             self.queryable_axons,
                             Specs(specs_input=repr(app_data)),
@@ -431,7 +431,7 @@ class Validator:
                                 hardware_list_responses.append({})
 
                         update_miner_details(self.db, self.queryable_hotkeys, hardware_list_responses)
-                        bt.logging.info(f"🔢 Hardware list responses : {hardware_list_responses}")
+                        bt.logging.info(f"✅ Hardware list responses : {hardware_list_responses}")
 
                     if self.current_block % block_next_sync_status == 0:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
@@ -482,24 +482,24 @@ class Validator:
             wait_for_inclusion=False,
         )
         if result:
-            bt.logging.success("Successfully set weights.")
+            bt.logging.success("✅ Successfully set weights.")
         else:
-            bt.logging.error("Failed to set weights.")
+            bt.logging.error("❌ Failed to set weights.")
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
             for uid, axon in queryable_tuple_uids_axons:
                 if self.miners_items_to_set and (uid, axon.hotkey) not in self.miners_items_to_set:
                     try:
-                        bt.logging.info(f"Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
+                        bt.logging.info(f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
                         purge_miner_entries(self.db, uid, self.miners[uid])
                     except KeyError:
                         pass
-                    bt.logging.info(f"Setting up new miner {uid}-{axon.hotkey}.")
+                    bt.logging.info(f"✅ Setting up new miner {uid}-{axon.hotkey}.")
                     update_miners(self.db, [(uid, axon.hotkey)]),
                     self.miners[uid] = axon.hotkey
         else:
-            bt.logging.warning(f"No queryable miners.")
+            bt.logging.warning(f"❌ No queryable miners.")
 
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
