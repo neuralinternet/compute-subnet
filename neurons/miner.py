@@ -48,6 +48,8 @@ class Miner:
     whitelist_hotkeys_version: set = set()
     exploiters_hotkeys_set: set
 
+    miner_whitelist_updated_threshold: int
+
     th_synchronize: threading.Thread
     th_update_repo: threading.Thread
     th_valid_hotkeys: threading.Thread
@@ -77,6 +79,9 @@ class Miner:
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
         self.config = self.init_config()
+
+        # Setup extra args
+        self.miner_whitelist_updated_threshold = self.config.miner_whitelist_updated_threshold
 
         # Step 2: Initialize different black and white list
         self.init_black_and_white_list()
@@ -151,8 +156,8 @@ class Miner:
                         valid_validators = self.get_valid_validator()
 
                         valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
-                        if percent(len(valid_validators_version), len(valid_validators)) <= compute.miner_whitelist_validators_threshold:
-                            bt.logging.info(f"More than {100 - compute.miner_whitelist_validators_threshold}% validators are currently using an old version.")
+                        if percent(len(valid_validators_version), len(valid_validators)) <= self.miner_whitelist_updated_threshold:
+                            bt.logging.info(f"More than {100 - self.miner_whitelist_updated_threshold}% validators are currently using an old version.")
 
                         for uid, hotkey, version in valid_validators:
                             try:
@@ -240,6 +245,7 @@ class Miner:
                 "miner",
             )
         )
+
         # Ensure the directory for logging exists, else create one.
         if not os.path.exists(config.full_path):
             os.makedirs(config.full_path, exist_ok=True)

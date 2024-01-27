@@ -40,7 +40,6 @@ from compute import (
     SUSPECTED_EXPLOITERS_COLDKEYS,
     __version_as_int__,
     weights_rate_limit,
-    validator_whitelist_miners_threshold,
 )
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, Specs
@@ -137,6 +136,9 @@ class Validator:
         # The metagraph holds the state of the network, letting us know about other miners.
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
+
+        # Setup extra args
+        self.validator_whitelist_updated_threshold = self.config.validator_whitelist_updated_threshold
 
         # Set blacklist and whitelist arrays
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
@@ -519,8 +521,8 @@ class Validator:
     def filter_axon_version(self, dict_filtered_axons: dict):
         # Get the minimal miner version
         latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
-        if percent(len(dict_filtered_axons), self.total_current_miners) <= validator_whitelist_miners_threshold:
-            bt.logging.info(f"More than {100 - validator_whitelist_miners_threshold}% miners are currently using an old version.")
+        if percent(len(dict_filtered_axons), self.total_current_miners) <= self.validator_whitelist_updated_threshold:
+            bt.logging.info(f"More than {100 - self.validator_whitelist_updated_threshold}% miners are currently using an old version.")
             return dict_filtered_axons
 
         dict_filtered_axons_version = {}

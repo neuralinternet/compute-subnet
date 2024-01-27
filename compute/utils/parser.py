@@ -99,6 +99,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="Force the try-update of prometheus version. Default: False.",
             default=False,
         )
+        self.add_argument(
+            "--validator.whitelist.updated.threshold",
+            dest="validator_whitelist_updated_threshold",
+            help="Total quorum before starting the whitelist. Default: 40.",
+            type=int,
+            default=40,
+        )
 
     def add_miner_argument(self):
         self.add_argument(
@@ -135,6 +142,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             dest="miner_whitelist_not_updated",
             help="Whitelist validators not using the last version of the code. Default: False.",
             default=False,
+        )
+        self.add_argument(
+            "--miner.whitelist.updated.threshold",
+            dest="miner_whitelist_updated_threshold",
+            help="Total quorum before starting the whitelist. Default: 40.",
+            type=int,
+            default=40,
         )
 
     @staticmethod
