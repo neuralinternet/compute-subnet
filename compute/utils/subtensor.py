@@ -14,10 +14,9 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-
+import datetime
 
 import bittensor as bt
-
 from compute.utils.cache import ttl_cache
 
 bt_blocktime = bt.__blocktime__
@@ -38,3 +37,7 @@ def is_registered(wallet: bt.wallet, metagraph: bt.metagraph, subtensor: bt.subt
         my_subnet_uid = metagraph.hotkeys.index(wallet.hotkey.ss58_address)
         bt.logging.info(f"Running {entity} on uid: {my_subnet_uid}")
         return my_subnet_uid
+
+
+def calculate_next_block_time(block_origin, block_destiny) -> datetime.timedelta:
+    return datetime.timedelta(seconds=(block_destiny - block_origin) * bt_blocktime)

@@ -47,7 +47,7 @@ from compute.protocol import Challenge, Specs
 from compute.utils.db import ComputeDb
 from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
-from compute.utils.subtensor import is_registered, get_current_block
+from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details
@@ -310,6 +310,10 @@ class Validator:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
         return difficulty
 
+    def print_next_info(self, cond, next_block, info):
+        if cond:
+            bt.logging.info(f"Next {info}: #{next_block} - ~ in {calculate_next_block_time(self.current_block, next_block)}")
+
     async def start(self):
         """The Main Validation Loop"""
 
@@ -327,11 +331,10 @@ class Validator:
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
-                    bt.logging.info(f"Next challenge query : #{block_next_challenge}")
-                    if self.validator_perform_hardware_query:
-                        bt.logging.info(f"Next specs query: #{block_next_hardware_info}")
-                    bt.logging.info(f"Next sync_status call: #{block_next_sync_status}")
-                    bt.logging.info(f"Next set_weights call: #{block_next_set_weights}")
+                    self.print_next_info(not block_next_challenge == 1, block_next_challenge, "challenge")
+                    self.print_next_info(not block_next_sync_status == 1, block_next_sync_status, "sync_status")
+                    self.print_next_info(not block_next_set_weights == 1, block_next_set_weights, "set_weights")
+                    self.print_next_info(self.validator_perform_hardware_query or not block_next_hardware_info == 1, block_next_hardware_info, "specs")
 
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0:
