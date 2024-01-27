@@ -52,8 +52,6 @@ class Miner:
     th_update_repo: threading.Thread
     th_valid_hotkeys: threading.Thread
 
-    total_current_validator: int = 0
-
     _axon: bt.axon
 
     @property
@@ -152,10 +150,9 @@ class Miner:
 
                         valid_validators = self.get_valid_validator()
 
-                        if percent(len(valid_validators), self.total_current_validator) <= compute.miner_whitelist_validators_threshold:
-                            bt.logging.info(
-                                f"Less than {compute.miner_whitelist_validators_threshold}% validators are currently using the last minimal accepted version."
-                            )
+                        valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
+                        if percent(len(valid_validators_version), len(valid_validators)) <= compute.miner_whitelist_validators_threshold:
+                            bt.logging.info(f"More than {100 - compute.miner_whitelist_validators_threshold}% validators are currently using an old version.")
 
                         for uid, hotkey, version in valid_validators:
                             try:
@@ -392,7 +389,9 @@ class Miner:
 
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
     def challenge(self, synapse: Challenge) -> Challenge:
-        bt.logging.info(f"Received challenge (hash, salt, chars): ({synapse.challenge_hash}, {synapse.challenge_salt}, {synapse.challenge_chars})")
+        bt.logging.info(
+            f"Received challenge (difficulty, hash, salt, chars): ({synapse.challenge_difficulty}, {synapse.challenge_hash}, {synapse.challenge_salt}, {synapse.challenge_chars})"
+        )
         result = run_miner_pow(
             _hash=synapse.challenge_hash,
             salt=synapse.challenge_salt,
@@ -416,16 +415,14 @@ class Miner:
                 valid_uids.append(uid)
         return valid_uids
 
-    def get_valid_validator(self):
+    def get_valid_validator(self) -> typing.List[typing.Tuple[int, str, int]]:
         valid_validator_uids = self.get_valid_validator_uids()
-        self.total_current_validator = len(valid_validator_uids)
         valid_validator = []
         for uid in valid_validator_uids:
             neuron = self.subtensor.neuron_for_uid(uid, self.config.netuid)
             hotkey = neuron.hotkey
             version = neuron.prometheus_info.version
             valid_validator.append((uid, hotkey, version))
-
         return valid_validator
 
     def set_weights(self):

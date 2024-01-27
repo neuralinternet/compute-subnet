@@ -25,6 +25,7 @@ import traceback
 from typing import Dict, Tuple, List
 
 import bittensor as bt
+import math
 import time
 import torch
 from cryptography.fernet import Fernet
@@ -44,7 +45,7 @@ from compute import (
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, Specs
 from compute.utils.db import ComputeDb
-from compute.utils.math import percent
+from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
@@ -221,6 +222,22 @@ class Validator:
         bt.logging.info(f"🔢 Initialized scores : {self.scores.tolist()}")
         self.sync_scores()
 
+    @staticmethod
+    def pretty_print_dict_values(items: dict):
+        for key, values in items.items():
+            log = f"uid: {key}"
+
+            for values_key, values_values in values.items():
+                if values_key == "ss58_address":
+                    values_values = values_values[:8] + (values_values[8:] and "...")
+                try:
+                    values_values = f"{float(values_values):.2f}"
+                except Exception:
+                    pass
+                log += f" | {values_key}: {values_values}"
+
+            bt.logging.trace(log)
+
     def init_local(self):
         bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
@@ -230,8 +247,7 @@ class Validator:
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
 
-        for key, values in self.stats.items():
-            bt.logging.trace(key, values)
+        self.pretty_print_dict_values(self.stats)
 
         # Calculate score
         for uid in self.uids:
@@ -273,6 +289,27 @@ class Validator:
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
 
+    def calc_difficulty(self, uid):
+        difficulty = pow_min_difficulty
+        try:
+            stat = self.stats[uid]
+            current_difficulty = math.ceil(force_to_float_or_default(stat.get("last_20_difficulty_avg"), default=pow_min_difficulty))
+            last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
+            challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
+            if challenge_successes >= 20:
+                difficulty = (
+                    current_difficulty + 1
+                    if last_20_challenge_failed == 0
+                    else current_difficulty - 1
+                    if last_20_challenge_failed >= 2
+                    else current_difficulty
+                )
+        except KeyError:
+            pass
+        except Exception as e:
+            bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
+        return difficulty
+
     async def start(self):
         """The Main Validation Loop"""
 
@@ -312,12 +349,13 @@ class Validator:
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                                 try:
                                     axon = self._queryable_uids[_uid]
-                                    password, _hash, _salt, mode, chars, mask = run_validator_pow()
-                                    self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, pow_min_difficulty)
+                                    difficulty = self.calc_difficulty(_uid)
+                                    password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
+                                    self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
                                     self.threads.append(
                                         threading.Thread(
                                             target=self.execute_pow_request,
-                                            args=(_uid, axon, _hash, _salt, mode, chars, mask),
+                                            args=(_uid, axon, _hash, _salt, mode, chars, mask, difficulty),
                                             name=f"th_execute_pow_request-{_uid}",
                                             daemon=True,
                                         )
@@ -335,11 +373,14 @@ class Validator:
                         self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() if v["success"] is True and v["elapsed_time"] < pow_timeout}
 
                         # Logs benchmarks for the validators
-                        bt.logging.info("🔢 Results success benchmarking:")
-                        for uid, benchmark in self.pow_benchmark_success.items():
-                            bt.logging.info(f"{uid}: {benchmark}")
+                        if len(self.pow_benchmark_success) > 0:
+                            bt.logging.info("🔢 Results success benchmarking:")
+                            for uid, benchmark in self.pow_benchmark_success.items():
+                                bt.logging.info(f"{uid}: {benchmark}")
+                        else:
+                            bt.logging.warning("🔢 Results success benchmarking: All miners failed. There must have been a problem.")
 
-                        pow_benchmarks_list = [{**values, "difficulty": pow_min_difficulty, "uid": uid} for uid, values in self.pow_benchmark.items()]
+                        pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
                         update_challenge_details(self.db, pow_benchmarks_list)
 
                         self.sync_scores()
@@ -418,6 +459,7 @@ class Validator:
 
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
+                self.db.close()
                 bt.logging.success("Keyboard interrupt detected. Exiting validator.")
                 exit()
 
@@ -442,7 +484,7 @@ class Validator:
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
             for uid, axon in queryable_tuple_uids_axons:
-                if (uid, axon.hotkey) not in self.miners_items_to_set:
+                if self.miners_items_to_set and (uid, axon.hotkey) not in self.miners_items_to_set:
                     try:
                         bt.logging.info(f"Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
                         purge_miner_entries(self.db, uid, self.miners[uid])
@@ -473,9 +515,7 @@ class Validator:
 
     def filter_axon_version(self, dict_filtered_axons: dict):
         # Get the minimal miner version
-        # TODO REACTIVE THIS FOR LAST PUSH
-        # latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
-        latest_version = version2number(get_remote_version())
+        latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
         if percent(len(dict_filtered_axons), self.total_current_miners) <= validator_whitelist_miners_threshold:
             bt.logging.info(f"More than {100 - validator_whitelist_miners_threshold}% miners are currently using an old version.")
             return dict_filtered_axons
@@ -549,7 +589,7 @@ class Validator:
         dict_filtered_axons = self.filter_axon_version(dict_filtered_axons=dict_filtered_axons)
         return dict_filtered_axons
 
-    def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask):
+    def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask, difficulty):
         dendrite = bt.dendrite(wallet=self.wallet)
         start_time = time.time()
         response = dendrite.query(
@@ -560,6 +600,7 @@ class Validator:
                 challenge_mode=mode,
                 challenge_chars=chars,
                 challenge_mask=mask,
+                challenge_difficulty=difficulty,
             ),
             timeout=pow_timeout,
         )
@@ -567,7 +608,12 @@ class Validator:
         response_password = response.get("password", "")
         hashed_response = gen_hash(response_password, _salt)[0] if response_password else ""
         success = True if _hash == hashed_response else False
-        result_data = {"ss58_address": axon.hotkey, "success": success, "elapsed_time": elapsed_time}
+        result_data = {
+            "ss58_address": axon.hotkey,
+            "success": success,
+            "elapsed_time": elapsed_time,
+            "difficulty": difficulty,
+        }
         with self.lock:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data

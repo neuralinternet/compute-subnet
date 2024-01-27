@@ -17,6 +17,8 @@
 
 import bittensor as bt
 
+import compute
+
 
 class Specs(bt.Synapse):
     """
@@ -85,7 +87,7 @@ class Allocate(bt.Synapse):
         - dict: The deserialized response, which in this case is the value of output.
 
         Example:
-        Assuming a Allocate instance has an output value of {}:
+        Assuming an Allocate instance has an output value of {}:
         >>> allocate_instance = Allocate()
         >>> allocate_instance.output = {}
         >>> allocate_instance.deserialize()
@@ -101,6 +103,7 @@ class Challenge(bt.Synapse):
     challenge_mode: str = ""
     challenge_chars: str = ""
     challenge_mask: str = ""
+    challenge_difficulty: int = compute.pow_min_difficulty
 
     output: dict = {}
 

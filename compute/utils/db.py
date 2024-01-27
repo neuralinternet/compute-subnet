@@ -17,7 +17,7 @@ class ComputeDb:
 
     def init(self):
         cursor = self.get_cursor()
-        # Create the necessary tables
+
         try:
             cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE)")
             cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
@@ -36,10 +36,12 @@ class ComputeDb:
                 )
             """
             )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
 
             self.conn.commit()
         except Exception as e:
             self.conn.rollback()
             bt.logging.error(f"ComputeDb error: {e}")
-
-        cursor.close()
+        finally:
+            cursor.close()
