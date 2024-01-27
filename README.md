@@ -279,7 +279,7 @@ Flags that you can use with the validator script.
 - `--miner.hashcat.workload.profile <profile>`: (Optional) Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information. Default: 3.
 - `--miner.hashcat.extended.options <options>`: (Optional) Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information. Default: ''.
 - `--miner.whitelist.not.enough.stake`: (Optional) Whitelist the validators without enough stake. Default: False.
-- `--miner.whitelist.version`: (Optional) Populate and use a whitelist for the validators using the last version of the code. Default: True.
+- `--miner.whitelist.not.updated`: (Optional) Whitelist validators not using the last version of the code. Default: False.
 
 ## Benchmarking the machine
 
@@ -295,7 +295,7 @@ Speed.#2.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
 ...
 ```
 
-Recommended minimum hashrate for the current difficulty: >= 4000 MH/s.
+Recommended minimum hashrate for the current difficulty: >= 3000 MH/s.
 
 Difficulty will increase over time.
 

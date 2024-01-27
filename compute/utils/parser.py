@@ -130,11 +130,11 @@ class ComputeArgPaser(argparse.ArgumentParser):
             default=False,
         )
         self.add_argument(
-            "--miner.whitelist.version",
+            "--miner.whitelist.not.updated",
             action="store_true",
-            dest="miner_whitelist_version",
-            help="Populate and use a whitelist for the validators using the last version of the code. Default: True.",
-            default=True,
+            dest="miner_whitelist_not_updated",
+            help="Whitelist validators not using the last version of the code. Default: False.",
+            default=False,
         )
 
     @staticmethod

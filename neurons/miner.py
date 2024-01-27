@@ -132,7 +132,7 @@ class Miner:
             self.th_update_repo = threading.Thread(target=self.th_update_repo_func, name="th_update_repo", daemon=True)
             self.th_update_repo.start()
 
-        if self.config.miner_whitelist_version:
+        if not self.config.miner_whitelist_not_updated:
             self.th_valid_hotkeys = threading.Thread(target=self.th_valid_hotkeys, name="th_valid_hotkeys", daemon=True)
             self.th_valid_hotkeys.start()
 
