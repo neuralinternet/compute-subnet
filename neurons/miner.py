@@ -187,8 +187,7 @@ class Miner:
                 except Exception as _:
                     bt.logging.error(traceback.format_exc())
                     continue
-                finally:
-                    time.sleep(300)
+            time.sleep(300)
 
     def th_synchronize_func(self):
         last_updated_block = self.current_block - (self.current_block % 100)
