@@ -16,11 +16,13 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 
+
 import docker
 
-container_name = "ssh-container" #Docker container name
+container_name = "ssh-container"  # Docker container name
 
 # Initialize Docker client
+
 
 # Kill the currently running container
 def kill_container():
@@ -37,6 +39,8 @@ def kill_container():
             running_container.remove()
             return True
     except Exception as e:
-        #bt.logging.info(f"Error killing container {e}")
+        # bt.logging.info(f"Error killing container {e}")
         return False
+
+
 kill_container()

@@ -92,8 +92,8 @@ def serve_extrinsic(
         "hotkey": wallet.hotkey.ss58_address,
         "coldkey": wallet.coldkeypub.ss58_address,
         "protocol": protocol,
-        "placeholder1": version,
-        "placeholder2": version,
+        "placeholder1": placeholder1,
+        "placeholder2": placeholder2,
     }
     bittensor.logging.debug("Checking axon ...")
     neuron = subtensor.get_neuron_for_pubkey_and_subnet(wallet.hotkey.ss58_address, netuid=netuid)
@@ -207,20 +207,6 @@ class ComputeSubnetSubtensor(subtensor):
 
 
 class ComputeSubnetAxon(axon):
-    def info(self) -> "bittensor.AxonInfo":
-        """Returns the axon info object associated with this axon."""
-        return bittensor.AxonInfo(
-            version=get_local_version(),
-            ip=self.external_ip,
-            ip_type=4,
-            port=self.external_port,
-            hotkey=self.wallet.hotkey.ss58_address,
-            coldkey=self.wallet.coldkeypub.ss58_address,
-            protocol=4,
-            placeholder1=1,
-            placeholder2=2,
-        )
-
     def __init__(
         self,
         wallet: "bittensor.wallet" = None,
@@ -300,6 +286,20 @@ class ComputeSubnetAxon(axon):
             return r
 
         self.attach(forward_fn=ping, verify_fn=None, blacklist_fn=None, priority_fn=None)
+
+    def info(self) -> "bittensor.AxonInfo":
+        """Returns the axon info object associated with this axon."""
+        return bittensor.AxonInfo(
+            version=get_local_version(),
+            ip=self.external_ip,
+            ip_type=4,
+            port=self.external_port,
+            hotkey=self.wallet.hotkey.ss58_address,
+            coldkey=self.wallet.coldkeypub.ss58_address,
+            protocol=4,
+            placeholder1=1,
+            placeholder2=2,
+        )
 
 
 class ComputeSubnetAxonMiddleware(AxonMiddleware):

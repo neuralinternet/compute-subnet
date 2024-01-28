@@ -28,26 +28,43 @@ import requests
 import sys
 
 
+def get_remote_version_to_number(pattern: str = "__version__"):
+    latest_version = version2number(get_remote_version(pattern=pattern))
+    if not latest_version:
+        bt.logging.error(f"Github API call failed or version string is incorrect!")
+    return latest_version
+
+
 def version2number(version: str):
-    if version and type(version) is str:
-        version = version.split(".")
-        return (100 * int(version[0])) + (10 * int(version[1])) + (1 * int(version[2]))
+    try:
+        if version and type(version) is str:
+            version = version.split(".")
+            return (100 * int(version[0])) + (10 * int(version[1])) + (1 * int(version[2]))
+    except Exception as _:
+        pass
     return None
 
 
 def get_remote_version(pattern: str = "__version__"):
-    url = "https://raw.githubusercontent.com/neuralinternet/Compute-Subnet/main/compute/__init__.py"
-    response = requests.get(url)
+    url = "https://raw.githubusercontent.com/neuralinternet/compute-subnet/main/compute/__init__.py"
+    try:
+        response = requests.get(url, timeout=30)
 
-    if response.status_code == 200:
-        lines = response.text.split("\n")
-        for line in lines:
-            if line.startswith(pattern):
-                version_info = line.split("=")[1].strip(" \"'").replace('"', "")
-                return version_info
-    else:
-        print("Failed to get file content")
-        return 0
+        if response.status_code == 200:
+            lines = response.text.split("\n")
+            for line in lines:
+                if line.startswith(pattern):
+                    version_info = line.split("=")[1].strip(" \"'").replace('"', "")
+                    return version_info
+        else:
+            print("Failed to get file content with status code:", response.status_code)
+            return None
+    except requests.exceptions.Timeout:
+        print("The request timed out after 30 seconds.")
+        return None
+    except requests.exceptions.RequestException as e:
+        print("There was an error while handling the request:", e)
+        return None
 
 
 def get_local_version():
@@ -147,9 +164,9 @@ def try_update_packages():
 
 def try_update():
     try:
-        if check_version_updated() == True:
+        if check_version_updated() is True:
             bt.logging.info("found the latest version in the repo. try ♻️update...")
-            if update_repo() == True:
+            if update_repo() is True:
                 try_update_packages()
                 restart_app()
     except Exception as e:

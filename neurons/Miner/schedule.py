@@ -1,7 +1,7 @@
-import atexit
-import subprocess
 import datetime
 import os
+import subprocess
+
 
 def start(delay_days):
     # Get the absolute path of the current working directory
@@ -26,7 +26,7 @@ def start(delay_days):
             job_number = job_number.split()[0]
             subprocess.run(["atrm", job_number], check=True)
 
-        subprocess.run(['at', formatted_time], input=f'{file_path}\n', text=True, check=True)
+        subprocess.run(["at", formatted_time], input=f"{file_path}\n", text=True, check=True)
 
     # Register the function to be executed when the script exits
     schedule_command()

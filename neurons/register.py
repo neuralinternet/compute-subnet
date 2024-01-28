@@ -27,8 +27,9 @@ import torch
 import wandb
 
 import RSAEncryption as rsa
-import Validator.database as db
 from compute.protocol import Allocate
+from compute.utils.db import ComputeDb
+from neurons.Validator.database.allocate import select_allocate_miners_hotkey
 
 
 # Step 2: Set up the configuration parser
@@ -85,8 +86,11 @@ def allocate(config, device_requirement, timeline, public_key):
     metagraph = subtensor.metagraph(config.netuid)
     bt.logging.info(f"Metagraph: {metagraph}")
 
+    # Instantiate the connection to the db
+    db = ComputeDb()
+
     # Find out the candidates
-    candidates_hotkey = db.select_miners_hotkey(device_requirement)
+    candidates_hotkey = select_allocate_miners_hotkey(db, device_requirement)
 
     axon_candidates = []
     for axon in metagraph.axons:
@@ -121,10 +125,13 @@ def allocate(config, device_requirement, timeline, public_key):
             Allocate(timeline=timeline, device_requirement=device_requirement, checking=False, public_key=public_key),
             timeout=120,
         )
-        if register_response and register_response["status"] == True:
+        if register_response and register_response["status"] is True:
             register_response["ip"] = axon.ip
             register_response["hotkey"] = axon.hotkey
             return register_response
+
+    # Close the db connection
+    db.close()
 
     return {"status": False, "msg": "No proper miner"}
 
