@@ -24,7 +24,6 @@ import typing
 import bittensor as bt
 import time
 import torch
-import websocket
 
 import compute
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
@@ -157,27 +156,27 @@ class Miner:
 
                         valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
                         if percent(len(valid_validators_version), len(valid_validators)) <= self.miner_whitelist_updated_threshold:
-                            bt.logging.info(f"More than {100 - self.miner_whitelist_updated_threshold}% validators are currently using an old version.")
+                            bt.logging.info(
+                                f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all."
+                            )
+                        else:
+                            for uid, hotkey, version in valid_validators:
+                                try:
+                                    if version >= latest_version:
+                                        bt.logging.debug(f"Version signature match for hotkey : {hotkey}")
+                                        self.whitelist_hotkeys_version.add(hotkey)
+                                        continue
 
-                        for uid, hotkey, version in valid_validators:
-                            try:
-                                if version >= latest_version:
-                                    bt.logging.debug(f"Version signature match for hotkey : {hotkey}")
-                                    self.whitelist_hotkeys_version.add(hotkey)
-                                    continue
+                                    bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
+                                except Exception:
+                                    bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
-                                bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
-                            except Exception:
-                                bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
-
-                        bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
-
+                            bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
                     except json.JSONDecodeError:
                         bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
                 except Exception as _:
                     bt.logging.error(traceback.format_exc())
-                finally:
-                    time.sleep(200)
+            time.sleep(200)
 
     def th_update_repo_func(self):
         while True:
@@ -197,14 +196,17 @@ class Miner:
                 try:
                     with self.lck_synchronize:
                         self.metagraph.sync(subtensor=self.subtensor)
-                except (websocket.WebSocketException, OSError) as e:
-                    bt.logging.warning(f"{e} <<< (can be ignored if you don't have it often)")
+                except Exception as e:
+                    # bt.logging.warning(f"{e} <<< (can be ignored if you don't have it often)")
+                    # It is the case if you see your metagraph not updating:
+                    # TODO create a checker if curr_block doesnt get update within 5minutes, throw a big error.
+                    pass
 
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
                     log = (
-                        f"Miner running at block: {self.current_block} | "
+                        f"Block: {self.current_block} | "
                         f"Stake:{self.metagraph.S[self.miner_subnet_uid]} | "
                         f"Rank:{self.metagraph.R[self.miner_subnet_uid]} | "
                         f"Trust:{self.metagraph.T[self.miner_subnet_uid]} | "
@@ -221,8 +223,7 @@ class Miner:
             except Exception as _:
                 bt.logging.error(traceback.format_exc())
                 continue
-            finally:
-                time.sleep(5)
+            time.sleep(5)
 
     @staticmethod
     def init_config():

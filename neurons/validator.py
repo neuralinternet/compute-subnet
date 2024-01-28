@@ -22,6 +22,7 @@ import os
 import random
 import threading
 import traceback
+from datetime import timedelta
 from typing import Dict, Tuple, List
 
 import bittensor as bt
@@ -312,17 +313,23 @@ class Validator:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
         return difficulty
 
+    def normalize_next_block_time(self, block):
+        if calculate_next_block_time(self.current_block, block) > timedelta(minutes=30) or block < self.current_block:
+            # means an issue occurred somehow
+            return self.current_block + 5
+        return block
+
     def print_next_info(self, cond, next_block, info):
         if cond:
-            bt.logging.info(f"Next {info}: #{next_block} - ~ in {calculate_next_block_time(self.current_block, next_block)}")
+            bt.logging.info(f"Next {info}: #{next_block} approx ~ in {calculate_next_block_time(self.current_block, next_block)}")
 
     async def start(self):
         """The Main Validation Loop"""
 
         # Step 5: Perform queries to miners, scoring, and weight
         block_next_challenge = 1
-        block_next_hardware_info = 1
         block_next_sync_status = 1
+        block_next_hardware_info = 1
         block_next_set_weights = self.current_block + weights_rate_limit
 
         bt.logging.info("Starting validator loop.")
@@ -332,6 +339,11 @@ class Validator:
 
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
+
+                    block_next_challenge = self.normalize_next_block_time(block_next_challenge)
+                    block_next_sync_status = self.normalize_next_block_time(block_next_sync_status)
+                    block_next_set_weights = self.normalize_next_block_time(block_next_set_weights)
+                    block_next_hardware_info = self.normalize_next_block_time(block_next_hardware_info)
 
                     self.print_next_info(not block_next_challenge == 1, block_next_challenge, "challenge")
                     self.print_next_info(not block_next_sync_status == 1, block_next_sync_status, "sync_status")
@@ -522,7 +534,7 @@ class Validator:
         # Get the minimal miner version
         latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
         if percent(len(dict_filtered_axons), self.total_current_miners) <= self.validator_whitelist_updated_threshold:
-            bt.logging.info(f"More than {100 - self.validator_whitelist_updated_threshold}% miners are currently using an old version.")
+            bt.logging.info(f"Less than {self.validator_whitelist_updated_threshold}% miners are currently using the last version. Allowing all.")
             return dict_filtered_axons
 
         dict_filtered_axons_version = {}
