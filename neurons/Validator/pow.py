@@ -69,4 +69,4 @@ def run_validator_pow(length=compute.pow_min_difficulty):
     random.shuffle(available_chars)
     available_chars = "".join(available_chars)
     password, _hash, _salt, _mask = gen_password(available_chars=available_chars[:10], length=length)
-    return password, _hash, _salt, compute.pow_default_mode, available_chars, _mask
+    return password, _hash, _salt, compute.pow_default_mode, available_chars[:10], _mask
