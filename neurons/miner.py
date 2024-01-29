@@ -32,7 +32,7 @@ import compute
 from compute.protocol import PerfInfo, Allocate, Challenge
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered
-from compute.utils.version import get_remote_version, check_hashcat_version, try_update, version2number
+from compute.utils.version import get_local_version, get_remote_version, check_hashcat_version, try_update, version2number
 
 whitelist_args_hotkeys_set: set = set()
 whitelist_version_hotkeys_set: set = set()
@@ -120,7 +120,7 @@ def get_valid_validator(config, subtensor: bt.subtensor, metagraph: bt.metagraph
 def get_valid_hotkeys(config, subtensor: bt.subtensor, metagraph: bt.metagraph):
     whitelist_version_hotkeys_set.clear()
     try:
-        latest_version = version2number(get_remote_version(pattern="__minimal_validator_version__"))
+        latest_version = version2number(get_local_version())
 
         if latest_version is None:
             bt.logging.error(f"Github API call failed or version string is incorrect!")
