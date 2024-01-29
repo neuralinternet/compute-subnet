@@ -361,8 +361,8 @@ class Validator:
                         self.pow_requests = {}
                         self.new_pow_benchmark = {}
 
+                        self.threads = []
                         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
-                            self.threads = []
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                                 try:
                                     axon = self._queryable_uids[_uid]
