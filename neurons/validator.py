@@ -314,7 +314,9 @@ class Validator:
                 if last_20_challenge_failed == 0:
                     difficulty = current_difficulty + 1
                 elif last_20_challenge_failed > 2:
-                    current_difficulty - 1
+                    difficulty = current_difficulty - 1
+                else:
+                    difficulty = current_difficulty
         except KeyError:
             pass
         except Exception as e:
