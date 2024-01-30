@@ -315,12 +315,11 @@ class Validator:
                     difficulty = current_difficulty + 1
                 elif last_20_challenge_failed > 2:
                     current_difficulty - 1
-                difficulty = max(current_difficulty, 1)
         except KeyError:
             pass
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
-        return difficulty
+        return max(difficulty, 1)
 
 
     @staticmethod
