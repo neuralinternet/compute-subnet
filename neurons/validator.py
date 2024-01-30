@@ -311,13 +311,11 @@ class Validator:
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
             if challenge_successes >= 20:
-                difficulty = (
-                    current_difficulty + 1
-                    if last_20_challenge_failed == 0
-                    else current_difficulty - 1
-                    if last_20_challenge_failed >= 2
-                    else current_difficulty
-                )
+                if last_20_challenge_failed == 0:
+                    difficulty = current_difficulty + 1
+                elif last_20_challenge_failed > 2:
+                    current_difficulty - 1
+                difficulty = max(current_difficulty, 1)
         except KeyError:
             pass
         except Exception as e:
