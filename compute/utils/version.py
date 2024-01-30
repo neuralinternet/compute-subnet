@@ -86,7 +86,7 @@ def check_version_updated():
     local_version = get_local_version()
     bt.logging.info(f"Version check - remote_version: {remote_version}, local_version: {local_version}")
 
-    if version2number(remote_version) != version2number(local_version):
+    if version2number(local_version) < version2number(remote_version):
         bt.logging.info(f"👩‍👦Update to the latest version is required")
         return True
     else:
@@ -177,7 +177,7 @@ def check_hashcat_version(hashcat_path: str = "hashcat"):
     try:
         process = subprocess.run([hashcat_path, "--version"], capture_output=True, check=True)
         if process and process.stdout:
-            bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}")
+            bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}".strip('\n'))
         return True
     except subprocess.CalledProcessError:
         bt.logging.error(
