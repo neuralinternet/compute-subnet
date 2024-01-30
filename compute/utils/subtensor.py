@@ -17,6 +17,7 @@
 import datetime
 
 import bittensor as bt
+
 from compute.utils.cache import ttl_cache
 
 bt_blocktime = bt.__blocktime__

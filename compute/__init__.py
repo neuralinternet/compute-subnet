@@ -18,8 +18,8 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.3.5"
-__minimal_miner_version__ = "1.3.4"
+__version__ = "1.3.6"
+__minimal_miner_version__ = "1.3.6"
 __minimal_validator_version__ = "1.3.5"
 
 version_split = __version__.split(".")
@@ -42,7 +42,6 @@ miner_priority_challenge = 2  # Medium priority
 miner_priority_allocate = 3  # The highest priority
 miner_hashcat_location = "hashcat"
 miner_hashcat_workload_profile = "3"
-miner_whitelist_validators_steps_for = 300  # Number of steps while a validator is whitelisted thanks to his version signature (~5minutes)
 
 SUSPECTED_EXPLOITERS_COLDKEYS = []
 SUSPECTED_EXPLOITERS_HOTKEYS = [
