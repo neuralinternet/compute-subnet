@@ -443,12 +443,12 @@ class Miner:
 
                 bt.logging.info(
                     f"Block: {self.current_block} | "
-                    f"Stake: {self.metagraph.S[self.miner_subnet_uid]} | "
-                    f"Rank: {self.metagraph.R[self.miner_subnet_uid]} | "
-                    f"Trust: {self.metagraph.T[self.miner_subnet_uid]} | "
-                    f"Consensus: {self.metagraph.C[self.miner_subnet_uid] } | "
-                    f"Incentive: {self.metagraph.I[self.miner_subnet_uid]} | "
-                    f"Emission: {self.metagraph.E[self.miner_subnet_uid]}| "
+                    f"Stake: {self.metagraph.S[self.miner_subnet_uid]:.4f} | "
+                    f"Rank: {self.metagraph.R[self.miner_subnet_uid]:.4f} | "
+                    f"Trust: {self.metagraph.T[self.miner_subnet_uid]:.4f} | "
+                    f"Consensus: {self.metagraph.C[self.miner_subnet_uid]:.4f} | "
+                    f"Incentive: {self.metagraph.I[self.miner_subnet_uid]:.4f} | "
+                    f"Emission: {self.metagraph.E[self.miner_subnet_uid]:.4f} | "
                     f"update_validator: #{block_next_updated_validator} ~ {time_next_updated_validator} | "
                     f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
                     f"set_weights: #{block_next_set_weights} ~ {time_next_set_weights}"
