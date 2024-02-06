@@ -68,7 +68,7 @@ class Allocate(bt.Synapse):
     - device_requirement: Detailed information of device requirements.
     - checking: Flag that indicates whether it is checking or allocating
     - public_key: Public key for encryption of data.
-    - output: Respond of miner.
+    - output: Response of miner.
     """
 
     timeline: int = 0
