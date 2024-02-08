@@ -447,6 +447,9 @@ class Validator:
             self.new_pow_benchmark[uid] = result_data
 
     def set_weights(self):
+        # Remove all negative scores and attribute them 0.
+        self.scores[self.scores < 0] = 0
+        # Normalize the scores into weights
         weights: torch.FloatTensor = torch.nn.functional.normalize(self.scores, p=1.0, dim=0).float()
         bt.logging.info(f"🏋️ Weight of miners : {weights.tolist()}")
         # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
