@@ -18,9 +18,9 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.3.8"
+__version__ = "1.3.9"
 __minimal_miner_version__ = "1.3.6"
-__minimal_validator_version__ = "1.3.6"
+__minimal_validator_version__ = "1.3.9"
 
 version_split = __version__.split(".")
 __version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
@@ -63,7 +63,5 @@ SUSPECTED_EXPLOITERS_HOTKEYS = [
     "5F4bqDZkx79hCxmbbsVMuq312EW9hQLvsBzKsAJgcEqpb8L9",
 ]
 
-# TODO feat(Validators): Implement the dynamic difficulty.
 # TODO feat(Validators/Miners): Random hashes used for challenge ? maybe not necessary thanks to Blake algo.
 # TODO feat(Miners): Remove docker requirement, to support containerized providers.
-# TODO Partially done: Run black everywhere. Use Classes instead of big main and unclassified methods.
