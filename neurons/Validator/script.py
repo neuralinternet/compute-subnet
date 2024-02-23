@@ -186,6 +186,7 @@ def get_perf_info():
     gpu_info = get_gpu_info()
     hard_disk_info = get_hard_disk_info()
     ram_info = get_ram_info()
+    check_docker_availability()
 
     perf_info = {'cpu' : cpu_info, 'gpu' : gpu_info, 'hard_disk' : hard_disk_info, 'ram' : ram_info}
     perf_str = json.dumps(perf_info)
