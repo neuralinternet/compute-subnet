@@ -20,6 +20,7 @@ import GPUtil
 import json
 import time
 import subprocess
+import bittensor as bt
 from cryptography.fernet import Fernet
 
 secret_key = b'pI1ffLVkUlsoxYnd4sRn5M21OyFWye6tP2YDUiZH5r8='#key
@@ -163,6 +164,22 @@ def get_ram_info():
         return info
     except Exception as e:
         return {}
+
+# Check if docker is available
+def check_docker_availability():
+    try:
+        # Run 'docker --version' command
+        result = subprocess.run(['docker', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        # If the command was successful, Docker is installed
+        docker_version = result.stdout.strip()
+        bt.logging.info(f"Docker is installed. Version: {docker_version}")
+    except Exception as e:  # Catch all exceptions
+        # If the command failed, Docker is not installed
+        error_message = ("Docker is not installed or not found in the system PATH. "
+                 "Miner initialization has been stopped. Please install Docker and try running the miner again. "
+                 "Note: running a miner within containerized instances is not supported.")
+        bt.logging.error(error_message)
+        exit()
 
 def get_perf_info():
     cpu_info = get_cpu_info()

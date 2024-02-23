@@ -36,6 +36,7 @@ from compute.utils.version import check_hashcat_version, try_update, version2num
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import get_respond
+from neurons.Validator.script import check_docker_availability
 
 
 class Miner:
@@ -104,6 +105,8 @@ class Miner:
         # Metagraph provides the network's current state, holding state about other participants in a subnet.
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
+
+        check_docker_availability()
 
         check_cuda_availability()
 
