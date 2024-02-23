@@ -32,7 +32,7 @@ from cryptography.fernet import Fernet
 from torch._C._te import Tensor
 
 import Validator.app_generator as ag
-from Validator.pow import run_validator_pow, gen_hash
+from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
     pow_timeout,
@@ -50,7 +50,7 @@ from compute.utils.subtensor import is_registered, get_current_block, calculate_
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details
-from neurons.Validator.database.challenge import update_challenge_details, select_challenge_stats
+from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
 
@@ -323,7 +323,6 @@ class Validator:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
         return max(difficulty, 1)
 
-
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         """Filter the axons with uids_list, remove those with the same IP address."""
@@ -545,7 +544,7 @@ class Validator:
                             for uid, benchmark in self.pow_benchmark_success.items():
                                 bt.logging.info(f"{uid}: {benchmark}")
                         else:
-                            bt.logging.warning("❌ Benchmarking: All miners failed. There must have been a problem.")
+                            bt.logging.warning("❌ Benchmarking: All miners failed. An issue occurred.")
 
                         pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
                         update_challenge_details(self.db, pow_benchmarks_list)
@@ -554,6 +553,9 @@ class Validator:
 
                     if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (block_next_hardware_info < self.current_block and self.validator_perform_hardware_query):
                         block_next_hardware_info = self.current_block + 125  # ~ every 25 minutes
+
+                        if not hasattr(self, '_queryable_uids'):
+                            self._queryable_uids = self.get_queryable()
 
                         # # Prepare app_data for benchmarking
                         # # Generate secret key for app

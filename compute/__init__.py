@@ -18,23 +18,34 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.3.9"
-__minimal_miner_version__ = "1.3.6"
-__minimal_validator_version__ = "1.3.9"
+__version__ = "1.3.10"
+__minimal_miner_version__ = "1.3.10"
+__minimal_validator_version__ = "1.3.10"
 
 version_split = __version__.split(".")
-__version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
+__version_as_int__ = (
+    (100 * int(version_split[0]))
+    + (10 * int(version_split[1]))
+    + (1 * int(version_split[2]))
+)
 
 # General static vars
-validator_permit_stake = 1.024e3  # Stake amount to be a permitted validator
+# Amount staked to be considered as a valid validator
+validator_permit_stake = 1.024e3
 weights_rate_limit = 100
 
 # Validators static vars
-pow_timeout = 30  # Time before the proof of work requests will time out. time unit = seconds
-pow_min_difficulty = 6  # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
-pow_max_difficulty = 12  # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
-pow_default_mode = "610"  # Model: BLAKE2b-512($pass.$salt)
-pow_default_chars = str(string.ascii_letters + string.digits + "!@#$%^&*()-_+=[]{};:,.<>/")
+# Time before the proof of work requests will time out. time unit = seconds
+pow_timeout = 30
+# Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
+pow_min_difficulty = 6
+# Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
+pow_max_difficulty = 12
+# Model: BLAKE2b-512($pass.$salt)
+pow_default_mode = "610"
+pow_default_chars = str(
+    string.ascii_letters + string.digits + "!@#$%^&*()-_+=[]{};:,.<>"
+)
 
 # Miners static vars
 miner_priority_specs = 1  # Lowest priority
