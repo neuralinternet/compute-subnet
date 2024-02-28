@@ -10,7 +10,7 @@ def percent(a, b):
 def percent_yield(a, b):
     if a == 0:
         return 100
-    return ((b - a) / a) * 100
+    return ((b - a) / b) * 100
 
 
 def force_to_float_or_default(a, default=0.0):

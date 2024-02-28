@@ -270,7 +270,7 @@ Flags that you can use with the validator script.
 - `--validator.perform.hardware.query`: (Optional) Perform the specs query - useful to register to a miner's machine. Default: False.
 - `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
 - `--validator.force.update.prometheus`: (Optional) Force the try-update of prometheus version. Default: False.
-- `--validator.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 70. (%)
+- `--validator.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
 
 ## Miners options
 
@@ -281,7 +281,7 @@ Flags that you can use with the validator script.
 - `--miner.hashcat.extended.options <options>`: (Optional) Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information. Default: ''.
 - `--miner.whitelist.not.enough.stake`: (Optional) Whitelist the validators without enough stake. Default: False.
 - `--miner.whitelist.not.updated`: (Optional) Whitelist validators not using the last version of the code. Default: False.
-- `--miner.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 50. (%)
+- `--miner.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
 
 ## Benchmarking the machine
 

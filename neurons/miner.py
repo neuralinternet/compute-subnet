@@ -25,14 +25,30 @@ import bittensor as bt
 import time
 import torch
 
-from compute import SUSPECTED_EXPLOITERS_HOTKEYS, __version_as_int__, validator_permit_stake, miner_priority_specs, \
-    miner_priority_allocate, miner_priority_challenge, weights_rate_limit
+from compute import (
+    SUSPECTED_EXPLOITERS_HOTKEYS,
+    __version_as_int__,
+    validator_permit_stake,
+    miner_priority_specs,
+    miner_priority_allocate,
+    miner_priority_challenge,
+    weights_rate_limit,
+)
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
 from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
-from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
-from compute.utils.version import check_hashcat_version, try_update, version2number, get_remote_version
+from compute.utils.subtensor import (
+    is_registered,
+    get_current_block,
+    calculate_next_block_time,
+)
+from compute.utils.version import (
+    check_hashcat_version,
+    try_update,
+    version2number,
+    get_remote_version,
+)
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import get_respond
@@ -79,13 +95,19 @@ class Miner:
         self.config = self.init_config()
 
         # Setup extra args
-        self.miner_whitelist_updated_threshold = self.config.miner_whitelist_updated_threshold
-        self.miner_whitelist_not_enough_stake = self.config.miner_whitelist_not_enough_stake
+        self.miner_whitelist_updated_threshold = (
+            self.config.miner_whitelist_updated_threshold
+        )
+        self.miner_whitelist_not_enough_stake = (
+            self.config.miner_whitelist_not_enough_stake
+        )
         self.init_black_and_white_list()
 
         # Set up logging with the provided configuration and directory.
         bt.logging(config=self.config, logging_dir=self.config.full_path)
-        bt.logging.info(f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+        bt.logging.info(
+            f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:"
+        )
         # Log the configuration for reference.
         bt.logging.info(self.config)
 
@@ -142,7 +164,9 @@ class Miner:
 
         # Serve passes the axon information to the network + netuid we are hosting on.
         # This will auto-update if the axon port of external ip have changed.
-        bt.logging.info(f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}")
+        bt.logging.info(
+            f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
 
         self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
@@ -156,7 +180,9 @@ class Miner:
         This function is responsible for setting up and parsing command-line arguments.
         :return: config
         """
-        parser = ComputeArgPaser(description="This script aims to help miners with the compute subnet.")
+        parser = ComputeArgPaser(
+            description="This script aims to help miners with the compute subnet."
+        )
         config = bt.config(parser)
 
         # Step 3: Set up logging directory
@@ -179,9 +205,13 @@ class Miner:
     def init_black_and_white_list(self):
         # Set blacklist and whitelist arrays
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
-        self.blacklist_coldkeys = {coldkey for coldkey in self.config.blacklist_coldkeys}
+        self.blacklist_coldkeys = {
+            coldkey for coldkey in self.config.blacklist_coldkeys
+        }
         self.whitelist_hotkeys = {hotkey for hotkey in self.config.whitelist_hotkeys}
-        self.whitelist_coldkeys = {coldkey for coldkey in self.config.whitelist_coldkeys}
+        self.whitelist_coldkeys = {
+            coldkey for coldkey in self.config.whitelist_coldkeys
+        }
 
         if self.config.blacklist_exploiters:
             self.exploiters_hotkeys_set = {key for key in SUSPECTED_EXPLOITERS_HOTKEYS}
@@ -196,7 +226,8 @@ class Miner:
         self.miner_subnet_uid = is_registered(
             wallet=self.wallet,
             metagraph=self.metagraph,
-            subtensor=self.subtensor, entity="miner"
+            subtensor=self.subtensor,
+            entity="miner",
         )
 
         # Check for auto update
@@ -206,14 +237,20 @@ class Miner:
         if hasattr(self, "axon"):
             if self.axon:
                 # Check if the miner has the axon version info updated
-                subnet_axon_version: bt.AxonInfo = self.metagraph.neurons[self.miner_subnet_uid].axon_info
+                subnet_axon_version: bt.AxonInfo = self.metagraph.neurons[
+                    self.miner_subnet_uid
+                ].axon_info
                 current_version = __version_as_int__
                 if subnet_axon_version.version != current_version:
-                    bt.logging.info("Axon info version has been changed. Needs to restart axon...")
+                    bt.logging.info(
+                        "Axon info version has been changed. Needs to restart axon..."
+                    )
                     self.axon.stop()
                     self.init_axon()
 
-    def base_blacklist(self, synapse: typing.Union[Specs, Allocate, Challenge]) -> typing.Tuple[bool, str]:
+    def base_blacklist(
+        self, synapse: typing.Union[Specs, Allocate, Challenge]
+    ) -> typing.Tuple[bool, str]:
         hotkey = synapse.dendrite.hotkey
         synapse_type = type(synapse).__name__
 
@@ -236,7 +273,10 @@ class Miner:
             return True, "Blacklisted hotkey"
 
         # Blacklist entities that are not up-to-date
-        if hotkey not in self.whitelist_hotkeys_version and len(self.whitelist_hotkeys_version) > 0:
+        if (
+            hotkey not in self.whitelist_hotkeys_version
+            and len(self.whitelist_hotkeys_version) > 0
+        ):
             return (
                 True,
                 f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
@@ -248,13 +288,21 @@ class Miner:
                 f"Blacklisted a {synapse_type} request from an exploiter hotkey: {hotkey}",
             )
 
-        bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
         return False, "Hotkey recognized!"
 
     def base_priority(self, synapse: typing.Union[Specs, Allocate, Challenge]) -> float:
-        caller_uid = self._metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
-        priority = float(self._metagraph.S[caller_uid])  # Return the stake as the priority.
-        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority)
+        caller_uid = self._metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        priority = float(
+            self._metagraph.S[caller_uid]
+        )  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority
+        )
         return priority
 
     # The blacklist function decides if a request should be ignored.
@@ -309,10 +357,19 @@ class Miner:
 
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
     def challenge(self, synapse: Challenge) -> Challenge:
-        bt.logging.info(
-            f"Received challenge (difficulty, hash, salt, chars): ({synapse.challenge_difficulty}, {synapse.challenge_hash}, {synapse.challenge_salt}, {synapse.challenge_chars})"
+        if synapse.challenge_difficulty <= 0:
+            bt.logging.warning(
+                f"{synapse.dendrite.hotkey}: Challenge received with a difficulty <= 0 - it can not be solved."
+            )
+            return synapse
+
+        v_id = synapse.dendrite.hotkey[:8]
+        run_id = (
+            f"{v_id}/{synapse.challenge_difficulty}/{synapse.challenge_hash[10:20]}"
         )
+
         result = run_miner_pow(
+            run_id=run_id,
             _hash=synapse.challenge_hash,
             salt=synapse.challenge_salt,
             mode=synapse.challenge_mode,
@@ -329,16 +386,27 @@ class Miner:
         try:
             self.whitelist_hotkeys_version.clear()
             try:
-                latest_version = version2number(get_remote_version(pattern="__minimal_validator_version__"))
+                latest_version = version2number(
+                    get_remote_version(pattern="__minimal_validator_version__")
+                )
 
                 if latest_version is None:
-                    bt.logging.error(f"Github API call failed or version string is incorrect!")
+                    bt.logging.error(
+                        f"Github API call failed or version string is incorrect!"
+                    )
                     return
 
                 valid_validators = self.get_valid_validator()
 
-                valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
-                if percent(len(valid_validators_version), len(valid_validators)) <= self.miner_whitelist_updated_threshold:
+                valid_validators_version = [
+                    uid
+                    for uid, hotkey, version in valid_validators
+                    if version >= latest_version
+                ]
+                if (
+                    percent(len(valid_validators_version), len(valid_validators))
+                    <= self.miner_whitelist_updated_threshold
+                ):
                     bt.logging.info(
                         f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all."
                     )
@@ -346,17 +414,27 @@ class Miner:
                     for uid, hotkey, version in valid_validators:
                         try:
                             if version >= latest_version:
-                                bt.logging.debug(f"Version signature match for hotkey : {hotkey}")
+                                bt.logging.debug(
+                                    f"Version signature match for hotkey : {hotkey}"
+                                )
                                 self.whitelist_hotkeys_version.add(hotkey)
                                 continue
 
-                            bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
+                            bt.logging.debug(
+                                f"Version signature mismatch for hotkey : {hotkey}"
+                            )
                         except Exception:
-                            bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+                            bt.logging.error(
+                                f"exception in get_valid_hotkeys: {traceback.format_exc()}"
+                            )
 
-                    bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
+                    bt.logging.info(
+                        f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}"
+                    )
             except json.JSONDecodeError:
-                bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+                bt.logging.error(
+                    f"exception in get_valid_hotkeys: {traceback.format_exc()}"
+                )
         except Exception as _:
             bt.logging.error(traceback.format_exc())
 
@@ -379,7 +457,9 @@ class Miner:
         return valid_validator
 
     def set_weights(self):
-        chain_weights = torch.zeros(self.subtensor.subnetwork_n(netuid=self.config.netuid))
+        chain_weights = torch.zeros(
+            self.subtensor.subnetwork_n(netuid=self.config.netuid)
+        )
         chain_weights[self.miner_subnet_uid] = 1
         # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
         # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
@@ -421,16 +501,33 @@ class Miner:
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
-                    time_next_updated_validator = self.next_info(not block_next_updated_validator == 1, block_next_updated_validator)
-                    time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
-                    time_next_set_weights = self.next_info(not block_next_sync_status == 1, block_next_set_weights)  # block_next_sync_status on purpose for the first iter
+                    time_next_updated_validator = self.next_info(
+                        not block_next_updated_validator == 1,
+                        block_next_updated_validator,
+                    )
+                    time_next_sync_status = self.next_info(
+                        not block_next_sync_status == 1, block_next_sync_status
+                    )
+                    time_next_set_weights = self.next_info(
+                        not block_next_sync_status == 1, block_next_set_weights
+                    )  # block_next_sync_status on purpose for the first iter
 
-                if self.current_block % block_next_updated_validator == 0 or block_next_updated_validator < self.current_block:
-                    block_next_updated_validator = self.current_block + 30  # ~ every 6 minutes
+                if (
+                    self.current_block % block_next_updated_validator == 0
+                    or block_next_updated_validator < self.current_block
+                ):
+                    block_next_updated_validator = (
+                        self.current_block + 30
+                    )  # ~ every 6 minutes
                     self.get_updated_validator()
 
-                if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
-                    block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
+                if (
+                    self.current_block % block_next_sync_status == 0
+                    or block_next_sync_status < self.current_block
+                ):
+                    block_next_sync_status = (
+                        self.current_block + 25
+                    )  # ~ every 5 minutes
                     self.sync_status()
 
                 # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
@@ -444,7 +541,6 @@ class Miner:
                 bt.logging.info(
                     f"Block: {self.current_block} | "
                     f"Stake: {self.metagraph.S[self.miner_subnet_uid]:.4f} | "
-                    f"Rank: {self.metagraph.R[self.miner_subnet_uid]:.4f} | "
                     f"Trust: {self.metagraph.T[self.miner_subnet_uid]:.4f} | "
                     f"Consensus: {self.metagraph.C[self.miner_subnet_uid]:.4f} | "
                     f"Incentive: {self.metagraph.I[self.miner_subnet_uid]:.4f} | "
@@ -455,7 +551,7 @@ class Miner:
                 )
                 time.sleep(5)
 
-            except RuntimeError as e:
+            except (RuntimeError, Exception) as e:
                 bt.logging.error(e)
                 traceback.print_exc()
 

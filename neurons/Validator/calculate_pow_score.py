@@ -48,7 +48,6 @@ def calc_score(response, hotkey, mock=False):
     try:
         challenge_attempts = prevent_none(response["challenge_attempts"])
         challenge_successes = prevent_none(response["challenge_successes"])
-        challenge_failed = prevent_none(response["challenge_failed"])
         last_20_challenge_failed = prevent_none(response["last_20_challenge_failed"])
         challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
         challenge_difficulty_avg = prevent_none(response["challenge_difficulty_avg"])
@@ -57,11 +56,10 @@ def calc_score(response, hotkey, mock=False):
             return 0
 
         # Define base weights for the PoW
-        success_weight = 0.8
-        difficulty_weight = 0.18
-        time_elapsed_weight = 0.02
-        failed_penalty_weight = 0.5
-        total_failed_penalty_weight = 0.2
+        success_weight = 1
+        difficulty_weight = 4
+        time_elapsed_weight = 0.05
+        failed_penalty_weight = 1
 
         # Just in case but in theory, it is not possible to fake the difficulty as it is sent by the validator
         # Same occurs for the time, it's calculated by the validator so miners can not fake it
@@ -79,10 +77,12 @@ def calc_score(response, hotkey, mock=False):
         time_elapsed = time_elapsed_modifier * time_elapsed_weight
 
         failed_penalty = failed_penalty_weight * last_20_challenge_failed
-        total_failed_penalty = total_failed_penalty_weight * challenge_failed
 
         # Calculate the score
-        final_score = successes + difficulty + time_elapsed + registration_bonus - failed_penalty - total_failed_penalty
+        final_score = successes + difficulty + time_elapsed + registration_bonus - failed_penalty
+
+        # Make sure this cant be negative
+        final_score = max(0, final_score)
 
         # Normalize the score
         normalized_score = normalize(final_score, 0, 100)
