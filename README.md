@@ -332,13 +332,8 @@ Exception for 1.3.10:
 ```sh
 git pull
 
-# Either this
-python -m pip install --force-reinstall --ignore-installed --no-deps -r requirements.txt
-python -m pip install --force-reinstall --ignore-installed --no-deps -e .
-# Or this
-python -m pip install --no-deps -r requirements.txt
-python -m pip install --no-deps -e .
-# Should work
+python -m pip install -e .
+python -m pip install --no-deps -r requirements-compute.txt
 pm2 restart <id>
 ```
 

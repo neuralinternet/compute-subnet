@@ -1,7 +1,7 @@
 at==0.0.3
 bittensor==6.8.2
 black==23.7.0
-cryptography==42.0.5
+cryptography==41.0.3
 docker==7.0.0
 GPUtil==1.4.0
 igpu==0.1.2
