@@ -14,10 +14,11 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-# Step 1: Import necessary libraries and modules
+
 import ast
 import os
 import subprocess
+import bittensor as bt
 
 
 # Respond the execution of the application
@@ -34,5 +35,6 @@ def get_respond(app_data):
         subprocess.run("chmod +x " + file_path, shell=True, check=True)
         result = subprocess.check_output(file_path, shell=True, text=True)
         return result
-    except Exception as _:
+    except Exception as e:
+        bt.logging.error(f"Specs query failed: {e}")
         return {}

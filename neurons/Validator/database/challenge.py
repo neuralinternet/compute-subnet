@@ -62,7 +62,7 @@ FROM (SELECT uid,
              AVG(CASE WHEN success = 1 THEN elapsed_time END) AS challenge_elapsed_time_avg,
              AVG(CASE WHEN success = 1 THEN difficulty END)   AS challenge_difficulty_avg
       FROM challenge_details
-      WHERE date(created_at) >= date('now', '-3 days')
+      WHERE date(created_at) >= date('now', '-2 days')
       GROUP BY uid, ss58_address) AS main_query
          LEFT JOIN (SELECT uid,
                            ss58_address,

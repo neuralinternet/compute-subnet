@@ -301,6 +301,21 @@ Recommended minimum hashrate for the current difficulty: >= 3000 MH/s.
 
 Difficulty will increase over time.
 
+## Troubleshooting
+
+> "I don't receive any request, 'Challenge' or 'Specs', what could be the reason ?"
+
+Most probably you are running into a **network issue**. 
+- check your ports 
+- check your firewall
+
+> "I have been deregistered, why ?"
+
+There might be a thousand reason for this. Ensure your script is running correctly.
+Otherwise, the simplest answer is the following: **competition is really hard over the network**.
+Maybe people are running stronger devices than you, maybe you had internet issues, maybe you did not isolate your environment and another script that you ran broke it, etc.
+
+
 ## License
 
 This repository is licensed under the MIT License.
