@@ -29,6 +29,8 @@ from typing import Dict, Tuple, List
 import bittensor as bt
 import math
 import time
+
+import cryptography
 import torch
 from cryptography.fernet import Fernet
 from torch._C._te import Tensor
@@ -529,6 +531,9 @@ class Validator:
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], decoded_data)
                         else:
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
+                    except cryptography.fernet.InvalidToken:
+                        bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
+                        results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except Exception as _:
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
@@ -537,7 +542,9 @@ class Validator:
                 traceback.print_exc()
 
         update_miner_details(self.db, list(results.keys()), list(results.values()))
-        bt.logging.info(f"✅ Hardware list responses : {results.values()}")
+        bt.logging.info(f"✅ Hardware list responses :")
+        for hotkey, specs in results.values():
+            bt.logging.info(f"{hotkey} - {specs}")
         self.finalized_specs_once = True
 
     def set_weights(self):

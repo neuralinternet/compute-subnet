@@ -49,7 +49,7 @@ from compute.utils.version import (
 )
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
-from neurons.Miner.specs import get_respond
+from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
 
 
@@ -141,6 +141,8 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
 
@@ -291,10 +293,9 @@ class Miner:
         return self.base_priority(synapse) + miner_priority_specs
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    @staticmethod
-    def specs(synapse: Specs) -> Specs:
+    def specs(self, synapse: Specs) -> Specs:
         app_data = synapse.specs_input
-        synapse.specs_output = get_respond(app_data)
+        synapse.specs_output = self.request_specs_processor.get_respond(app_data)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
