@@ -6,7 +6,7 @@ import bittensor as bt
 class ComputeDb:
     def __init__(self):
         # Connect to the database (or create it if it doesn't exist)
-        self.conn = sqlite3.connect("database.db")
+        self.conn = sqlite3.connect("database.db", check_same_thread=False)
         self.init()
 
     def close(self):

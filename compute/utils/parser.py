@@ -90,6 +90,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             type=int,
             dest="validator_challenge_batch_size",
             help="For lower hardware specifications you might want to use a different batch_size.",
+            default=256,
+        )
+        self.add_argument(
+            "--validator.specs.batch.size",
+            type=int,
+            dest="validator_specs_batch_size",
+            help="For lower hardware specifications you might want to use a different batch_size.",
             default=64,
         )
         self.add_argument(

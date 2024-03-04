@@ -245,3 +245,5 @@ database.db
 
 # Specs generated app
 neurons/Miner/app
+
+test_speed_file.dat

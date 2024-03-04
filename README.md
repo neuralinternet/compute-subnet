@@ -268,7 +268,8 @@ Flags that you can use with the validator script.
 
 - `--validator.whitelist.unrecognized`: (Optional) Whitelist the unrecognized miners. Default: False.
 - `--validator.perform.hardware.query <bool>`: (Optional) Perform the specs query - useful to register to a miner's machine. Default: True.
-- `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
+- `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 256.
+- `--validator.specs.batch.size <size>`: (Optional) Batch size that perform the specs queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
 - `--validator.force.update.prometheus`: (Optional) Force the try-update of prometheus version. Default: False.
 - `--validator.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
 
@@ -300,6 +301,46 @@ Speed.#2.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
 Recommended minimum hashrate for the current difficulty: >= 3000 MH/s.
 
 Difficulty will increase over time.
+
+## Troubleshooting
+
+> "I don't receive any request, 'Challenge' or 'Specs', what could be the reason ?"
+
+Most probably you are running into a **network issue**. 
+- check your ports 
+- check your firewall
+
+> "I have been deregistered, why ?"
+
+There might be a thousand reason for this. Ensure your script is running correctly.
+Otherwise, the simplest answer is the following: **competition is really hard over the network**.
+Maybe people are running stronger devices than you, maybe you had internet issues, maybe you did not isolate your environment and another script that you ran broke it, etc.
+
+
+## Action todo for updates
+
+__**No action required when using auto-update flag**__.
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python -m pip install -e .
+pm2 restart <id>
+```
+
+Exception for 1.3.10:
+```sh
+git pull
+
+# Either this
+python -m pip install --force-reinstall --ignore-installed --no-deps -r requirements.txt
+python -m pip install --force-reinstall --ignore-installed --no-deps -e .
+# Or this
+python -m pip install --no-deps -r requirements.txt
+python -m pip install --no-deps -e .
+# Should work
+pm2 restart <id>
+```
 
 ## License
 

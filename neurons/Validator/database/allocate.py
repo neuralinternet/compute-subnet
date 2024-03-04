@@ -16,10 +16,31 @@
 # DEALINGS IN THE SOFTWARE.
 
 import json
+from typing import Tuple, Any
 
 import bittensor as bt
 
 from compute.utils.db import ComputeDb
+
+
+def select_has_docker_miners_hotkey(db: ComputeDb):
+    cursor = db.get_cursor()
+    try:
+        # Fetch all records from miner_details table
+        cursor.execute("SELECT * FROM miner_details")
+        rows = cursor.fetchall()
+
+        uid_hotkey_dict = {}
+        for row in rows:
+            details = json.loads(row[2])
+            if details.get("has_docker", False) is True:
+                uid_hotkey_dict[row[0]] = row[1]
+        return uid_hotkey_dict
+    except Exception as e:
+        bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
+        return []
+    finally:
+        cursor.close()
 
 
 # Fetch hotkeys from database that meets device_requirement
@@ -34,7 +55,7 @@ def select_allocate_miners_hotkey(db: ComputeDb, device_requirement):
         hotkey_list = []
         for row in rows:
             details = json.loads(row[2])
-            if allocate_check_if_miner_meet(details, device_requirement) == True:
+            if allocate_check_if_miner_meet(details, device_requirement) is True:
                 hotkey_list.append(row[1])
         return hotkey_list
     except Exception as e:
@@ -45,12 +66,12 @@ def select_allocate_miners_hotkey(db: ComputeDb, device_requirement):
 
 
 #  Update the miner_details with specs
-def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses):
+def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[str, Any]):
     cursor = db.get_cursor()
     try:
         cursor.execute(f"DELETE FROM miner_details")
-        for index, response in enumerate(benchmark_responses):
-            cursor.execute("INSERT INTO miner_details (hotkey, details) VALUES (?, ?)", (hotkey_list[index], json.dumps(response)))
+        for index, (hotkey, response) in enumerate(benchmark_responses):
+            cursor.execute("INSERT INTO miner_details (id, hotkey, details) VALUES (?, ?, ?)", (hotkey_list[index], hotkey, json.dumps(response)))
         db.conn.commit()
     except Exception as e:
         db.conn.rollback()

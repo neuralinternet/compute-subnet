@@ -39,7 +39,14 @@ def calc_score(response, hotkey, mock=False):
     """
     Method to calculate the score attributed to this miner dual uid - hotkey
     :param response:
-    {'challenge_attempts': 7, 'challenge_successes': 6, 'challenge_failed': 0, 'challenge_elapsed_time_avg': 5.804196675618489, 'challenge_difficulty_avg': 2.0}
+    {
+        'challenge_attempts': 7,
+        'challenge_successes': 6,
+        'challenge_failed': 0,
+        'challenge_elapsed_time_avg': 5.804196675618489,
+        'challenge_difficulty_avg': 2.0,
+        'has_docker': True,
+    }
     challenge_failed is batched over the last 10 challenges only
     :param hotkey:
     :param mock: During testing phase
@@ -51,6 +58,7 @@ def calc_score(response, hotkey, mock=False):
         last_20_challenge_failed = prevent_none(response["last_20_challenge_failed"])
         challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
         challenge_difficulty_avg = prevent_none(response["challenge_difficulty_avg"])
+        has_docker = response.get("has_docker", False)
 
         if last_20_challenge_failed >= 10 or challenge_successes == 0:
             return 0
@@ -80,6 +88,8 @@ def calc_score(response, hotkey, mock=False):
 
         # Calculate the score
         final_score = successes + difficulty + time_elapsed + registration_bonus - failed_penalty
+
+        final_score = final_score if has_docker else final_score / 2
 
         # Make sure this cant be negative
         final_score = max(0, final_score)
