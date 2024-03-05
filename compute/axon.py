@@ -96,7 +96,9 @@ def serve_extrinsic(
         "placeholder2": placeholder2,
     }
     bittensor.logging.debug("Checking axon ...")
-    neuron = subtensor.get_neuron_for_pubkey_and_subnet(wallet.hotkey.ss58_address, netuid=netuid)
+    neuron = subtensor.get_neuron_for_pubkey_and_subnet(
+        wallet.hotkey.ss58_address, netuid=netuid
+    )
     neuron_up_to_date = not neuron.is_null and params == {
         "version": neuron.axon_info.version,
         "ip": net.ip_to_int(neuron.axon_info.ip),
@@ -113,17 +115,25 @@ def serve_extrinsic(
     output["coldkey"] = wallet.coldkeypub.ss58_address
     output["hotkey"] = wallet.hotkey.ss58_address
     if neuron_up_to_date:
-        bittensor.logging.debug(f"Axon already served on: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) ")
+        bittensor.logging.debug(
+            f"Axon already served on: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) "
+        )
         return True
 
     if prompt:
         output = params.copy()
         output["coldkey"] = wallet.coldkeypub.ss58_address
         output["hotkey"] = wallet.hotkey.ss58_address
-        if not Confirm.ask("Do you want to serve axon:\n  [bold white]{}[/bold white]".format(json.dumps(output, indent=4, sort_keys=True))):
+        if not Confirm.ask(
+            "Do you want to serve axon:\n  [bold white]{}[/bold white]".format(
+                json.dumps(output, indent=4, sort_keys=True)
+            )
+        ):
             return False
 
-    bittensor.logging.debug(f"Serving axon with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) -> {subtensor.network}:{netuid}:{version}")
+    bittensor.logging.debug(
+        f"Serving axon with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) -> {subtensor.network}:{netuid}:{version}"
+    )
     success, error_message = subtensor._do_serve_axon(
         wallet=wallet,
         call_params=params,
@@ -133,10 +143,12 @@ def serve_extrinsic(
 
     if wait_for_inclusion or wait_for_finalization:
         if success == True:
-            bittensor.logging.debug(f"Axon served with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) on {subtensor.network}:{netuid} ")
+            bittensor.logging.debug(f"Axon served.")
             return True
         else:
-            bittensor.logging.debug(f"Axon failed to served with error: {error_message} ")
+            bittensor.logging.debug(
+                f"Axon failed to served with error: {error_message} "
+            )
             return False
     else:
         return True
@@ -240,9 +252,15 @@ class ComputeSubnetAxon(axon):
         config = copy.deepcopy(config)
         config.axon.ip = ip or config.axon.get("ip", bittensor.defaults.axon.ip)
         config.axon.port = port or config.axon.get("port", bittensor.defaults.axon.port)
-        config.axon.external_ip = external_ip or config.axon.get("external_ip", bittensor.defaults.axon.external_ip)
-        config.axon.external_port = external_port or config.axon.get("external_port", bittensor.defaults.axon.external_port)
-        config.axon.max_workers = max_workers or config.axon.get("max_workers", bittensor.defaults.axon.max_workers)
+        config.axon.external_ip = external_ip or config.axon.get(
+            "external_ip", bittensor.defaults.axon.external_ip
+        )
+        config.axon.external_port = external_port or config.axon.get(
+            "external_port", bittensor.defaults.axon.external_port
+        )
+        config.axon.max_workers = max_workers or config.axon.get(
+            "max_workers", bittensor.defaults.axon.max_workers
+        )
         axon.check_config(config)
         self.config = config
 
@@ -253,13 +271,23 @@ class ComputeSubnetAxon(axon):
         self.uuid = str(uuid.uuid1())
         self.ip = self.config.axon.ip
         self.port = self.config.axon.port
-        self.external_ip = self.config.axon.external_ip if self.config.axon.external_ip != None else bittensor.utils.networking.get_external_ip()
-        self.external_port = self.config.axon.external_port if self.config.axon.external_port != None else self.config.axon.port
+        self.external_ip = (
+            self.config.axon.external_ip
+            if self.config.axon.external_ip != None
+            else bittensor.utils.networking.get_external_ip()
+        )
+        self.external_port = (
+            self.config.axon.external_port
+            if self.config.axon.external_port != None
+            else self.config.axon.port
+        )
         self.full_address = str(self.config.axon.ip) + ":" + str(self.config.axon.port)
         self.started = False
 
         # Build middleware
-        self.thread_pool = bittensor.PriorityThreadPoolExecutor(max_workers=self.config.axon.max_workers)
+        self.thread_pool = bittensor.PriorityThreadPoolExecutor(
+            max_workers=self.config.axon.max_workers
+        )
         self.nonces = {}
 
         # Request default functions.
@@ -273,7 +301,9 @@ class ComputeSubnetAxon(axon):
         # Instantiate FastAPI
         self.app = FastAPI()
         log_level = "trace" if bittensor.logging.__trace_on__ else "critical"
-        self.fast_config = uvicorn.Config(self.app, host="0.0.0.0", port=self.config.axon.port, log_level=log_level)
+        self.fast_config = uvicorn.Config(
+            self.app, host="0.0.0.0", port=self.config.axon.port, log_level=log_level
+        )
         self.fast_server = FastAPIThreadedServer(config=self.fast_config)
         self.router = APIRouter()
         self.app.include_router(self.router)
@@ -285,7 +315,9 @@ class ComputeSubnetAxon(axon):
         def ping(r: bittensor.Synapse) -> bittensor.Synapse:
             return r
 
-        self.attach(forward_fn=ping, verify_fn=None, blacklist_fn=None, priority_fn=None)
+        self.attach(
+            forward_fn=ping, verify_fn=None, blacklist_fn=None, priority_fn=None
+        )
 
     def info(self) -> "bittensor.AxonInfo":
         """Returns the axon info object associated with this axon."""
@@ -358,7 +390,9 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
 
         # Creates a synapse instance from the headers using the appropriate forward class type
         # based on the request name obtained from the URL path.
-        synapse = self.axon.forward_class_types[request_name].from_headers(request.headers)
+        synapse = self.axon.forward_class_types[request_name].from_headers(
+            request.headers
+        )
         synapse.name = request_name
 
         # Fills the local axon information into the synapse.
@@ -375,7 +409,9 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
         )
 
         # Fills the dendrite information into the synapse.
-        synapse.dendrite.__dict__.update({"port": str(request.client.port), "ip": str(request.client.host)})
+        synapse.dendrite.__dict__.update(
+            {"port": str(request.client.port), "ip": str(request.client.host)}
+        )
 
         # Signs the synapse from the axon side using the wallet hotkey.
         message = f"{synapse.axon.nonce}.{synapse.dendrite.hotkey}.{synapse.axon.hotkey}.{synapse.axon.uuid}"

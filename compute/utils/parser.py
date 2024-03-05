@@ -80,15 +80,22 @@ class ComputeArgPaser(argparse.ArgumentParser):
         )
         self.add_argument(
             "--validator.perform.hardware.query",
-            action="store_true",
+            type=bool,
             dest="validator_perform_hardware_query",
             help="Perform the specs method - useful for allocation attempts.",
-            default=False,
+            default=True,
         )
         self.add_argument(
             "--validator.challenge.batch.size",
             type=int,
             dest="validator_challenge_batch_size",
+            help="For lower hardware specifications you might want to use a different batch_size.",
+            default=256,
+        )
+        self.add_argument(
+            "--validator.specs.batch.size",
+            type=int,
+            dest="validator_specs_batch_size",
             help="For lower hardware specifications you might want to use a different batch_size.",
             default=64,
         )

@@ -18,21 +18,25 @@
 
 import ast
 import asyncio
+import json
 import os
 import random
 import threading
 import traceback
+from asyncio import AbstractEventLoop
 from typing import Dict, Tuple, List
 
 import bittensor as bt
 import math
 import time
+
+import cryptography
 import torch
 from cryptography.fernet import Fernet
 from torch._C._te import Tensor
 
 import Validator.app_generator as ag
-from Validator.pow import run_validator_pow, gen_hash
+from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
     pow_timeout,
@@ -40,6 +44,7 @@ from compute import (
     SUSPECTED_EXPLOITERS_COLDKEYS,
     __version_as_int__,
     weights_rate_limit,
+    specs_timeout,
 )
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Challenge, Specs
@@ -49,8 +54,8 @@ from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
-from neurons.Validator.database.allocate import update_miner_details
-from neurons.Validator.database.challenge import update_challenge_details, select_challenge_stats
+from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey
+from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
 
@@ -63,6 +68,9 @@ class Validator:
     new_pow_benchmark: dict = {}
     pow_benchmark_success: dict = {}
 
+    queryable_for_specs: dict = {}
+    finalized_specs_once: bool = False
+
     total_current_miners: int = 0
 
     scores: Tensor
@@ -71,6 +79,8 @@ class Validator:
     validator_subnet_uid: int
 
     _queryable_uids: Dict[int, bt.AxonInfo]
+
+    loop: AbstractEventLoop
 
     @property
     def wallet(self) -> bt.wallet:
@@ -87,6 +97,10 @@ class Validator:
     @property
     def metagraph(self) -> bt.metagraph:
         return self._metagraph
+
+    @property
+    def queryable(self):
+        return self._queryable_uids
 
     @property
     def queryable_uids(self):
@@ -121,6 +135,7 @@ class Validator:
         self.exploiters_coldkeys = {coldkey for coldkey in SUSPECTED_EXPLOITERS_COLDKEYS} if self.config.blacklist_exploiters else {}
 
         # Set custom validator arguments
+        self.validator_specs_batch_size = self.config.validator_specs_batch_size
         self.validator_challenge_batch_size = self.config.validator_challenge_batch_size
         self.validator_perform_hardware_query = self.config.validator_perform_hardware_query
         self.validator_whitelist_updated_threshold = self.config.validator_whitelist_updated_threshold
@@ -247,11 +262,23 @@ class Validator:
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
 
+        # Fetch docker requirement
+        has_docker: dict = select_has_docker_miners_hotkey(self.db)
+
         self.pretty_print_dict_values(self.stats)
 
         # Calculate score
         for uid in self.uids:
             try:
+                try:
+                    # This part is to ensure the upgrade to 1.3.10 is running smoothly. But should theoretically be removed after it.
+                    if not self.finalized_specs_once:
+                        self.stats[uid]["has_docker"] = True
+                    else:
+                        self.stats[uid]["has_docker"] = has_docker[uid]
+                except KeyError:
+                    self.stats[uid]["has_docker"] = False
+
                 hotkey = self.stats[uid].get("ss58_address")
                 score = calc_score(self.stats[uid], hotkey=hotkey)
             except (ValueError, KeyError):
@@ -288,6 +315,7 @@ class Validator:
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
+
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
             for uid, axon in queryable_tuple_uids_axons:
@@ -322,7 +350,6 @@ class Validator:
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
         return max(difficulty, 1)
-
 
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
@@ -420,6 +447,7 @@ class Validator:
     def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask, difficulty):
         dendrite = bt.dendrite(wallet=self.wallet)
         start_time = time.time()
+        bt.logging.info(f"Querying for {Challenge.__name__} - {uid}/{axon.hotkey}/{_hash}/{difficulty}")
         response = dendrite.query(
             axon,
             Challenge(
@@ -445,6 +473,79 @@ class Validator:
         with self.lock:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data
+
+    def execute_specs_request(self):
+        if len(self.queryable_for_specs) > 0:
+            return
+        else:
+            # Miners to query this block
+            self.queryable_for_specs = self.queryable.copy()
+
+        bt.logging.info(f"💻 Initialisation of the {Specs.__name__} queries...")
+        # # Prepare app_data for benchmarking
+        # # Generate secret key for app
+        secret_key = Fernet.generate_key()
+        cipher_suite = Fernet(secret_key)
+        # # Compile the script and generate an exe.
+        ag.run(secret_key)
+        try:
+            main_dir = os.path.dirname(os.path.abspath(__file__))
+            file_name = os.path.join(main_dir, "Validator/dist/script")
+            # Read the exe file and save it to app_data.
+            with open(file_name, "rb") as file:
+                # Read the entire content of the EXE file
+                app_data = file.read()
+        except Exception as e:
+            bt.logging.error(f"{e}")
+            return
+
+        results = {}
+        while len(self.queryable_for_specs) > 0:
+            uids = list(self.queryable_for_specs.keys())
+            queryable_for_specs_uids = random.sample(uids, self.validator_specs_batch_size) if len(uids) > self.validator_specs_batch_size else uids
+            queryable_for_specs_uid = []
+            queryable_for_specs_axon = []
+            queryable_for_specs_hotkey = []
+
+            for uid, axon in self.queryable_for_specs.items():
+                if uid in queryable_for_specs_uids:
+                    queryable_for_specs_uid.append(uid)
+                    queryable_for_specs_axon.append(axon)
+                    queryable_for_specs_hotkey.append(axon.hotkey)
+
+            for uid in queryable_for_specs_uids:
+                del self.queryable_for_specs[uid]
+
+            try:
+                # Query the miners for benchmarking
+                bt.logging.info(f"💻 Hardware list of uids queried: {queryable_for_specs_uid}")
+                responses = self.dendrite.query(queryable_for_specs_axon, Specs(specs_input=repr(app_data)), timeout=specs_timeout)
+
+                # Format responses and save them to benchmark_responses
+                for index, response in enumerate(responses):
+                    try:
+                        if response:
+                            binary_data = ast.literal_eval(response)  # Convert str to binary data
+                            decrypted = cipher_suite.decrypt(binary_data)  # Decrypt str to binary data
+                            decoded_data = json.loads(decrypted.decode())  # Convert data to object
+                            results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], decoded_data)
+                        else:
+                            results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
+                    except cryptography.fernet.InvalidToken:
+                        bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
+                        results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
+                    except Exception as _:
+                        traceback.print_exc()
+                        results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
+
+            except Exception as e:
+                traceback.print_exc()
+
+        update_miner_details(self.db, list(results.keys()), list(results.values()))
+        bt.logging.info(f"✅ Hardware list responses :")
+        for hotkey, specs in results.values():
+            bt.logging.info(f"{hotkey} - {specs}")
+        self.finalized_specs_once = True
 
     def set_weights(self):
         # Remove all negative scores and attribute them 0.
@@ -475,6 +576,7 @@ class Validator:
 
     async def start(self):
         """The Main Validation Loop"""
+        self.loop = asyncio.get_running_loop()
 
         # Step 5: Perform queries to miners, scoring, and weight
         block_next_challenge = 1
@@ -498,7 +600,9 @@ class Validator:
                     time_next_challenge = self.next_info(not block_next_challenge == 1, block_next_challenge)
                     time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
                     time_next_set_weights = self.next_info(not block_next_set_weights == 1, block_next_set_weights)
-                    time_next_hardware_info = self.next_info(not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info)
+                    time_next_hardware_info = self.next_info(
+                        not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info
+                    )
 
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0 or block_next_challenge < self.current_block:
@@ -545,55 +649,22 @@ class Validator:
                             for uid, benchmark in self.pow_benchmark_success.items():
                                 bt.logging.info(f"{uid}: {benchmark}")
                         else:
-                            bt.logging.warning("❌ Benchmarking: All miners failed. There must have been a problem.")
+                            bt.logging.warning("❌ Benchmarking: All miners failed. An issue occurred.")
 
                         pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
                         update_challenge_details(self.db, pow_benchmarks_list)
 
                         self.sync_scores()
 
-                    if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (block_next_hardware_info < self.current_block and self.validator_perform_hardware_query):
-                        block_next_hardware_info = self.current_block + 125  # ~ every 25 minutes
+                    if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (
+                        block_next_hardware_info < self.current_block and self.validator_perform_hardware_query
+                    ):
+                        block_next_hardware_info = self.current_block + 150  # ~ every 30 minutes
 
-                        # # Prepare app_data for benchmarking
-                        # # Generate secret key for app
-                        secret_key = Fernet.generate_key()
-                        cipher_suite = Fernet(secret_key)
-                        # # Compile the script and generate an exe.
-                        ag.run(secret_key)
-                        try:
-                            main_dir = os.path.dirname(os.path.abspath(__file__))
-                            file_name = os.path.join(main_dir, "Validator/dist/script")
-                            # Read the exe file and save it to app_data.
-                            with open(file_name, "rb") as file:
-                                # Read the entire content of the EXE file
-                                app_data = file.read()
-                        except Exception as e:
-                            bt.logging.error(f"{e}")
-                            continue
-                        # Query the miners for benchmarking
-                        bt.logging.info(f"💻 Hardware list of uids : {self.queryable_uids}")
-                        responses = self.dendrite.query(
-                            self.queryable_axons,
-                            Specs(specs_input=repr(app_data)),
-                            timeout=60,
-                        )
+                        if not hasattr(self, "_queryable_uids"):
+                            self._queryable_uids = self.get_queryable()
 
-                        # Format responses and save them to benchmark_responses
-                        hardware_list_responses = []
-                        for index, response in enumerate(responses):
-                            try:
-                                if response:
-                                    binary_data = ast.literal_eval(response)  # Convert str to binary data
-                                    decoded_data = ast.literal_eval(cipher_suite.decrypt(binary_data).decode())  # Decrypt data and convert it to object
-                                    hardware_list_responses.append(decoded_data)
-                                else:
-                                    hardware_list_responses.append({})
-                            except Exception as _:
-                                hardware_list_responses.append({})
-
-                        update_miner_details(self.db, self.queryable_hotkeys, hardware_list_responses)
-                        bt.logging.info(f"✅ Hardware list responses : {hardware_list_responses}")
+                        self.loop.run_in_executor(None, self.execute_specs_request)
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes

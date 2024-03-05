@@ -23,19 +23,34 @@ import typing
 
 import bittensor as bt
 import time
-import torch
 
-from compute import SUSPECTED_EXPLOITERS_HOTKEYS, __version_as_int__, validator_permit_stake, miner_priority_specs, \
-    miner_priority_allocate, miner_priority_challenge, weights_rate_limit
+from compute import (
+    SUSPECTED_EXPLOITERS_HOTKEYS,
+    __version_as_int__,
+    validator_permit_stake,
+    miner_priority_specs,
+    miner_priority_allocate,
+    miner_priority_challenge,
+)
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
 from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
-from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
-from compute.utils.version import check_hashcat_version, try_update, version2number, get_remote_version
+from compute.utils.subtensor import (
+    is_registered,
+    get_current_block,
+    calculate_next_block_time,
+)
+from compute.utils.version import (
+    check_hashcat_version,
+    try_update,
+    version2number,
+    get_remote_version,
+)
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
-from neurons.Miner.specs import get_respond
+from neurons.Miner.specs import RequestSpecsProcessor
+from neurons.Validator.script import check_docker_availability
 
 
 class Miner:
@@ -105,6 +120,14 @@ class Miner:
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
 
+        has_docker, msg = check_docker_availability()
+
+        if not has_docker:
+            bt.logging.error(msg)
+            exit(1)
+        else:
+            bt.logging.info(f"Docker is installed. Version: {msg}")
+
         check_cuda_availability()
 
         # Step 3: Set up hashcat for challenges
@@ -118,6 +141,8 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
 
@@ -196,7 +221,8 @@ class Miner:
         self.miner_subnet_uid = is_registered(
             wallet=self.wallet,
             metagraph=self.metagraph,
-            subtensor=self.subtensor, entity="miner"
+            subtensor=self.subtensor,
+            entity="miner",
         )
 
         # Check for auto update
@@ -267,10 +293,9 @@ class Miner:
         return self.base_priority(synapse) + miner_priority_specs
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    @staticmethod
-    def specs(synapse: Specs) -> Specs:
+    def specs(self, synapse: Specs) -> Specs:
         app_data = synapse.specs_input
-        synapse.specs_output = get_respond(app_data)
+        synapse.specs_output = self.request_specs_processor.get_respond(app_data)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
@@ -309,10 +334,15 @@ class Miner:
 
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
     def challenge(self, synapse: Challenge) -> Challenge:
-        bt.logging.info(
-            f"Received challenge (difficulty, hash, salt, chars): ({synapse.challenge_difficulty}, {synapse.challenge_hash}, {synapse.challenge_salt}, {synapse.challenge_chars})"
-        )
+        if synapse.challenge_difficulty <= 0:
+            bt.logging.warning(f"{synapse.dendrite.hotkey}: Challenge received with a difficulty <= 0 - it can not be solved.")
+            return synapse
+
+        v_id = synapse.dendrite.hotkey[:8]
+        run_id = f"{v_id}/{synapse.challenge_difficulty}/{synapse.challenge_hash[10:20]}"
+
         result = run_miner_pow(
+            run_id=run_id,
             _hash=synapse.challenge_hash,
             salt=synapse.challenge_salt,
             mode=synapse.challenge_mode,
@@ -339,9 +369,7 @@ class Miner:
 
                 valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
                 if percent(len(valid_validators_version), len(valid_validators)) <= self.miner_whitelist_updated_threshold:
-                    bt.logging.info(
-                        f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all."
-                    )
+                    bt.logging.info(f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all.")
                 else:
                     for uid, hotkey, version in valid_validators:
                         try:
@@ -378,24 +406,6 @@ class Miner:
             valid_validator.append((uid, hotkey, version))
         return valid_validator
 
-    def set_weights(self):
-        chain_weights = torch.zeros(self.subtensor.subnetwork_n(netuid=self.config.netuid))
-        chain_weights[self.miner_subnet_uid] = 1
-        # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
-        # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
-        result = self.subtensor.set_weights(
-            netuid=self.config.netuid,  # Subnet to set weights on.
-            wallet=self.wallet,  # Wallet to sign set weights using hotkey.
-            uids=self.uids,  # Uids of the miners to set weights for.
-            weights=chain_weights.float(),  # Weights to set for the miners.
-            version_key=__version_as_int__,
-            wait_for_inclusion=False,
-        )
-        if result:
-            bt.logging.success("Successfully set weights.")
-        else:
-            bt.logging.error("Failed to set weights.")
-
     def next_info(self, cond, next_block):
         if cond:
             return calculate_next_block_time(self.current_block, next_block)
@@ -407,11 +417,9 @@ class Miner:
 
         block_next_updated_validator = 1
         block_next_sync_status = 1
-        block_next_set_weights = self.current_block + weights_rate_limit
 
         time_next_updated_validator = None
         time_next_sync_status = None
-        time_next_set_weights = None
 
         bt.logging.info("Starting miner loop.")
         while True:
@@ -421,9 +429,11 @@ class Miner:
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
-                    time_next_updated_validator = self.next_info(not block_next_updated_validator == 1, block_next_updated_validator)
+                    time_next_updated_validator = self.next_info(
+                        not block_next_updated_validator == 1,
+                        block_next_updated_validator,
+                    )
                     time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
-                    time_next_set_weights = self.next_info(not block_next_sync_status == 1, block_next_set_weights)  # block_next_sync_status on purpose for the first iter
 
                 if self.current_block % block_next_updated_validator == 0 or block_next_updated_validator < self.current_block:
                     block_next_updated_validator = self.current_block + 30  # ~ every 6 minutes
@@ -433,29 +443,24 @@ class Miner:
                     block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
                     self.sync_status()
 
-                # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
-                if self.current_block - self.last_updated_block > weights_rate_limit:
-                    block_next_set_weights = self.current_block + weights_rate_limit
-                    self.set_weights()
-                    self.last_updated_block = self.current_block
+                # Periodically clear some vars
+                if len(self.blocks_done) > 1000:
                     self.blocks_done.clear()
                     self.blocks_done.add(self.current_block)
 
                 bt.logging.info(
                     f"Block: {self.current_block} | "
                     f"Stake: {self.metagraph.S[self.miner_subnet_uid]:.4f} | "
-                    f"Rank: {self.metagraph.R[self.miner_subnet_uid]:.4f} | "
                     f"Trust: {self.metagraph.T[self.miner_subnet_uid]:.4f} | "
-                    f"Consensus: {self.metagraph.C[self.miner_subnet_uid]:.4f} | "
-                    f"Incentive: {self.metagraph.I[self.miner_subnet_uid]:.4f} | "
-                    f"Emission: {self.metagraph.E[self.miner_subnet_uid]:.4f} | "
+                    f"Consensus: {self.metagraph.C[self.miner_subnet_uid]:.6f} | "
+                    f"Incentive: {self.metagraph.I[self.miner_subnet_uid]:.6f} | "
+                    f"Emission: {self.metagraph.E[self.miner_subnet_uid]:.6f} | "
                     f"update_validator: #{block_next_updated_validator} ~ {time_next_updated_validator} | "
-                    f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
-                    f"set_weights: #{block_next_set_weights} ~ {time_next_set_weights}"
+                    f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status}"
                 )
                 time.sleep(5)
 
-            except RuntimeError as e:
+            except (RuntimeError, Exception) as e:
                 bt.logging.error(e)
                 traceback.print_exc()
 

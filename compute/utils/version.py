@@ -144,7 +144,7 @@ def restart_app():
     os.execl(python, python, *sys.argv)
 
 
-def try_update_packages():
+def try_update_packages(force=False):
     bt.logging.info("Try updating packages...")
 
     try:
@@ -154,11 +154,21 @@ def try_update_packages():
         requirements_path = os.path.join(repo_path, "requirements.txt")
 
         python_executable = sys.executable
-        subprocess.check_call([python_executable], "-m", "pip", "install", "-r", requirements_path)
-        subprocess.check_call([python_executable], "-m", "pip", "install", "-e", ".")
+
+        if force:
+            subprocess.check_call(
+                [python_executable], "-m", "pip", "install", "--force-reinstall", "--ignore-installed", "--no-deps", "-r", requirements_path
+            )
+            subprocess.check_call([python_executable], "-m", "pip", "install", "--force-reinstall", "--ignore-installed", "--no-deps", "-e", ".")
+        else:
+            subprocess.check_call([python_executable], "-m", "pip", "install", "-r", requirements_path)
+            subprocess.check_call([python_executable], "-m", "pip", "install", "-e", ".")
+
         bt.logging.info("📦Updating packages finished.")
 
     except Exception as e:
+        if not force:
+            try_update_packages(force=True)
         bt.logging.info(f"Updating packages failed {e}")
 
 
@@ -177,7 +187,7 @@ def check_hashcat_version(hashcat_path: str = "hashcat"):
     try:
         process = subprocess.run([hashcat_path, "--version"], capture_output=True, check=True)
         if process and process.stdout:
-            bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}".strip('\n'))
+            bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}".strip("\n"))
         return True
     except subprocess.CalledProcessError:
         bt.logging.error(
