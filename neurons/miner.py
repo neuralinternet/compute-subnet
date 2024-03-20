@@ -18,11 +18,11 @@
 import asyncio
 import json
 import os
+import time
 import traceback
 import typing
 
 import bittensor as bt
-import time
 
 from compute import (
     SUSPECTED_EXPLOITERS_HOTKEYS,
@@ -49,6 +49,8 @@ from compute.utils.version import (
 )
 from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
 from neurons.Miner.container import build_check_container
+from compute.wandb.wandb import ComputeWandb
+from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
@@ -112,6 +114,9 @@ class Miner:
         # Wallet holds cryptographic information, ensuring secure transactions and communication.
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
+
+        self.wandb = ComputeWandb(self.config, self.wallet.hotkey.ss58_address, os.path.basename(__file__))
+        self.wandb.update_specs()
 
         # Subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
@@ -312,9 +317,15 @@ class Miner:
     def priority_allocate(self, synapse: Allocate) -> float:
         return self.base_priority(synapse) + miner_priority_allocate
 
+    def update_allocation(self, synapse: Allocate):
+        if not synapse.checking and isinstance(synapse.output, dict) and synapse.output.get("status") is True:
+            self.wandb.update_allocated(True)
+            bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}..")
+        if isinstance(synapse.output, dict) and synapse.output.get("status") is False:
+            self.wandb.update_allocated(False)
+
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
-    @staticmethod
-    def allocate(synapse: Allocate) -> Allocate:
+    def allocate(self, synapse: Allocate) -> Allocate:
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
         checking = synapse.checking
@@ -335,6 +346,7 @@ class Miner:
             else:
                 result = deregister_allocation(public_key)
                 synapse.output = result
+        self.update_allocation(synapse)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
@@ -429,8 +441,8 @@ class Miner:
     async def start(self):
         """The Main Validation Loop"""
 
-        block_next_updated_validator = 1
-        block_next_sync_status = 1
+        block_next_updated_validator = self.current_block + 30
+        block_next_sync_status = self.current_block + 25
 
         time_next_updated_validator = None
         time_next_sync_status = None
