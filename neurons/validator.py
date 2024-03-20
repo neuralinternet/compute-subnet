@@ -54,6 +54,7 @@ from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
+from compute.wandb.wandb import ComputeWandb
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
@@ -154,6 +155,8 @@ class Validator:
         # The wallet holds the cryptographic key pairs for the validator.
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
+
+        self.wandb = ComputeWandb(self.config, self.wallet.hotkey.ss58_address, os.path.basename(__file__))
 
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
@@ -262,6 +265,7 @@ class Validator:
     def sync_scores(self):
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
+        self.wandb.update_stats(self.stats)
 
         # Fetch docker requirement
         has_docker: dict = select_has_docker_miners_hotkey(self.db)
@@ -476,8 +480,8 @@ class Validator:
         with self.lock:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data
-            
-            
+
+
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
             return
@@ -541,7 +545,7 @@ class Validator:
                     except Exception as _:
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-                        
+
             except Exception as e:
                 traceback.print_exc()
 
