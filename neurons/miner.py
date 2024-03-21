@@ -245,6 +245,9 @@ class Miner:
         hotkey = synapse.dendrite.hotkey
         synapse_type = type(synapse).__name__
 
+        if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
+            return False, "Whitelisted hotkey"
+
         if hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(f"Blacklisting unrecognized hotkey {hotkey}")
@@ -256,9 +259,6 @@ class Miner:
         if stake < validator_permit_stake and not self.miner_whitelist_not_enough_stake:
             bt.logging.trace(f"Not enough stake {stake}")
             return True, "Not enough stake!"
-
-        if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
-            return True, "Not whitelisted"
 
         if len(self.blacklist_hotkeys) > 0 and hotkey in self.blacklist_hotkeys:
             return True, "Blacklisted hotkey"
