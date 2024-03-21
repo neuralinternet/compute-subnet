@@ -246,6 +246,7 @@ class Miner:
         synapse_type = type(synapse).__name__
 
         if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
+            bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
             return False, "Whitelisted hotkey"
 
         if hotkey not in self.metagraph.hotkeys:
