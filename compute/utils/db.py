@@ -14,12 +14,24 @@ class ComputeDb:
 
     def get_cursor(self):
         return self.conn.cursor()
+    
+    def miner_sweep(self):
+        cursor = self.get_cursor()
+        try:
+            cursor.execute("DELETE * FROM challenge_details WHERE unresponsive_count >= 20")
+            rows = cursor.fetchall()
+            return rows
+        except Exception as e:
+            bt.logging.error(f"Error while getting unresponsive miners : {e}")
+            return []
+        finally:
+            cursor.close()
 
     def init(self):
         cursor = self.get_cursor()
 
         try:
-            cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE, unresponsive_count INTEGER DEFAULT 0)")
             cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute("CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute(
