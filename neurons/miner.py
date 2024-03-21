@@ -30,7 +30,7 @@ from compute import (
     validator_permit_stake,
     miner_priority_specs,
     miner_priority_allocate,
-    miner_priority_challenge,
+    miner_priority_challenge, TRUSTED_VALIDATORS_HOTKEYS,
 )
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
@@ -202,10 +202,12 @@ class Miner:
         return config
 
     def init_black_and_white_list(self):
+        default_whitelist = self.config.whitelist_hotkeys + TRUSTED_VALIDATORS_HOTKEYS
+
         # Set blacklist and whitelist arrays
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
         self.blacklist_coldkeys = {coldkey for coldkey in self.config.blacklist_coldkeys}
-        self.whitelist_hotkeys = {hotkey for hotkey in self.config.whitelist_hotkeys}
+        self.whitelist_hotkeys = {hotkey for hotkey in default_whitelist}
         self.whitelist_coldkeys = {coldkey for coldkey in self.config.whitelist_coldkeys}
 
         if self.config.blacklist_exploiters:
