@@ -377,7 +377,7 @@ class Validator:
 
         dict_filtered_axons_version = {}
         for uid, axon in dict_filtered_axons.items():
-            if latest_version and axon.version >= latest_version:
+            if latest_version and latest_version <= axon.version < 600:
                 dict_filtered_axons_version[uid] = axon
         return dict_filtered_axons_version
 
@@ -413,10 +413,12 @@ class Validator:
 
     def get_valid_tensors(self, metagraph):
         tensors = []
+        self.total_current_miners = 0
         for uid in metagraph.uids:
             neuron = metagraph.neurons[uid]
 
             if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
+                self.total_current_miners += 1
                 tensors.append(True)
             else:
                 tensors.append(False)
