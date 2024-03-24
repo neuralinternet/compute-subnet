@@ -13,27 +13,13 @@ class ComputeDb:
         self.conn.close()
 
     def get_cursor(self):
-        return self.conn.cursor()
-    
-    def miner_sweep(self):
-        cursor = self.get_cursor()
-        try:
-            cursor.execute("BEGIN;")
-            cursor.execute("DELETE FROM challenge_details WHERE uid IN (SELECT uid FROM miner WHERE unresponsive_count >= 20);")
-            cursor.execute("DELETE FROM miner WHERE unresponsive_count >= 20;")
-            cursor.execute("COMMIT;")
-        except Exception as e:
-            cursor.execute("ROLLBACK;")
-            bt.logging.error(f"Error while purging unresponsive miners: {e}")
-        finally:
-            cursor.close()
-            return deleted_miners  # Return the number of miners deleted
+        return self.conn.cursor()  # Return the number of miners deleted
 
     def init(self):
         cursor = self.get_cursor()
 
         try:
-            cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE, unresponsive_count INTEGER DEFAULT 0)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE)")
             cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute("CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute(
@@ -45,6 +31,7 @@ class ComputeDb:
                     elapsed_time REAL,
                     difficulty INTEGER,
                     created_at TIMESTAMP,
+                    unresponsive_count INTEGER,
                     FOREIGN KEY (uid) REFERENCES miner(uid) ON DELETE CASCADE,
                     FOREIGN KEY (ss58_address) REFERENCES miner(ss58_address) ON DELETE CASCADE
                 )

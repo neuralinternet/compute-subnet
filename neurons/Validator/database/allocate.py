@@ -71,7 +71,11 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
     try:
         cursor.execute(f"DELETE FROM miner_details")
         for index, (hotkey, response) in enumerate(benchmark_responses):
-            cursor.execute("INSERT INTO miner_details (id, hotkey, details) VALUES (?, ?, ?)", (hotkey_list[index], hotkey, json.dumps(response)))
+            if json.dumps(response):
+                cursor.execute("INSERT INTO miner_details (id, hotkey, details) VALUES (?, ?, ?)", (hotkey_list[index], hotkey, json.dumps(response)))
+            else:
+                cursor.execute("UPDATE miner SET unresponsive_count = unresponsive_count + 1 WHERE hotkey = ?", (hotkey))
+                cursor.execute("DELETE FROM challenge_details WHERE uid IN (SELECT uid FROM miner WHERE unresponsive_count >= 10);")
         db.conn.commit()
     except Exception as e:
         db.conn.rollback()
