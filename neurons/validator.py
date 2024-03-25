@@ -481,7 +481,6 @@ class Validator:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data
 
-
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
             return

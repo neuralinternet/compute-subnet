@@ -58,6 +58,7 @@ class ComputeWandb:
         This function update the allocated value on miner side.
         It's useless to fake this information because its only used as public purpose.
         Not used by the validators to calculate your steak :meat:.
+        allocated: hotkey of the validator allocating
         """
         if self.run:
             self.run.config["allocated"] = allocated
@@ -69,17 +70,3 @@ class ComputeWandb:
             self.run.config["stats"] = stats
         else:
             bittensor.logging.warning(f"wandb init failed, update stats not possible.")
-
-    # def update_allocation(self, hotkey: str, allocated: bool):
-    #     artifact = wandb.Artifact("allocated", type="dataset")
-    #     artifact.add({hotkey: allocated}, hotkey)
-    #     self.run.log_artifact(artifact)
-
-    # @staticmethod
-    # def update_db():
-    #     artifact = wandb.Artifact("db", type="dataset")
-    #     artifact.add_file("database.db")
-    #     artifact.description = "Validator database."
-    #
-    #     run_db = wandb.init(project=PUBLIC_WANDB_NAME, job_type="database-upload")
-    #     run_db.log_artifact(artifact)

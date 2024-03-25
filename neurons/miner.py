@@ -319,10 +319,10 @@ class Miner:
 
     def update_allocation(self, synapse: Allocate):
         if not synapse.checking and isinstance(synapse.output, dict) and synapse.output.get("status") is True:
-            self.wandb.update_allocated(True)
+            self.wandb.update_allocated(synapse.dendrite.hotkey)
             bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}..")
         if isinstance(synapse.output, dict) and synapse.output.get("status") is False:
-            self.wandb.update_allocated(False)
+            self.wandb.update_allocated(None)
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
     def allocate(self, synapse: Allocate) -> Allocate:
