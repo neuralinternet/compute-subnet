@@ -55,7 +55,7 @@ from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
-from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, select_returns_specs_miners_hotkey, get_miner_details
+from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
@@ -265,7 +265,6 @@ class Validator:
 
         # Fetch docker requirement
         has_docker: dict = select_has_docker_miners_hotkey(self.db)
-        returns_specs: dict = select_returns_specs_miners_hotkey(self.db)
 
         self.pretty_print_dict_values(self.stats)
 
@@ -276,13 +275,10 @@ class Validator:
                     # This part is to ensure the upgrade to 1.3.10 is running smoothly. But should theoretically be removed after it.
                     if not self.finalized_specs_once:
                         self.stats[uid]["has_docker"] = True
-                        self.stats[uid]["returns_specs"] = True
                     else:
                         self.stats[uid]["has_docker"] = has_docker[uid]
-                        self.stats[uid]["returns_specs"] = returns_specs[uid]
                 except KeyError:
                     self.stats[uid]["has_docker"] = False
-                    self.stats[uid]["returns_specs"] = False
 
                 hotkey = self.stats[uid].get("ss58_address")
                 score = calc_score(self.stats[uid], hotkey=hotkey)
@@ -482,7 +478,7 @@ class Validator:
             self.new_pow_benchmark[uid] = result_data
             
             
-    def execute_specs_request(self, db: ComputeDb):
+    def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
             return
         else:
@@ -525,7 +521,6 @@ class Validator:
                 del self.queryable_for_specs[uid]
 
             try:
-                # TODO: // IF RESPONSE = NULL, THEN ADD TO THE RESULTS WITH EMPTY DICT
                 # Query the miners for benchmarking
                 bt.logging.info(f"💻 Hardware list of uids queried: {queryable_for_specs_uid}")
                 responses = self.dendrite.query(queryable_for_specs_axon, Specs(specs_input=repr(app_data)), timeout=specs_timeout)
@@ -539,8 +534,6 @@ class Validator:
                             decoded_data = json.loads(decrypted.decode())  # Convert data to object
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], decoded_data)
                         else:
-                            cursor = db.get_cursor()
-                            cursor.execute("UPDATE miner SET unresponsive_count = unresponsive_count + 1 WHERE uid = "+queryable_for_specs_uid[index])
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except cryptography.fernet.InvalidToken:
                         bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
@@ -548,7 +541,7 @@ class Validator:
                     except Exception as _:
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-                db.miner_sweep()
+                        
             except Exception as e:
                 traceback.print_exc()
 

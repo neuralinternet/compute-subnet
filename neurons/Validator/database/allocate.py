@@ -44,28 +44,6 @@ def select_has_docker_miners_hotkey(db: ComputeDb):
         cursor.close()
 
 
-def select_returns_specs_miners_hotkey(db: ComputeDb):
-    cursor = db.get_cursor()
-    try:
-        # Fetch records from miner_details table where no_specs_count is less than 20
-        cursor.execute("""
-            SELECT id, hotkey, no_specs_count FROM miner_details
-            WHERE no_specs_count < 20
-        """)
-        rows = cursor.fetchall()
-
-        uid_hotkey_dict = {}
-        for row in rows:
-            uid, hotkey, no_specs_count = row
-            uid_hotkey_dict[uid] = hotkey
-        return uid_hotkey_dict
-    except Exception as e:
-        bt.logging.error(f"Error while getting miners with no_specs_count < 20: {e}")
-        return {}
-    finally:
-        cursor.close()
-
-
 # Fetch hotkeys from database that meets device_requirement
 def select_allocate_miners_hotkey(db: ComputeDb, device_requirement):
     cursor = db.get_cursor()

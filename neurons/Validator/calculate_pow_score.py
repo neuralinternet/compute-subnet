@@ -59,7 +59,6 @@ def calc_score(response, hotkey, mock=False):
         challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
         challenge_difficulty_avg = prevent_none(response["challenge_difficulty_avg"])
         has_docker = response.get("has_docker", False)
-        returns_specs = response.get("returns_specs", False)
 
         if last_20_challenge_failed >= 10 or challenge_successes == 0:
             return 0
@@ -109,7 +108,7 @@ def calc_score(response, hotkey, mock=False):
         max_score = max_score_challenge + max_score_allocation
 
         # Docker and specs penalty
-        penalty = not(returns_specs and has_docker)
+        penalty = not(has_docker)
 
         final_score = 0
         if allocation_status:
@@ -121,6 +120,11 @@ def calc_score(response, hotkey, mock=False):
 
         # Final score is > 0
         final_score = max(0, final_score)
+
+        # Debugging
+        # print("Final score:", final_score)
+        # print("Penalty:", penalty)
+        # print("Allocation status:",allocation_status)
 
         # Normalize the score
         normalized_score = normalize(final_score, 0, max_score)

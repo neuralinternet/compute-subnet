@@ -561,8 +561,18 @@ def list_allocations():
 
 
 def list_resources():
+
+    # Show and sync status from wandb based on user input: y/n
+    sync_status_input = input("Sync and show status (available/reserved)? This may take some time. y/n: ")
+    if sync_status_input.lower() in ['y', 'yes']:
+        sync_status = True
+    elif sync_status_input.lower() in ['n', 'no']:
+        sync_status = False
+    else:
+        print("Invalid input. Please respond with 'y' or 'n'.")
+
     # Wandb is mandatory
-    if wandb.api.api_key is None:
+    if sync_status and wandb.api.api_key is None:
         print("The requested function is unavailable without Weights & Biases (wandb) integration.\n"
               "Kindly note that the user must be logged in to wandb via API key to proceed.\n" 
               "For assistance with obtaining the API key, please contact the Neural Internet team.")
@@ -639,9 +649,12 @@ def list_resources():
             hard_disk = "N/A"
         
         # Allocation status
-        status = "Avail."
-        if check_latest_allocation_status(hotkey, False):
-            status = "Res."
+        status = "N/A"
+        if sync_status:
+            if check_latest_allocation_status(hotkey, False):
+                status = "Res."
+            else:
+                status = "Avail."
 
         # Print the row with column separators
         row_data = [hotkey, gpu_name, gpu_capacity, gpu_count, cpu_count, ram, hard_disk, status]
@@ -683,7 +696,7 @@ def upload_wandb(hotkey, flag):
         run = wandb.init(
             project="allocated-miners", 
             name="hotkeys", reinit=True, 
-            settings=wandb.Settings(_disable_stats=True), 
+            settings=wandb.Settings(_disable_stats=True, console='off'),
             )
         
         # Log the hotkey along with the allocation_status
@@ -712,7 +725,7 @@ def main():
     parser_allocate.set_defaults(func=allocate)
 
     # Subparser for the 'allocate' command
-    parser_allocate = subparsers.add_parser('a_h', help='Allocate resource via hotkey')
+    parser_allocate = subparsers.add_parser('a_hotkey', help='Allocate resource via hotkey')
     parser_allocate.set_defaults(func=allocate_hotkey)
 
     # Subparser for the 'deallocate' command
@@ -724,11 +737,14 @@ def main():
     parser_list.set_defaults(func=list_allocations)
 
     # Subparser for the 'list_resources'
-    parser_list = subparsers.add_parser('list_r', help='List available resources')
+    parser_list = subparsers.add_parser('list_r', help='List resources')
     parser_list.set_defaults(func=list_resources)
 
     # Print help before entering the command loop
     parser.print_help()
+
+    # Set the WANDB_SILENT environment variable to 'true'
+    os.environ['WANDB_SILENT'] = 'true'
 
     # Command loop
     while True:
