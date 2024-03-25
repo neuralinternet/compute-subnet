@@ -13,7 +13,7 @@ class ComputeDb:
         self.conn.close()
 
     def get_cursor(self):
-        return self.conn.cursor()
+        return self.conn.cursor()  # Return the number of miners deleted
 
     def init(self):
         cursor = self.get_cursor()
@@ -31,6 +31,7 @@ class ComputeDb:
                     elapsed_time REAL,
                     difficulty INTEGER,
                     created_at TIMESTAMP,
+                    unresponsive_count INTEGER,
                     FOREIGN KEY (uid) REFERENCES miner(uid) ON DELETE CASCADE,
                     FOREIGN KEY (ss58_address) REFERENCES miner(ss58_address) ON DELETE CASCADE
                 )

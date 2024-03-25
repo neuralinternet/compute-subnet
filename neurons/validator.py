@@ -382,7 +382,7 @@ class Validator:
 
         dict_filtered_axons_version = {}
         for uid, axon in dict_filtered_axons.items():
-            if latest_version and axon.version >= latest_version:
+            if latest_version and latest_version <= axon.version < 600:
                 dict_filtered_axons_version[uid] = axon
         return dict_filtered_axons_version
 
@@ -418,10 +418,12 @@ class Validator:
 
     def get_valid_tensors(self, metagraph):
         tensors = []
+        self.total_current_miners = 0
         for uid in metagraph.uids:
             neuron = metagraph.neurons[uid]
 
             if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
+                self.total_current_miners += 1
                 tensors.append(True)
             else:
                 tensors.append(False)
@@ -478,8 +480,9 @@ class Validator:
         with self.lock:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data
-
-    def execute_specs_request(self):
+            
+            
+    def execute_specs_request(self, db: ComputeDb):
         if len(self.queryable_for_specs) > 0:
             return
         else:
@@ -522,6 +525,7 @@ class Validator:
                 del self.queryable_for_specs[uid]
 
             try:
+                # TODO: // IF RESPONSE = NULL, THEN ADD TO THE RESULTS WITH EMPTY DICT
                 # Query the miners for benchmarking
                 bt.logging.info(f"💻 Hardware list of uids queried: {queryable_for_specs_uid}")
                 responses = self.dendrite.query(queryable_for_specs_axon, Specs(specs_input=repr(app_data)), timeout=specs_timeout)
@@ -535,6 +539,8 @@ class Validator:
                             decoded_data = json.loads(decrypted.decode())  # Convert data to object
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], decoded_data)
                         else:
+                            cursor = db.get_cursor()
+                            cursor.execute("UPDATE miner SET unresponsive_count = unresponsive_count + 1 WHERE uid = "+queryable_for_specs_uid[index])
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except cryptography.fernet.InvalidToken:
                         bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
@@ -542,7 +548,7 @@ class Validator:
                     except Exception as _:
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-
+                db.miner_sweep()
             except Exception as e:
                 traceback.print_exc()
 
