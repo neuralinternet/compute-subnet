@@ -93,18 +93,44 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
 def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[str, Any]):
     cursor = db.get_cursor()
     try:
-        # Check if no_specs_count column exists, if not, add it
-        cursor.execute("""
-            PRAGMA table_info(miner_details);
-        """)
+        # Update th database structure while keeping the data
+        # Check the number of columns in the miner_details table
+        cursor.execute("PRAGMA table_info(miner_details);")
         table_info = cursor.fetchall()
-        no_specs_count_exists = any(column[1] == 'no_specs_count' for column in table_info)
-        
-        if not no_specs_count_exists:
+        column_count = len(table_info)
+
+        # Check if there is a UNIQUE index on the hotkey column
+        cursor.execute("PRAGMA index_list('miner_details')")
+        indices = cursor.fetchall()
+        hotkey_unique = False
+        for index in indices:
+            cursor.execute(f"PRAGMA index_info('{index[1]}')")
+            index_info = cursor.fetchall()
+            if any(column[2] == 'hotkey' for column in index_info) and index[3] == 0:
+                hotkey_unique = True
+                break
+
+        # If there are 3 columns or hotkey lacks a UNIQUE constraint, alter the table
+        if column_count == 3 or not hotkey_unique:
+            # Create a new table with the UNIQUE constraint and no_specs_count column
             cursor.execute("""
-                ALTER TABLE miner_details
-                ADD COLUMN no_specs_count INTEGER DEFAULT 0;
+                CREATE TABLE IF NOT EXISTS new_miner_details (
+                    id INTEGER PRIMARY KEY,
+                    hotkey TEXT UNIQUE,
+                    details TEXT,
+                    no_specs_count INTEGER DEFAULT 0
+                );
             """)
+            # Copy data from the old table to the new table
+            cursor.execute("""
+                INSERT INTO new_miner_details (id, hotkey, details)
+                SELECT id, hotkey, details FROM miner_details;
+            """)
+            # Drop the old table
+            cursor.execute("DROP TABLE miner_details;")
+            # Rename the new table to the old table's name
+            cursor.execute("ALTER TABLE new_miner_details RENAME TO miner_details;")
+            db.conn.commit()
 
         # Update miner_details  
         for index, (hotkey, response) in enumerate(benchmark_responses):

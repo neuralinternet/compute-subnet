@@ -174,5 +174,5 @@ def check_latest_allocation_status(hotkey, mock=False):
         return False
           
     except Exception as e:
-        print("Error checking latest allocation status:", e)
+        bt.logging.error("Error checking latest allocation status:", e)
         return None
