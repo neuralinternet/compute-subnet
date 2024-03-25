@@ -94,6 +94,25 @@ sudo apt install at
 docker run hello-world  # Must not return you any error.
 ```
 
+To run a docker container for allocation, user must be added to docker group to run without sudo command.
+
+```bash
+sudo groupadd docker
+sudo usermod -aG docker $USER
+sudo gpasswd -a $USER docker
+newgrp docker
+sudo restart
+```
+
+### Nvidia toolkit
+
+To run a container for allocation, nvidia toolkit for docker needs to be installed.
+
+```bash
+sudo apt-get install -y nvidia-container-toolkit
+sudo apt install -y nvidia-docker2
+```
+
 ### Running subtensor locally
 
 ```bash
@@ -126,11 +145,13 @@ critical due to their superior computational power, particularly in tasks demand
 Consequently, miners utilizing GPU instances are positioned to receive substantially higher rewards compared to their
 CPU counterparts, in alignment with the greater processing power and efficiency GPUs bring to the network.
 
-A key aspect of the miners' contribution is the management of resource reservations. Miners have the autonomy to set
-specific timelines for each reservation of their computational resources. This timeline dictates the duration for which
-the resources are allocated to a particular task or user. Once the set timeline reaches its conclusion, the reservation
-automatically expires, thereby freeing up the resources for subsequent allocations. This mechanism ensures a dynamic and
-efficient distribution of computational power, catering to varying demands within the network.
+The primary contribution of miners lies in providing their resources to the validator. The management of these resources' 
+reservations is entirely handled on the validator's side. A validator has the capability to allocate and deallocate a miner's 
+resource based on availability and demand. Currently, the maximum duration of allocation for each reservation is limited to 60 days. 
+This mechanism guarantees a dynamic and efficient distribution of computational power, accommodating the fluctuating demands across the network.
+
+Important: It's crucial to ensure that port 4444 is open on the host machine to grant validators access to the allocated resource on the miner.
+
 
 ```bash
 # To run the miner
@@ -183,7 +204,7 @@ The score calculation function determines a miner's performance based on various
 
 **Exponential Rewards for Difficulty**: Higher problem difficulty leads to more significant rewards. An exponential formula is applied to increase rewards based on difficulty.
 
-**Allocation Bonus**: Miners that have allocated machine receive an additional bonus added to their final score.
+**Allocation Bonus**: Miners that have allocated machine receive the maximum challenge score and an additional allocation score, that is proportiuonal to their average challenge difficulty reached prior to allocation.
 
 **Effect of Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score.
 

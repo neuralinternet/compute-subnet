@@ -13,14 +13,14 @@ class ComputeDb:
         self.conn.close()
 
     def get_cursor(self):
-        return self.conn.cursor()  # Return the number of miners deleted
+        return self.conn.cursor()
 
     def init(self):
         cursor = self.get_cursor()
 
         try:
             cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE)")
-            cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT, no_specs_count INTEGER DEFAULT 0)")
             cursor.execute("CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute(
                 """
@@ -31,12 +31,12 @@ class ComputeDb:
                     elapsed_time REAL,
                     difficulty INTEGER,
                     created_at TIMESTAMP,
-                    unresponsive_count INTEGER,
                     FOREIGN KEY (uid) REFERENCES miner(uid) ON DELETE CASCADE,
                     FOREIGN KEY (ss58_address) REFERENCES miner(ss58_address) ON DELETE CASCADE
                 )
             """
             )
+            cursor.execute("CREATE TABLE IF NOT EXISTS allocation (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
 
