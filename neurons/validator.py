@@ -39,6 +39,7 @@ import Validator.app_generator as ag
 from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
+    pow_max_difficulty,
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -54,7 +55,7 @@ from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
 from neurons.Validator.calculate_pow_score import calc_score
-from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey
+from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, select_returns_specs_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
@@ -264,6 +265,7 @@ class Validator:
 
         # Fetch docker requirement
         has_docker: dict = select_has_docker_miners_hotkey(self.db)
+        returns_specs: dict = select_returns_specs_miners_hotkey(self.db)
 
         self.pretty_print_dict_values(self.stats)
 
@@ -274,10 +276,13 @@ class Validator:
                     # This part is to ensure the upgrade to 1.3.10 is running smoothly. But should theoretically be removed after it.
                     if not self.finalized_specs_once:
                         self.stats[uid]["has_docker"] = True
+                        self.stats[uid]["returns_specs"] = True
                     else:
                         self.stats[uid]["has_docker"] = has_docker[uid]
+                        self.stats[uid]["returns_specs"] = returns_specs[uid]
                 except KeyError:
                     self.stats[uid]["has_docker"] = False
+                    self.stats[uid]["returns_specs"] = False
 
                 hotkey = self.stats[uid].get("ss58_address")
                 score = calc_score(self.stats[uid], hotkey=hotkey)
@@ -339,10 +344,10 @@ class Validator:
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
             if challenge_successes >= 20:
-                if last_20_challenge_failed == 0:
-                    difficulty = current_difficulty + 1
+                if last_20_challenge_failed <= 1:
+                    difficulty = min(current_difficulty + 1, pow_max_difficulty)
                 elif last_20_challenge_failed > 2:
-                    difficulty = current_difficulty - 1
+                    difficulty = max(current_difficulty - 1, pow_min_difficulty)
                 else:
                     difficulty = current_difficulty
         except KeyError:
@@ -542,9 +547,17 @@ class Validator:
                 traceback.print_exc()
 
         update_miner_details(self.db, list(results.keys()), list(results.values()))
-        bt.logging.info(f"✅ Hardware list responses :")
+        bt.logging.info(f"✅ Hardware list responses:")
+
+        # Hardware list response hotfix 1.3.11
+        db = ComputeDb()
+        hardware_details = get_miner_details(db)
+        for hotkey, specs in hardware_details.items():
+            bt.logging.info(f"{hotkey} - {specs}")
+        """
         for hotkey, specs in results.values():
             bt.logging.info(f"{hotkey} - {specs}")
+        """
         self.finalized_specs_once = True
 
     def set_weights(self):
@@ -607,7 +620,7 @@ class Validator:
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0 or block_next_challenge < self.current_block:
                         # Next block the validators will challenge again.
-                        block_next_challenge = self.current_block + random.randint(50, 80)  # between ~ 10 and 16 minutes
+                        block_next_challenge = self.current_block + random.randint(50, 80)  # 50,80 -> between ~ 10 and 16 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
@@ -656,10 +669,11 @@ class Validator:
 
                         self.sync_scores()
 
+                    # Perform specs queries
                     if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (
                         block_next_hardware_info < self.current_block and self.validator_perform_hardware_query
                     ):
-                        block_next_hardware_info = self.current_block + 150  # ~ every 30 minutes
+                        block_next_hardware_info = self.current_block + 150  # 150 -> ~ every 30 minutes
 
                         if not hasattr(self, "_queryable_uids"):
                             self._queryable_uids = self.get_queryable()

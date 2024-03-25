@@ -47,7 +47,8 @@ from compute.utils.version import (
     version2number,
     get_remote_version,
 )
-from neurons.Miner.allocate import check_allocation, register_allocation
+from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
+from neurons.Miner.container import build_check_container
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
@@ -120,6 +121,7 @@ class Miner:
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
 
+        build_check_container('my-compute-subnet','sn27-check-container')
         has_docker, msg = check_docker_availability()
 
         if not has_docker:
@@ -315,12 +317,21 @@ class Miner:
         checking = synapse.checking
 
         if checking is True:
-            result = check_allocation(timeline, device_requirement)
-            synapse.output = result
+            if timeline > 0:
+                result = check_allocation(timeline, device_requirement)
+                synapse.output = result
+            else:
+                public_key = synapse.public_key
+                result = check_if_allocated(public_key=public_key)
+                synapse.output = result
         else:
             public_key = synapse.public_key
-            result = register_allocation(timeline, device_requirement, public_key)
-            synapse.output = result
+            if timeline > 0:
+                result = register_allocation(timeline, device_requirement, public_key)
+                synapse.output = result
+            else:
+                result = deregister_allocation(public_key)
+                synapse.output = result
         return synapse
 
     # The blacklist function decides if a request should be ignored.

@@ -20,7 +20,7 @@ class ComputeDb:
 
         try:
             cursor.execute("CREATE TABLE IF NOT EXISTS miner (uid INTEGER PRIMARY KEY, ss58_address TEXT UNIQUE)")
-            cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS miner_details (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT, no_specs_count INTEGER DEFAULT 0)")
             cursor.execute("CREATE TABLE IF NOT EXISTS tb (id INTEGER PRIMARY KEY, hotkey TEXT, details TEXT)")
             cursor.execute(
                 """
@@ -36,6 +36,7 @@ class ComputeDb:
                 )
             """
             )
+            cursor.execute("CREATE TABLE IF NOT EXISTS allocation (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
 

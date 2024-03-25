@@ -17,6 +17,9 @@
 # Step 1: Import necessary libraries and modules
 
 import bittensor as bt
+import base64
+import docker
+from io import BytesIO
 
 from neurons.Miner.container import kill_container, run_container, check_container
 from neurons.Miner.schedule import start
@@ -46,12 +49,48 @@ def register_allocation(timeline, device_requirement, public_key):
 
         run_status = run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key)
 
+        if run_status["status"]:
+            bt.logging.info("Successfully allocated container.")
+
         # Kill container when it meets timeline
         start(timeline)
         return run_status
+    
     except Exception as e:
-        bt.logging.info(f"Error registering container {e}")
+        bt.logging.info(f"Error allocating container {e}")
     return {"status": False}
+
+
+# Deregister allocation
+def deregister_allocation(public_key):
+    try:
+        file_path = 'allocation_key'
+        # Open the file in read mode ('r') and read the data
+        with open(file_path, 'r') as file:
+            allocation_key_encoded = file.read()
+
+        # Decode the base64-encoded public key from the file
+        allocation_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+
+        # Kill container when the request is valid
+        if allocation_key.strip() == public_key.strip():
+            kill_status = kill_container()
+            if kill_status:
+                # Remove the key from the file after successful deallocation
+                with open(file_path, 'w') as file:
+                    file.truncate(0)  # Clear the file
+                
+                bt.logging.info("Successfully de-allocated container.")
+                return {"status": True}
+            else:
+                return {"status": False}
+        else:
+            bt.logging.info(f"Permission denied.")
+            return {"status": False}
+
+    except Exception as e:
+        bt.logging.info(f"Error de-allocating container {e}")
+        return {"status": False}
 
 
 # Check if miner is acceptable
@@ -61,3 +100,37 @@ def check_allocation(timeline, device_requirement):
         return {"status": False}
     # Check if there is enough device
     return {"status": True}
+
+
+def check_if_allocated(public_key):
+    try:
+        file_path = 'allocation_key'
+        # Check if the file exists
+        if not os.path.exists(file_path):
+            return {"status": False}
+
+        # Open the file in read mode ('r') and read the data
+        with open(file_path, 'r') as file:
+            allocation_key_encoded = file.read()
+
+        # Check if the key is empty
+        if not allocation_key_encoded.strip():
+            return {"status": False}
+
+        # Decode the base64-encoded public key from the file
+        allocation_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+
+        # Compare the decoded key with the public key
+        if allocation_key.strip() != public_key.strip():
+            return {"status": False}
+
+        # Check if the container is running
+        if not check_container():
+            return {"status": False}
+
+        # All checks passed, return True
+        return {"status": True}
+    except Exception as e:
+        # Handle any exceptions that occur
+        # Log the exception or handle it as needed
+        return {"status": False}
