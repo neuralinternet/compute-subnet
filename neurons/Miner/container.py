@@ -24,6 +24,7 @@ import string
 import subprocess
 
 import docker
+from io import BytesIO
 import sys
 from docker.types import DeviceRequest
 
@@ -31,6 +32,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import RSAEncryption as rsa
+
+import bittensor as bt
 
 image_name = "ssh-image"  # Docker image name
 container_name = "ssh-container"  # Docker container name
@@ -82,20 +85,23 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
         # Step 1: Build the Docker image with an SSH server
         dockerfile_content = (
             """
-        FROM ubuntu
-        RUN apt-get update && apt-get install -y openssh-server
-        RUN mkdir -p /run/sshd  # Create the /run/sshd directory
-        RUN echo 'root:"""
-            + password
-            + """' | chpasswd
-        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-        CMD ["/usr/sbin/sshd", "-D"]
-        """
+            FROM ubuntu
+            RUN apt-get update && apt-get install -y openssh-server
+            RUN mkdir -p /run/sshd  # Create the /run/sshd directory
+            RUN echo 'root:'{}'' | chpasswd
+            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            CMD ["/usr/sbin/sshd", "-D"]
+            """.format(password)
         )
 
-        dockerfile_path = "/tmp/dockerfile"
+        # Ensure the tmp directory exists within the current directory
+        tmp_dir_path = os.path.join('.', 'tmp')
+        os.makedirs(tmp_dir_path, exist_ok=True)
+
+        # Path for the Dockerfile within the tmp directory
+        dockerfile_path = os.path.join(tmp_dir_path, 'dockerfile')
         with open(dockerfile_path, "w") as dockerfile:
             dockerfile.write(dockerfile_content)
 
@@ -106,8 +112,8 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
-        if gpu_usage["capacity"] == 0:
-            device_requests = []
+        # if gpu_usage["capacity"] == 0:
+        #    device_requests = []
         container = client.containers.run(
             image=image_name,
             name=container_name,
@@ -120,12 +126,21 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
         # Check the status to determine if the container ran successfully
 
         if container.status == "created":
-            # bt.logging.info("Container was created successfully")
+            #bt.logging.info("Container was created successfully.")
             info = {"username": "root", "password": password, "port": ssh_port}
             info_str = json.dumps(info)
             public_key = public_key.encode("utf-8")
             encrypted_info = rsa.encrypt_data(public_key, info_str)
             encrypted_info = base64.b64encode(encrypted_info).decode("utf-8")
+
+            # The path to the file where you want to store the data
+            file_path = 'allocation_key'
+            allocation_key = base64.b64encode(public_key).decode("utf-8")
+
+            # Open the file in write mode ('w') and write the data
+            with open(file_path, 'w') as file:
+                file.write(allocation_key)
+    
             return {"status": True, "info": encrypted_info}
         else:
             # bt.logging.info(f"Container falied with status : {container.status}")
@@ -167,3 +182,27 @@ def password_generator(length):
     alphabet = string.ascii_letters + string.digits  # You can customize this as needed
     random_str = "".join(secrets.choice(alphabet) for _ in range(length))
     return random_str
+
+
+def build_check_container(image_name: str, container_name: str):
+    client = docker.from_env()
+    dockerfile = '''
+    FROM alpine:latest
+    CMD echo "compute-subnet"
+    '''
+    try:
+        # Create a file-like object from the Dockerfile
+        f = BytesIO(dockerfile.encode('utf-8'))
+
+        # Build the Docker image
+        image, _ = client.images.build(fileobj=f, tag=image_name)
+
+        # Create the container from the built image
+        container = client.containers.create(image_name, name=container_name)
+        return container
+    except docker.errors.BuildError:
+        pass
+    except docker.errors.APIError:
+        pass
+    finally:
+        client.close()

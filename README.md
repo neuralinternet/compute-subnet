@@ -94,6 +94,23 @@ sudo apt install at
 docker run hello-world  # Must not return you any error.
 ```
 
+To run a docker container for allocation, user must be added to docker group to run without sudo command.
+
+```bash
+sudo groupadd docker
+sudo usermod -aG docker $USER
+sudo systemctl restart docker
+```
+
+### Nvidia toolkit
+
+To run a container for allocation, nvidia toolkit for docker needs to be installed.
+
+```bash
+sudo apt-get install -y nvidia-container-toolkit
+sudo apt install -y nvidia-docker2
+```
+
 ### Running subtensor locally
 
 ```bash
@@ -126,11 +143,13 @@ critical due to their superior computational power, particularly in tasks demand
 Consequently, miners utilizing GPU instances are positioned to receive substantially higher rewards compared to their
 CPU counterparts, in alignment with the greater processing power and efficiency GPUs bring to the network.
 
-A key aspect of the miners' contribution is the management of resource reservations. Miners have the autonomy to set
-specific timelines for each reservation of their computational resources. This timeline dictates the duration for which
-the resources are allocated to a particular task or user. Once the set timeline reaches its conclusion, the reservation
-automatically expires, thereby freeing up the resources for subsequent allocations. This mechanism ensures a dynamic and
-efficient distribution of computational power, catering to varying demands within the network.
+The primary contribution of miners lies in providing their resources to the validator. The management of these resources' 
+reservations is entirely handled on the validator's side. A validator has the capability to allocate and deallocate a miner's 
+resource based on availability and demand. Currently, the maximum duration of allocation for each reservation is limited to 60 days. 
+This mechanism guarantees a dynamic and efficient distribution of computational power, accommodating the fluctuating demands across the network.
+
+Important: It's crucial to ensure that port 4444 is open on the host machine to grant validators access to the allocated resource on the miner.
+
 
 ```bash
 # To run the miner
@@ -175,39 +194,48 @@ RAM performance. The script's structure and logic are outlined below:
 
 The score calculation function determines a miner's performance based on various factors:
 
-**Successful Problem Resolution**: It first checks if the problem was solved successfully. If not, the score remains at zero.
+**Successful Problem Resolution**: The success rate of solving challenges in the last 24 hours. Score range: (0,100).
 
-**Problem Difficulty**: This measures the complexity of the solved task. The code restricts this difficulty to a maximum allowed value.
+**Problem Difficulty**: This measures the complexity of the solved tasks. The code restricts this difficulty to a minimum and maximum allowed value. Score range: (0,100).
 
-**Weighting Difficulty and Elapsed Time**: The function assigns a weight to both the difficulty of the solved problem (75%) and the time taken to solve it (25%).
+**Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score. Score range: (0,100).
 
-**Exponential Rewards for Difficulty**: Higher problem difficulty leads to more significant rewards. An exponential formula is applied to increase rewards based on difficulty.
+**Failure Penalty**: The failure rate of solving the last 20 challenges. Score range: (0,100).
 
-**Allocation Bonus**: Miners that have allocated machine receive an additional bonus added to their final score.
+**Allocation Score**: Miners that have allocated machine resources receive the maximum challenge score and an additional allocation score, which is proportional to their average challenge difficulty. Score range: (0,100).
 
-**Effect of Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score.
+**Scoring Weights**: Each score component is weighted with the corresponding weight before being added to the total score.
 
-- Max Score = 1e5
-- Score = Lowest Difficulty + (Difficulty Weight * Problem Difficulty) + (Elapsed Time * 1 / (1 + Elapsed Time) * 10000) + Allocation Bonus
-- Normalized Score = (Score / Max Score) * 100
+- Successful Problem Resolution Weight = 1.0
+- Problem Difficulty Weight = 1.0
+- Elapsed Time Weight = 0.5
+- Failure Penalty Weight = 0.5
+- Allocation Weight = 0.4
 
-### Example 1: Miner A's Hardware Scores and Weighted Total
+**Total Score**:
 
-- **Successful Problem Resolution**: True
-- **Elapsed Time**: 4 seconds
-- **Problem Difficulty**: 6
+- Score (not allocated) = (Successful Problem Resolution * Resolution Weight) + (Problem Difficulty * Difficulty Weight) + (Elapsed Time * Time Weight) - (Failure Penalty * Penalty Weight)
+- Score (allocated) = Maximum Challenge Score + (Allocation Score * Allocation Weight)
+
+### Example 1: Miner A's Weighted Total Score
+
+- **Successful Problem Resolution**: 95%
+- **Problem Difficulty**: 7
+- **Elapsed Time**: 4.6 seconds
+- **Failure Penalty**: 2.6%
 - **Allocation**: True
 
-Score = 8.2865
+Total Score = Score (allocated) = 264.6
 
-### Example 2: Miner B's Hardware Scores and Weighted Total
+### Example 2: Miner B's Weighted Total Score
 
-- **Successful Problem Resolution**: True
+- **Successful Problem Resolution**: 92%
+- **Problem Difficulty**: 9
 - **Elapsed Time**: 16 seconds
-- **Problem Difficulty**: 8
-- **Allocation**: True
+- **Failure Penalty**: 3.1%
+- **Allocation**: False
 
-Score = 24.835058823529412
+Total Score = Score (not allocated) = 193.7
 
 ```bash
 # To run the validator

@@ -173,7 +173,13 @@ def check_docker_availability() -> Tuple[bool, str]:
         result = subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         # If the command was successful, Docker is installed
         docker_version = result.stdout.strip()
-        return True, docker_version
+        
+        if check_docker_container('sn27-check-container') is True:
+            return True, docker_version
+        else:
+            error_message = "Docker is installed, but is unable to create or run a container. Please verify your system's permissions."
+            return False, error_message
+
     except Exception as e:  # Catch all exceptions
         # If the command failed, Docker is not installed
         error_message = (
@@ -182,6 +188,40 @@ def check_docker_availability() -> Tuple[bool, str]:
             "Note: running a miner within containerized instances is not supported."
         )
         return False, error_message
+    
+
+def check_docker_container(container_id_or_name: str):
+    try:
+        # Start the container
+        subprocess.run(["docker", "start", container_id_or_name], 
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+
+        # Wait for the container to finish running
+        subprocess.run(["docker", "wait", container_id_or_name],
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL)
+        
+        # Get the logs from the container
+        logs_result = subprocess.run(
+            ["docker", "logs", container_id_or_name],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        output = logs_result.stdout.strip()
+
+        # Check if the output is compute-subnet
+        if "compute-subnet" in output:
+            return True
+        else:
+            return False
+
+    except subprocess.CalledProcessError as e:
+        # Handle errors from the Docker CLI
+        return False
 
 
 def get_perf_info():

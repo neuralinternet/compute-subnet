@@ -30,7 +30,7 @@ from compute import (
     validator_permit_stake,
     miner_priority_specs,
     miner_priority_allocate,
-    miner_priority_challenge,
+    miner_priority_challenge, TRUSTED_VALIDATORS_HOTKEYS,
 )
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
@@ -47,7 +47,8 @@ from compute.utils.version import (
     version2number,
     get_remote_version,
 )
-from neurons.Miner.allocate import check_allocation, register_allocation
+from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
+from neurons.Miner.container import build_check_container
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
@@ -120,6 +121,7 @@ class Miner:
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
 
+        build_check_container('my-compute-subnet','sn27-check-container')
         has_docker, msg = check_docker_availability()
 
         if not has_docker:
@@ -202,10 +204,12 @@ class Miner:
         return config
 
     def init_black_and_white_list(self):
+        default_whitelist = self.config.whitelist_hotkeys + TRUSTED_VALIDATORS_HOTKEYS
+
         # Set blacklist and whitelist arrays
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
         self.blacklist_coldkeys = {coldkey for coldkey in self.config.blacklist_coldkeys}
-        self.whitelist_hotkeys = {hotkey for hotkey in self.config.whitelist_hotkeys}
+        self.whitelist_hotkeys = {hotkey for hotkey in default_whitelist}
         self.whitelist_coldkeys = {coldkey for coldkey in self.config.whitelist_coldkeys}
 
         if self.config.blacklist_exploiters:
@@ -243,6 +247,10 @@ class Miner:
         hotkey = synapse.dendrite.hotkey
         synapse_type = type(synapse).__name__
 
+        if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
+            bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
+            return False, "Whitelisted hotkey"
+
         if hotkey not in self.metagraph.hotkeys:
             # Ignore requests from unrecognized entities.
             bt.logging.trace(f"Blacklisting unrecognized hotkey {hotkey}")
@@ -254,9 +262,6 @@ class Miner:
         if stake < validator_permit_stake and not self.miner_whitelist_not_enough_stake:
             bt.logging.trace(f"Not enough stake {stake}")
             return True, "Not enough stake!"
-
-        if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
-            return True, "Not whitelisted"
 
         if len(self.blacklist_hotkeys) > 0 and hotkey in self.blacklist_hotkeys:
             return True, "Blacklisted hotkey"
@@ -315,12 +320,21 @@ class Miner:
         checking = synapse.checking
 
         if checking is True:
-            result = check_allocation(timeline, device_requirement)
-            synapse.output = result
+            if timeline > 0:
+                result = check_allocation(timeline, device_requirement)
+                synapse.output = result
+            else:
+                public_key = synapse.public_key
+                result = check_if_allocated(public_key=public_key)
+                synapse.output = result
         else:
             public_key = synapse.public_key
-            result = register_allocation(timeline, device_requirement, public_key)
-            synapse.output = result
+            if timeline > 0:
+                result = register_allocation(timeline, device_requirement, public_key)
+                synapse.output = result
+            else:
+                result = deregister_allocation(public_key)
+                synapse.output = result
         return synapse
 
     # The blacklist function decides if a request should be ignored.
