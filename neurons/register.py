@@ -231,7 +231,7 @@ def allocate():
     device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
     if config.gpu_type != "" and config.gpu_size != 0:
         device_requirement["gpu"] = {"count": 1, "capacity": config.gpu_size, "type": config.gpu_type}
-    timeline = 30
+    timeline = 90
     private_key, public_key = rsa.generate_key_pair()
     result = allocate_container(config, device_requirement, timeline, public_key)
 
