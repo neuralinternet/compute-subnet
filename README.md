@@ -212,8 +212,10 @@ The score calculation function determines a miner's performance based on various
 - Failure Penalty Weight = 0.5
 - Allocation Weight = 0.4
 
-Score (not allocated) = (Successful Problem Resolution * Resolution Weight) + (Problem Difficulty * Difficulty Weight) + (Elapsed Time * Time Weight) - (Failure Penalty * Penalty Weight)
-Score (allocated) = Maximum Challenge Score + (Allocation Score * Allocation Weight)
+**Total Score**:
+
+- Score (not allocated) = (Successful Problem Resolution * Resolution Weight) + (Problem Difficulty * Difficulty Weight) + (Elapsed Time * Time Weight) - (Failure Penalty * Penalty Weight)
+- Score (allocated) = Maximum Challenge Score + (Allocation Score * Allocation Weight)
 
 ### Example 1: Miner A's Weighted Total Score
 
