@@ -37,6 +37,7 @@ This repository requires python3.8 or higher. To install, simply clone this repo
 git clone https://github.com/neuralinternet/Compute-Subnet.git
 cd Compute-Subnet
 python3 -m pip install -r requirements.txt
+python3 -m pip install --no-deps -r requirements-compute.txt
 python3 -m pip install -e .
 ```
 
