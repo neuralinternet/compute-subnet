@@ -56,6 +56,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             default=[],
         )
 
+        self.add_argument(
+            "--sentry-dsn",
+            type=str,
+            default=None,
+            help="The url that sentry will use to send exception information to"
+        )
+
         self.add_validator_argument()
         self.add_miner_argument()
 

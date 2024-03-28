@@ -16,6 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+
+import sentry_sdk
 import ast
 import asyncio
 import json
@@ -29,7 +31,6 @@ from typing import Dict, Tuple, List
 import bittensor as bt
 import math
 import time
-
 import cryptography
 import torch
 from cryptography.fernet import Fernet
@@ -39,7 +40,7 @@ import Validator.app_generator as ag
 from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
-    pow_max_difficulty,
+    pow_max_difficulty, 
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -54,10 +55,12 @@ from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
+from compute.utils.sentry import init_sentry
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
+
 
 
 class Validator:
@@ -126,6 +129,7 @@ class Validator:
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
         self.config = self.init_config()
+        init_sentry(self.config, {"node-type": "validator"})
 
         # Setup extra args
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
@@ -210,7 +214,7 @@ class Validator:
 
         # Return the parsed config.
         return config
-
+    
     def init_prometheus(self, force_update: bool = False):
         """
         Register the prometheus information on metagraph.
@@ -254,6 +258,8 @@ class Validator:
                 try:
                     values_values = f"{float(values_values):.2f}"
                 except Exception:
+                    sentry_sdk.capture_exception()
+                    
                     pass
                 log += f" | {values_key}: {values_values}"
 
@@ -278,11 +284,15 @@ class Validator:
                     else:
                         self.stats[uid]["has_docker"] = has_docker[uid]
                 except KeyError:
+                    sentry_sdk.capture_exception()
+                    
                     self.stats[uid]["has_docker"] = False
 
                 hotkey = self.stats[uid].get("ss58_address")
                 score = calc_score(self.stats[uid], hotkey=hotkey)
             except (ValueError, KeyError):
+                sentry_sdk.capture_exception()
+                
                 score = 0
 
             self.scores[uid] = score
@@ -325,6 +335,8 @@ class Validator:
                         bt.logging.info(f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
                         purge_miner_entries(self.db, uid, self.miners[uid])
                     except KeyError:
+                        sentry_sdk.capture_exception()
+                        
                         pass
                     bt.logging.info(f"✅ Setting up new miner {uid}-{axon.hotkey}.")
                     update_miners(self.db, [(uid, axon.hotkey)]),
@@ -347,6 +359,8 @@ class Validator:
                 else:
                     difficulty = current_difficulty
         except KeyError:
+            sentry_sdk.capture_exception()
+            
             pass
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
@@ -500,6 +514,8 @@ class Validator:
                 # Read the entire content of the EXE file
                 app_data = file.read()
         except Exception as e:
+            sentry_sdk.capture_exception()
+            
             bt.logging.error(f"{e}")
             return
 
@@ -536,13 +552,19 @@ class Validator:
                         else:
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except cryptography.fernet.InvalidToken:
+                        sentry_sdk.capture_exception()
+                        
                         bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except Exception as _:
+                        sentry_sdk.capture_exception()
+                        
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                         
             except Exception as e:
+                sentry_sdk.capture_exception()
+                
                 traceback.print_exc()
 
         update_miner_details(self.db, list(results.keys()), list(results.values()))
@@ -644,6 +666,8 @@ class Validator:
                                         )
                                     )
                                 except KeyError:
+                                    sentry_sdk.capture_exception()
+                                    
                                     continue
 
                         for thread in self.threads:
@@ -709,11 +733,15 @@ class Validator:
 
             # If we encounter an unexpected error, log it for debugging.
             except RuntimeError as e:
+                sentry_sdk.capture_exception()
+                
                 bt.logging.error(e)
                 traceback.print_exc()
 
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
+                sentry_sdk.capture_exception()
+                
                 self.db.close()
                 bt.logging.success("Keyboard interrupt detected. Exiting validator.")
                 exit()

@@ -15,6 +15,8 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
+
+import sentry_sdk
 import asyncio
 import json
 import os
@@ -36,6 +38,7 @@ from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
 from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
+from compute.utils.sentry import init_sentry
 from compute.utils.subtensor import (
     is_registered,
     get_current_block,
@@ -93,6 +96,7 @@ class Miner:
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
         self.config = self.init_config()
+        init_sentry(self.config, {"node-type": "miner"})
 
         # Setup extra args
         self.miner_whitelist_updated_threshold = self.config.miner_whitelist_updated_threshold
@@ -394,12 +398,17 @@ class Miner:
 
                             bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
                         except Exception:
+                            sentry_sdk.capture_exception()
+                            
                             bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
                     bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
             except json.JSONDecodeError:
+                sentry_sdk.capture_exception()
+                
                 bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
         except Exception as _:
+            
             bt.logging.error(traceback.format_exc())
 
     def get_valid_validator_uids(self):
@@ -475,11 +484,15 @@ class Miner:
                 time.sleep(5)
 
             except (RuntimeError, Exception) as e:
+                sentry_sdk.capture_exception()
+                
                 bt.logging.error(e)
                 traceback.print_exc()
 
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
+                sentry_sdk.capture_exception()
+                
                 self.axon.stop()
                 bt.logging.success("Keyboard interrupt detected. Exiting miner.")
                 exit()
