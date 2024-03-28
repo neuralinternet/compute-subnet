@@ -1,5 +1,6 @@
 from bittensor import config as Config
 import bittensor as bt
+import sentry_sdk
 
 from compute import __version__
 
