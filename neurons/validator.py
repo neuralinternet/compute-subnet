@@ -29,6 +29,7 @@ from typing import Dict, Tuple, List
 import bittensor as bt
 import math
 import time
+import sentry_sdk
 
 import cryptography
 import torch
@@ -39,7 +40,7 @@ import Validator.app_generator as ag
 from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
-    pow_max_difficulty,
+    pow_max_difficulty, 
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -54,10 +55,12 @@ from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
 from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
 from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
+from compute.utils.sentry import init_sentry
 from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
+
 
 
 class Validator:
@@ -126,6 +129,7 @@ class Validator:
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
         self.config = self.init_config()
+        init_sentry(self.config, {"node-type": "validator"})
 
         # Setup extra args
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
@@ -210,7 +214,7 @@ class Validator:
 
         # Return the parsed config.
         return config
-
+    
     def init_prometheus(self, force_update: bool = False):
         """
         Register the prometheus information on metagraph.

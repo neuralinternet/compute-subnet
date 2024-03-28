@@ -22,6 +22,7 @@ import traceback
 import typing
 
 import bittensor as bt
+import sentry_sdk
 import time
 
 from compute import (
@@ -36,6 +37,7 @@ from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
 from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
+from compute.utils.sentry import init_sentry
 from compute.utils.subtensor import (
     is_registered,
     get_current_block,
@@ -93,6 +95,7 @@ class Miner:
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
         self.config = self.init_config()
+        init_sentry(self.config, {"node-type": "miner"})
 
         # Setup extra args
         self.miner_whitelist_updated_threshold = self.config.miner_whitelist_updated_threshold
