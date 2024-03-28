@@ -17,6 +17,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 
+import sentry_sdk
 import ast
 import os
 import subprocess
@@ -63,6 +64,7 @@ class RequestSpecsProcessor:
             subprocess.run(f"chmod +x {file_path}", shell=True, check=True)
             result = subprocess.check_output([file_path], shell=True, text=True)
         except Exception as e:
+            sentry_sdk.capture_exception()
             
             
             traceback.print_exc()
@@ -91,6 +93,7 @@ class RequestSpecsProcessor:
             bt.logging.info(f"💻 Specs query finalized {request_id} ...")
             return result
         except Exception as e:
+            sentry_sdk.capture_exception()
             
             
             traceback.print_exc()

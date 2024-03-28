@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 
+import sentry_sdk
 import datetime
 
 import bittensor as bt
@@ -166,6 +167,7 @@ def update_challenge_details(db: ComputeDb, pow_benchmarks: list):
         )
         db.conn.commit()
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         db.conn.rollback()

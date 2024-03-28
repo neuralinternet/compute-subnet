@@ -20,6 +20,7 @@
 
 
 
+import sentry_sdk
 import argparse
 import base64
 import os
@@ -255,6 +256,7 @@ def allocate():
                     gpu_name = str(gpu_miner['details'][0]['name']).lower()
                     break
                 except (KeyError, IndexError, TypeError):
+                    sentry_sdk.capture_exception()
                     
                     
                     gpu_name = "Invalid details"
@@ -316,6 +318,7 @@ def allocate_hotkey():
                 gpu_name = str(gpu_miner['details'][0]['name']).lower()
                 break
             except (KeyError, IndexError, TypeError):
+                sentry_sdk.capture_exception()
                 
                 
                 gpu_name = "Invalid details"
@@ -431,6 +434,7 @@ def deallocate():
             print("No allocation details found for the provided hotkey.")
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         print(f"An error occurred during de-allocation: {e}")
@@ -474,6 +478,7 @@ def check_and_update_existing_allocations():
             public_key_list.append(info['regkey'])
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         print(f"An error occurred while retrieving allocation details: {e}")
@@ -564,6 +569,7 @@ def list_allocations():
             print("-" * 80)  # Print a separator line
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         print(f"An error occurred while retrieving allocation details: {e}")
@@ -646,6 +652,7 @@ def list_resources():
                 total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
 
             except (KeyError, IndexError, TypeError):
+                sentry_sdk.capture_exception()
                 
                 
                 gpu_name = "Invalid details"
@@ -718,6 +725,7 @@ def upload_wandb(hotkey, flag):
         run.log({"key": hotkey, "allocated": allocation_status})
         run.finish()
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.info(f"Error uploading to wandb : {e}")
@@ -773,6 +781,7 @@ def main():
             if hasattr(args, 'func'):
                 args.func()
         except SystemExit:
+            sentry_sdk.capture_exception()
             
             
             # Catch the SystemExit exception to prevent the script from closing

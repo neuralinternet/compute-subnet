@@ -18,6 +18,7 @@
 
 
 
+import sentry_sdk
 import bittensor as bt
 import base64
 import docker
@@ -59,6 +60,7 @@ def register_allocation(timeline, device_requirement, public_key):
         return run_status
     
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.info(f"Error allocating container {e}")
@@ -93,6 +95,7 @@ def deregister_allocation(public_key):
             return {"status": False}
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.info(f"Error de-allocating container {e}")
@@ -137,6 +140,7 @@ def check_if_allocated(public_key):
         # All checks passed, return True
         return {"status": True}
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         # Handle any exceptions that occur

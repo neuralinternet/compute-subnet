@@ -19,6 +19,7 @@
 
 
 
+import sentry_sdk
 import bittensor
 import bittensor.utils.networking as net
 
@@ -67,6 +68,7 @@ def prometheus_extrinsic(
             external_ip = net.get_external_ip()
             bittensor.logging.trace("Found external ip: {}".format(external_ip))
         except Exception as E:
+            sentry_sdk.capture_exception()
             
             
             raise RuntimeError("Unable to attain your external ip. Check your internet connection. error: {}".format(E)) from E

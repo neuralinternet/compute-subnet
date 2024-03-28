@@ -18,6 +18,7 @@ DEALINGS IN THE SOFTWARE.
 """
 
 
+import sentry_sdk
 import codecs
 import os
 import re
@@ -43,6 +44,7 @@ def version2number(version: str):
             version = version.split(".")
             return (100 * int(version[0])) + (10 * int(version[1])) + (1 * int(version[2]))
     except Exception as _:
+        sentry_sdk.capture_exception()
         
         
         pass
@@ -64,11 +66,13 @@ def get_remote_version(pattern: str = "__version__"):
             print("Failed to get file content with status code:", response.status_code)
             return None
     except requests.exceptions.Timeout:
+        sentry_sdk.capture_exception()
         
         
         print("The request timed out after 30 seconds.")
         return None
     except requests.exceptions.RequestException as e:
+        sentry_sdk.capture_exception()
         
         
         print("There was an error while handling the request:", e)
@@ -85,6 +89,7 @@ def get_local_version():
             version_string = version_match.group(1)
         return version_string
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error(f"Error getting local version. : {e}")
@@ -118,12 +123,14 @@ def update_repo():
             bt.logging.info("pulling success")
             return True
         except git.exc.GitCommandError as e:
+            sentry_sdk.capture_exception()
             
             
             bt.logging.info(f"update : Merge conflict detected: {e} Recommend you manually commit changes and update")
             return handle_merge_conflict(repo)
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error(f"update failed: {e} Recommend you manually commit changes and update")
@@ -147,6 +154,7 @@ def handle_merge_conflict(repo):
         bt.logging.info(f"✅ Repo update success")
         return True
     except git.GitCommandError as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error(f"update failed: {e} Recommend you manually commit changes and update")
@@ -183,6 +191,7 @@ def try_update_packages(force=False):
         bt.logging.info("📦Updating packages finished.")
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         if not force:
@@ -198,6 +207,7 @@ def try_update():
                 try_update_packages()
                 restart_app()
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.info(f"Try updating failed {e}")
@@ -210,6 +220,7 @@ def check_hashcat_version(hashcat_path: str = "hashcat"):
             bt.logging.info(f"Version of hashcat found: {process.stdout.decode()}".strip("\n"))
         return True
     except subprocess.CalledProcessError:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error(

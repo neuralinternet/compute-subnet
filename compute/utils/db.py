@@ -2,6 +2,7 @@ import sqlite3
 
 
 
+import sentry_sdk
 import bittensor as bt
 
 
@@ -44,6 +45,7 @@ class ComputeDb:
 
             self.conn.commit()
         except Exception as e:
+            sentry_sdk.capture_exception()
             
             
             self.conn.rollback()

@@ -16,6 +16,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import sentry_sdk
 import asyncio
 import json
 import os
@@ -397,11 +398,13 @@ class Miner:
 
                             bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
                         except Exception:
+                            sentry_sdk.capture_exception()
                             
                             bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
 
                     bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
             except json.JSONDecodeError:
+                sentry_sdk.capture_exception()
                 
                 bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
         except Exception as _:
@@ -481,12 +484,14 @@ class Miner:
                 time.sleep(5)
 
             except (RuntimeError, Exception) as e:
+                sentry_sdk.capture_exception()
                 
                 bt.logging.error(e)
                 traceback.print_exc()
 
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
+                sentry_sdk.capture_exception()
                 
                 self.axon.stop()
                 bt.logging.success("Keyboard interrupt detected. Exiting miner.")

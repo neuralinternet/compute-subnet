@@ -1,3 +1,4 @@
+import sentry_sdk
 
 
 __all__ = ["percent", "percent_yield", "force_to_float_or_default"]
@@ -19,6 +20,7 @@ def force_to_float_or_default(a, default=0.0):
     try:
         return float(a)
     except Exception:
+        sentry_sdk.capture_exception()
         
         
         return default

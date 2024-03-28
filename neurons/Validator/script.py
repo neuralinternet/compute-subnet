@@ -17,6 +17,7 @@
 # Step 1: Import necessary libraries and modules
 
 
+import sentry_sdk
 import psutil
 import GPUtil
 import json
@@ -43,6 +44,7 @@ def get_cpu_info():
 
         return info
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         return {}
@@ -77,6 +79,7 @@ def get_gpu_info():
         return info
 
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         return {}
@@ -98,6 +101,7 @@ def get_hard_disk_info():
                     {"device": partition.device, "mountpoint": partition.mountpoint, "total": usage.total, "used": usage.used, "free": usage.free}
                 )
             except Exception as e:
+                sentry_sdk.capture_exception()
                 
                 
                 continue
@@ -130,6 +134,7 @@ def get_hard_disk_info():
 
         return info
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         return {}
@@ -173,6 +178,7 @@ def get_ram_info():
 
         return info
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         return {}
@@ -193,6 +199,7 @@ def check_docker_availability() -> Tuple[bool, str]:
             return False, error_message
 
     except Exception as e:  # Catch all exceptions
+        sentry_sdk.capture_exception()
         
         
         # If the command failed, Docker is not installed
@@ -234,6 +241,7 @@ def check_docker_container(container_id_or_name: str):
             return False
 
     except subprocess.CalledProcessError as e:
+        sentry_sdk.capture_exception()
         
         
         # Handle errors from the Docker CLI

@@ -18,6 +18,7 @@
 # Step 1: Import necessary libraries and modules
 
 
+import sentry_sdk
 import bittensor as bt
 import wandb
 
@@ -132,6 +133,7 @@ def calc_score(response, hotkey, mock=False):
         normalized_score = normalize(final_score, 0, max_score)
         return normalized_score
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error(f"An error occurred while calculating score for the following hotkey - {hotkey}: {e}")
@@ -172,6 +174,7 @@ def check_latest_allocation_status(hotkey, mock=False):
                             return latest_status
                     
             except Exception as e:
+                sentry_sdk.capture_exception()
                 
                 
                 print(f"Error fetching data from run '{run.id}': {e}")
@@ -180,6 +183,7 @@ def check_latest_allocation_status(hotkey, mock=False):
         return False
           
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         bt.logging.error("Error checking latest allocation status:", e)

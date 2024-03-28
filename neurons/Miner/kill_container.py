@@ -19,6 +19,7 @@
 
 
 
+import sentry_sdk
 import docker
 
 container_name = "ssh-container"  # Docker container name
@@ -41,6 +42,7 @@ def kill_container():
             running_container.remove()
             return True
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         # bt.logging.info(f"Error killing container {e}")

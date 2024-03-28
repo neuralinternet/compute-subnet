@@ -18,6 +18,7 @@
 
 
 
+import sentry_sdk
 import base64
 import json
 import os
@@ -69,6 +70,7 @@ def kill_container():
             # bt.logging.info("Unable to find container")
             return False
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         # bt.logging.info(f"Error killing container {e}")
@@ -150,6 +152,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
             # bt.logging.info(f"Container falied with status : {container.status}")
             return {"status": False}
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         # bt.logging.info(f"Error running container {e}")
@@ -165,6 +168,7 @@ def check_container():
                 return True
         return False
     except Exception as e:
+        sentry_sdk.capture_exception()
         
         
         # bt.logging.info(f"Error checking container {e}")
@@ -209,10 +213,12 @@ def build_check_container(image_name: str, container_name: str):
         container = client.containers.create(image_name, name=container_name)
         return container
     except docker.errors.BuildError:
+        sentry_sdk.capture_exception()
         
         
         pass
     except docker.errors.APIError:
+        sentry_sdk.capture_exception()
         
         pass
     finally:
