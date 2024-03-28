@@ -17,6 +17,8 @@
 # Step 1: Import necessary libraries and modules
 
 
+import sentry_sdk
+import sentry_sdk
 import numpy as np
 import wandb
 
@@ -60,6 +62,8 @@ def score(data, hotkey):
 
         return 10 + np.dot(score_list, weight_list).item() * 100 + registration_bonus
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return 0
 
 
@@ -71,6 +75,8 @@ def get_cpu_score(cpu_info):
         level = 75  # 30, 2.5
         return count * frequency / 1024 / level
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return 0
 
 
@@ -82,6 +88,8 @@ def get_gpu_score(gpu_info):
         speed = (gpu_info["graphics_speed"] + gpu_info["memory_speed"]) / 2
         return capacity * speed / level
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return 0
 
 
@@ -94,6 +102,8 @@ def get_hard_disk_score(hard_disk_info):
 
         return capacity * speed / level
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return 0
 
 
@@ -105,6 +115,8 @@ def get_ram_score(ram_info):
         speed = ram_info["read_speed"]
         return capacity * speed / level
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return 0
 
 
@@ -121,4 +133,6 @@ def check_if_registered(hotkey):
         else:
             return False
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         return False

@@ -14,6 +14,8 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
+import sentry_sdk
+import sentry_sdk
 import datetime
 
 import bittensor as bt
@@ -164,6 +166,8 @@ def update_challenge_details(db: ComputeDb, pow_benchmarks: list):
         )
         db.conn.commit()
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         db.conn.rollback()
         bt.logging.error(f"Error while updating challenge_details: {e}")
     finally:

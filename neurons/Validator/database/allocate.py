@@ -15,6 +15,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import sentry_sdk
+import sentry_sdk
 import json
 from typing import Tuple, Any
 
@@ -38,6 +40,8 @@ def select_has_docker_miners_hotkey(db: ComputeDb):
                     uid_hotkey_dict[row[0]] = row[1]
         return uid_hotkey_dict
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
         return []
     finally:
@@ -60,6 +64,8 @@ def select_allocate_miners_hotkey(db: ComputeDb, device_requirement):
                 hotkey_list.append(row[1])
         return hotkey_list
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
         return []
     finally:
@@ -82,6 +88,8 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
                 cursor.execute("DELETE FROM challenge_details WHERE uid IN (SELECT uid FROM miner WHERE unresponsive_count >= 10);")
         db.conn.commit()
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         db.conn.rollback()
         bt.logging.error(f"Error while updating miner_details : {e}")
     finally:
@@ -168,6 +176,8 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
                 """, (hotkey_list[index], hotkey, '{}'))
         db.conn.commit()
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         db.conn.rollback()
         bt.logging.error(f"Error while updating miner_details: {e}")
     finally:
@@ -197,6 +207,8 @@ def get_miner_details(db):
             else:  # If details are empty, set the value to an empty dictionary
                 miner_specs_details[hotkey] = {}
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         bt.logging.error(f"Error while retrieving miner details: {e}")
     finally:
         cursor.close()
@@ -221,6 +233,8 @@ def update_allocation_db(hotkey: str, info: str, flag: bool):
             cursor.execute("DELETE FROM allocation WHERE hotkey = ?", (hotkey,))
         db.conn.commit()
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         db.conn.rollback()
         bt.logging.error(f"Error while updating allocation details: {e}")
     finally:
@@ -263,6 +277,8 @@ def allocate_check_if_miner_meet(details, required_details):
         if required_ram and (not ram_miner or ram_miner["available"] < required_ram["capacity"]):
             return False
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         bt.logging.error("The format is wrong, please check it again.")
         return False
     return True

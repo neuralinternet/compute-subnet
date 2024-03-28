@@ -16,6 +16,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import sentry_sdk
+import sentry_sdk
 import os
 import re
 import subprocess
@@ -67,7 +69,11 @@ def run(secret_key):
             stdout_thread.join()
             stderr_thread.join()
         except subprocess.CalledProcessError as e:
+            sentry_sdk.capture_exception()
+            sentry_sdk.capture_exception()
             bt.logging.error("An error occurred while generating the app.")
             bt.logging.error(f"Error output:{e.stderr.decode()}")
     except Exception as e:
+        sentry_sdk.capture_exception()
+        sentry_sdk.capture_exception()
         bt.logging.error(f"{e}")
