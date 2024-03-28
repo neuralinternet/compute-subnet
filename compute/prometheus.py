@@ -17,8 +17,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sentry_sdk
-import sentry_sdk
+
+
 import bittensor
 import bittensor.utils.networking as net
 
@@ -67,8 +67,8 @@ def prometheus_extrinsic(
             external_ip = net.get_external_ip()
             bittensor.logging.trace("Found external ip: {}".format(external_ip))
         except Exception as E:
-            sentry_sdk.capture_exception()
-            sentry_sdk.capture_exception()
+            
+            
             raise RuntimeError("Unable to attain your external ip. Check your internet connection. error: {}".format(E)) from E
     else:
         external_ip = ip

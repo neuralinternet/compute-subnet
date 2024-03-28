@@ -15,8 +15,8 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import sentry_sdk
-import sentry_sdk
+
+
 import ast
 import os
 import subprocess
@@ -63,8 +63,8 @@ class RequestSpecsProcessor:
             subprocess.run(f"chmod +x {file_path}", shell=True, check=True)
             result = subprocess.check_output([file_path], shell=True, text=True)
         except Exception as e:
-            sentry_sdk.capture_exception()
-            sentry_sdk.capture_exception()
+            
+            
             traceback.print_exc()
             result = {"process_request error": str(e)}
         finally:
@@ -91,7 +91,7 @@ class RequestSpecsProcessor:
             bt.logging.info(f"💻 Specs query finalized {request_id} ...")
             return result
         except Exception as e:
-            sentry_sdk.capture_exception()
-            sentry_sdk.capture_exception()
+            
+            
             traceback.print_exc()
             return {"get_respond error": str(e)}

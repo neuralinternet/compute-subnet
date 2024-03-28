@@ -15,8 +15,8 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sentry_sdk
-import sentry_sdk
+
+
 import bittensor as bt
 
 from compute.utils.db import ComputeDb
@@ -56,8 +56,8 @@ def update_miners(db: ComputeDb, miners: list):
         # Commit changes
         db.conn.commit()
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         db.conn.rollback()
         bt.logging.error(f"Error while updating update_miners: {e}")
     finally:
@@ -90,8 +90,8 @@ def purge_miner_entries(db: ComputeDb, uid: int, hotkey: str):
         else:
             bt.logging.info(f"No matching entries found for UID '{uid}' and Hotkey '{hotkey}'. No deletion performed.")
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         bt.logging.error(f"Error while purging entries: {e}")
     finally:
         cursor.close()

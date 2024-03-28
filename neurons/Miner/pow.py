@@ -13,8 +13,8 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import sentry_sdk
-import sentry_sdk
+
+
 import shlex
 import subprocess
 from typing import Union
@@ -147,8 +147,8 @@ def run_hashcat(
             }
 
     except subprocess.TimeoutExpired:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         execution_time = time.time() - start_time
         error_message = f"{run_id}: ❌ Hashcat execution timed out"
         bt.logging.warning(error_message)
@@ -159,8 +159,8 @@ def run_hashcat(
             "error": error_message,
         }
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         execution_time = time.time() - start_time
         bt.logging.warning(f"{unknown_error_message}: {e}")
         queue.popleft()

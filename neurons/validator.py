@@ -16,7 +16,7 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sentry_sdk
+
 import ast
 import asyncio
 import json
@@ -257,7 +257,7 @@ class Validator:
                 try:
                     values_values = f"{float(values_values):.2f}"
                 except Exception:
-                    sentry_sdk.capture_exception()
+                    
                     pass
                 log += f" | {values_key}: {values_values}"
 
@@ -282,13 +282,13 @@ class Validator:
                     else:
                         self.stats[uid]["has_docker"] = has_docker[uid]
                 except KeyError:
-                    sentry_sdk.capture_exception()
+                    
                     self.stats[uid]["has_docker"] = False
 
                 hotkey = self.stats[uid].get("ss58_address")
                 score = calc_score(self.stats[uid], hotkey=hotkey)
             except (ValueError, KeyError):
-                sentry_sdk.capture_exception()
+                
                 score = 0
 
             self.scores[uid] = score
@@ -331,7 +331,7 @@ class Validator:
                         bt.logging.info(f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
                         purge_miner_entries(self.db, uid, self.miners[uid])
                     except KeyError:
-                        sentry_sdk.capture_exception()
+                        
                         pass
                     bt.logging.info(f"✅ Setting up new miner {uid}-{axon.hotkey}.")
                     update_miners(self.db, [(uid, axon.hotkey)]),
@@ -354,7 +354,7 @@ class Validator:
                 else:
                     difficulty = current_difficulty
         except KeyError:
-            sentry_sdk.capture_exception()
+            
             pass
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
@@ -508,7 +508,7 @@ class Validator:
                 # Read the entire content of the EXE file
                 app_data = file.read()
         except Exception as e:
-            sentry_sdk.capture_exception()
+            
             bt.logging.error(f"{e}")
             return
 
@@ -545,16 +545,16 @@ class Validator:
                         else:
                             results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except cryptography.fernet.InvalidToken:
-                        sentry_sdk.capture_exception()
+                        
                         bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                     except Exception as _:
-                        sentry_sdk.capture_exception()
+                        
                         traceback.print_exc()
                         results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
                         
             except Exception as e:
-                sentry_sdk.capture_exception()
+                
                 traceback.print_exc()
 
         update_miner_details(self.db, list(results.keys()), list(results.values()))
@@ -656,7 +656,7 @@ class Validator:
                                         )
                                     )
                                 except KeyError:
-                                    sentry_sdk.capture_exception()
+                                    
                                     continue
 
                         for thread in self.threads:
@@ -722,13 +722,13 @@ class Validator:
 
             # If we encounter an unexpected error, log it for debugging.
             except RuntimeError as e:
-                sentry_sdk.capture_exception()
+                
                 bt.logging.error(e)
                 traceback.print_exc()
 
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
-                sentry_sdk.capture_exception()
+                
                 self.db.close()
                 bt.logging.success("Keyboard interrupt detected. Exiting validator.")
                 exit()

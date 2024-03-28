@@ -14,8 +14,8 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import sentry_sdk
-import sentry_sdk
+
+
 import hashlib
 import random
 import secrets
@@ -58,8 +58,8 @@ def gen_password(available_chars=compute.pow_default_chars, length=compute.pow_m
         _hash, _salt = gen_hash(password)
         return password, _hash, _salt, _mask
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         bt.logging.error(f"Error during PoW generation (gen_password): {e}")
         return None
 

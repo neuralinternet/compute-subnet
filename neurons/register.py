@@ -18,8 +18,8 @@
 # Step 1: Import necessary libraries and modules
 
 
-import sentry_sdk
-import sentry_sdk
+
+
 import argparse
 import base64
 import os
@@ -255,8 +255,8 @@ def allocate():
                     gpu_name = str(gpu_miner['details'][0]['name']).lower()
                     break
                 except (KeyError, IndexError, TypeError):
-                    sentry_sdk.capture_exception()
-                    sentry_sdk.capture_exception()
+                    
+                    
                     gpu_name = "Invalid details"
             else:
                 gpu_name = "No details available"
@@ -316,8 +316,8 @@ def allocate_hotkey():
                 gpu_name = str(gpu_miner['details'][0]['name']).lower()
                 break
             except (KeyError, IndexError, TypeError):
-                sentry_sdk.capture_exception()
-                sentry_sdk.capture_exception()
+                
+                
                 gpu_name = "Invalid details"
         else:
             gpu_name = "No details available"
@@ -431,8 +431,8 @@ def deallocate():
             print("No allocation details found for the provided hotkey.")
 
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         print(f"An error occurred during de-allocation: {e}")
     finally:
         cursor.close()
@@ -474,8 +474,8 @@ def check_and_update_existing_allocations():
             public_key_list.append(info['regkey'])
 
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         print(f"An error occurred while retrieving allocation details: {e}")
     
     config = get_config()
@@ -564,8 +564,8 @@ def list_allocations():
             print("-" * 80)  # Print a separator line
 
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         print(f"An error occurred while retrieving allocation details: {e}")
     finally:
         cursor.close()
@@ -646,8 +646,8 @@ def list_resources():
                 total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
 
             except (KeyError, IndexError, TypeError):
-                sentry_sdk.capture_exception()
-                sentry_sdk.capture_exception()
+                
+                
                 gpu_name = "Invalid details"
                 gpu_capacity = "N/A"
                 gpu_count = "N/A"
@@ -718,8 +718,8 @@ def upload_wandb(hotkey, flag):
         run.log({"key": hotkey, "allocated": allocation_status})
         run.finish()
     except Exception as e:
-        sentry_sdk.capture_exception()
-        sentry_sdk.capture_exception()
+        
+        
         bt.logging.info(f"Error uploading to wandb : {e}")
         return
     
@@ -773,8 +773,8 @@ def main():
             if hasattr(args, 'func'):
                 args.func()
         except SystemExit:
-            sentry_sdk.capture_exception()
-            sentry_sdk.capture_exception()
+            
+            
             # Catch the SystemExit exception to prevent the script from closing
             continue
 
