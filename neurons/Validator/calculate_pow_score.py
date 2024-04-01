@@ -115,8 +115,6 @@ def calc_score(response, hotkey, mock=False):
             final_score = max_score_challenge + allocation_score
         else:
             final_score = difficulty + successes + time_elapsed - failed_penalty
-            if penalty:
-                final_score = final_score * 0.5
 
         # Final score is > 0
         final_score = max(0, final_score)
@@ -174,5 +172,5 @@ def check_latest_allocation_status(hotkey, mock=False):
         return False
           
     except Exception as e:
-        bt.logging.error("Error checking latest allocation status:", e)
+        bt.logging.warning("Error checking latest allocation status:", e)
         return None

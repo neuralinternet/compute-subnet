@@ -339,6 +339,7 @@ class Validator:
             current_difficulty = math.ceil(force_to_float_or_default(stat.get("last_20_difficulty_avg"), default=pow_min_difficulty))
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
+
             if challenge_successes >= 20:
                 if last_20_challenge_failed <= 1:
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
@@ -350,7 +351,7 @@ class Validator:
             pass
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
-        return max(difficulty, 1)
+        return max(difficulty, pow_min_difficulty)
 
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
