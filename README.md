@@ -364,8 +364,7 @@ A workload profile from 1 to 4 can be used. An invalid or empty entry will defau
 
 > "Enter any extra hashcat options to use. Leave this empty to use the recommended -O option. Enter None for no extended options."
 
-Enter any additional options for hashcat to use. It's recommended to use the ```-O``` option by either explicitly stating it or submitting a blank entry, which will use ```-O``` by default. Enter ```None``` to exclude all extra hashcat options.\
-Additional options can be listed with the command ```hashcat -h```.
+Enter any additional options for hashcat to use. It's recommended to use the ```-O``` option by either explicitly stating it or submitting a blank entry, which will use ```-O``` by default. Enter ```None``` to exclude all extra hashcat options. Additional options can be listed with the command ```hashcat -h```.
 
 ![alt text](<miner_benchmark_sample.png>)
 
