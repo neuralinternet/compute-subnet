@@ -367,7 +367,7 @@ A workload profile from 1 to 4 can be used. An invalid or empty entry will defau
 Enter any additional options for hashcat to use. It's recommended to use the ```-O``` option by either explicitly stating it or submitting a blank entry, which will use ```-O``` by default. Enter ```None``` to exclude all extra hashcat options.\
 Additional options can be listed with the command ```hashcat -h```.
 
-![alt text](<sample 1.png>)
+![alt text](<miner_benchmark_sample.png>)
 
 ## Troubleshooting
 
