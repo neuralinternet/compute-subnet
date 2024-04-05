@@ -334,7 +334,7 @@ Difficulty will increase over time.
 ### Benchmarking the system using challenge emulations:
 ```bash
 cd compute-subnet
-python3 ./neurons/Miner/benchmark.py
+python3 ./test-scripts/benchmark.py
 ```
 
 > "What challenge difficulties would you like to benchmark?"
