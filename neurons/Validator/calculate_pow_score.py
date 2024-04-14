@@ -55,12 +55,12 @@ def calc_score(response, hotkey, mock=False):
     try:
         challenge_attempts = prevent_none(response["challenge_attempts"])
         challenge_successes = prevent_none(response["challenge_successes"])
-        last_20_challenge_failed = prevent_none(response["last_20_challenge_failed"])
+        last_10_challenge_failed = prevent_none(response["last_10_challenge_failed"])
         challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
         challenge_difficulty_avg = prevent_none(response["challenge_difficulty_avg"])
         has_docker = response.get("has_docker", False)
 
-        if last_20_challenge_failed >= 10 or challenge_successes == 0:
+        if last_10_challenge_failed >= 10 or challenge_successes == 0:
             return 0
 
         # Define base weights for the PoW
