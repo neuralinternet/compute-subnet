@@ -32,8 +32,8 @@ def select_challenge_stats(db: ComputeDb) -> dict:
             "challenge_failed": int(challenge_failed) if challenge_failed else 0,
             "challenge_elapsed_time_avg": challenge_elapsed_time_avg,
             "challenge_difficulty_avg": challenge_difficulty_avg,
-            "last_20_challenge_failed": last_20_challenge_failed,
-            "last_20_difficulty_avg": last_20_difficulty_avg,
+            "last_10_challenge_failed": last_10_challenge_failed,
+            "last_10_difficulty_avg": last_10_difficulty_avg,
         }
     """
     cursor = db.get_cursor()
@@ -52,8 +52,8 @@ SELECT main_query.uid,
        main_query.challenge_elapsed_time_avg,
        main_query.challenge_difficulty_avg,
        COALESCE(main_query.challenge_failed, 0) as challenge_failed,
-       COALESCE(last_20_challenge_failed.last_20_challenge_failed, 0) as last_20_challenge_failed,
-       last_20_query.last_20_difficulty_avg
+       COALESCE(last_10_challenge_failed.last_10_challenge_failed, 0) as last_10_challenge_failed,
+       last_10_query.last_10_difficulty_avg
 FROM (SELECT uid,
              ss58_address,
              COUNT(*)                                         AS challenge_attempts,
@@ -66,27 +66,27 @@ FROM (SELECT uid,
       GROUP BY uid, ss58_address) AS main_query
          LEFT JOIN (SELECT uid,
                            ss58_address,
-                           COUNT(*) AS last_20_challenge_failed
+                           COUNT(*) AS last_10_challenge_failed
                     FROM (SELECT uid, ss58_address, success
                           FROM RankedChallenges
-                          WHERE row_num <= 20
-                          ORDER BY created_at DESC) AS Last20Rows
+                          WHERE row_num <= 10
+                          ORDER BY created_at DESC) AS Last10Rows
                     WHERE success = 0
-                    GROUP BY uid, ss58_address) AS last_20_challenge_failed
-                   ON main_query.uid = last_20_challenge_failed.uid AND
-                      main_query.ss58_address = last_20_challenge_failed.ss58_address
+                    GROUP BY uid, ss58_address) AS last_10_challenge_failed
+                   ON main_query.uid = last_10_challenge_failed.uid AND
+                      main_query.ss58_address = last_10_challenge_failed.ss58_address
          LEFT JOIN (SELECT uid,
                            ss58_address,
-                           AVG(difficulty) AS last_20_difficulty_avg
+                           AVG(difficulty) AS last_10_difficulty_avg
                     FROM (SELECT uid,
                                  ss58_address,
                                  difficulty,
                                  ROW_NUMBER() OVER (PARTITION BY uid, ss58_address ORDER BY created_at DESC) AS row_num
                           FROM challenge_details
                           WHERE success = 1) AS subquery
-                    WHERE row_num <= 20
-                    GROUP BY uid, ss58_address) AS last_20_query
-                   ON main_query.uid = last_20_query.uid AND main_query.ss58_address = last_20_query.ss58_address;
+                    WHERE row_num <= 10
+                    GROUP BY uid, ss58_address) AS last_10_query
+                   ON main_query.uid = last_10_query.uid AND main_query.ss58_address = last_10_query.ss58_address;
         """
     )
 
@@ -102,8 +102,8 @@ FROM (SELECT uid,
             challenge_elapsed_time_avg,
             challenge_difficulty_avg,
             challenge_failed,
-            last_20_challenge_failed,
-            last_20_difficulty_avg,
+            last_10_challenge_failed,
+            last_10_difficulty_avg,
         ) = result
         stats[uid] = {
             "ss58_address": ss58_address,
@@ -112,8 +112,8 @@ FROM (SELECT uid,
             "challenge_failed": int(challenge_failed) if challenge_failed else 0,
             "challenge_elapsed_time_avg": challenge_elapsed_time_avg,
             "challenge_difficulty_avg": challenge_difficulty_avg,
-            "last_20_challenge_failed": last_20_challenge_failed,
-            "last_20_difficulty_avg": last_20_difficulty_avg,
+            "last_10_challenge_failed": last_10_challenge_failed,
+            "last_10_difficulty_avg": last_10_difficulty_avg,
         }
 
     cursor.close()
