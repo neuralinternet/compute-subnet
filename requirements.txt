@@ -1,7 +1,7 @@
 at==0.0.3
-bittensor==6.8.2
+bittensor==6.9.3
 black==23.7.0
-cryptography==41.0.3
+cryptography==42.0.0
 docker==7.0.0
 GPUtil==1.4.0
 igpu==0.1.2
@@ -9,6 +9,7 @@ numpy==1.26.3
 psutil==5.9.8
 pyinstaller==6.4.0
 torch==2.1.2
-wandb==0.16.4
+wandb==0.16.6
 pyfiglet==1.0.2
+python-dotenv==1.0.1
 

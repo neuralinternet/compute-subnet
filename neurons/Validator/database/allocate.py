@@ -30,15 +30,15 @@ def select_has_docker_miners_hotkey(db: ComputeDb):
         cursor.execute("SELECT * FROM miner_details")
         rows = cursor.fetchall()
 
-        uid_hotkey_dict = {}
+        hotkey_list = []
         for row in rows:
             if row[2]:
                 details = json.loads(row[2])
                 if details.get("has_docker", False) is True:
-                    uid_hotkey_dict[row[0]] = row[1]
-        return uid_hotkey_dict
+                    hotkey_list.append(row[1])
+        return hotkey_list
     except Exception as e:
-        bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
+        bt.logging.error(f"Error while getting has_docker hotkeys from miner_details : {e}")
         return []
     finally:
         cursor.close()
@@ -60,7 +60,7 @@ def select_allocate_miners_hotkey(db: ComputeDb, device_requirement):
                 hotkey_list.append(row[1])
         return hotkey_list
     except Exception as e:
-        bt.logging.error(f"Error while getting hotkeys from miner_details : {e}")
+        bt.logging.error(f"Error while getting meet device_req. hotkeys from miner_details : {e}")
         return []
     finally:
         cursor.close()
@@ -133,7 +133,7 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
             db.conn.commit()
 
         # Update miner_details  
-        for index, (hotkey, response) in enumerate(benchmark_responses):
+        for hotkey, response in benchmark_responses:
             # Print current values in the row before updating
             cursor.execute("""
                 SELECT * FROM miner_details WHERE hotkey = ?;
@@ -142,31 +142,32 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
             # print("Current values in row before updating (hotkey:", hotkey, "):", current_values) # debugging
 
             if response:  # Check if the response is not empty
-                # Insert a new record or update the existing one with the new details
+                # Update the existing record with the new details or insert a new one
                 cursor.execute("""
-                    INSERT INTO miner_details (id, hotkey, details, no_specs_count)
-                    VALUES (?, ?, ?, 0)
+                    INSERT INTO miner_details (hotkey, details, no_specs_count)
+                    VALUES (?, ?, 0)
                     ON CONFLICT(hotkey) DO UPDATE SET
                         details = excluded.details,
                         no_specs_count = 0;
-                """, (hotkey_list[index], hotkey, json.dumps(response)))
+                """, (hotkey, json.dumps(response)))
             else:
-                # Insert a new record with no_specs_count = 1 or update the existing one
+                # Increment no_specs_count for the existing record or insert a new one
                 cursor.execute("""
-                    INSERT INTO miner_details (id, hotkey, details, no_specs_count)
-                    VALUES (?, ?, ?, 1)
+                    INSERT INTO miner_details (hotkey, details, no_specs_count)
+                    VALUES (?, '{}', 1)
                     ON CONFLICT(hotkey) DO UPDATE SET
                         no_specs_count = 
                             CASE
-                                WHEN miner_details.no_specs_count >= 20 THEN 20
+                                WHEN miner_details.no_specs_count >= 5 THEN 5
                                 ELSE miner_details.no_specs_count + 1
                             END,
-                        details = CASE
-                            WHEN miner_details.no_specs_count >= 20 THEN '{}'
-                            ELSE miner_details.details
-                        END;
-                """, (hotkey_list[index], hotkey, '{}'))
-        db.conn.commit()
+                        details = 
+                            CASE
+                                WHEN miner_details.no_specs_count >= 5 THEN '{}'
+                                ELSE excluded.details
+                            END;
+                """, (hotkey, '{}'))
+        db.conn.commit()    
     except Exception as e:
         db.conn.rollback()
         bt.logging.error(f"Error while updating miner_details: {e}")
@@ -210,7 +211,7 @@ def update_allocation_db(hotkey: str, info: str, flag: bool):
     cursor = db.get_cursor()
     try:
         if flag:
-            # Insert or update the allocation details without specifying an id
+            # Insert or update the allocation details
             cursor.execute("""
                 INSERT INTO allocation (hotkey, details)
                 VALUES (?, ?) ON CONFLICT(hotkey) DO UPDATE SET

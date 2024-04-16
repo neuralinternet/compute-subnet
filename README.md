@@ -23,7 +23,7 @@ This repository serves as a compute-composable subnet, integrating various cloud
 
 ## Installation
 
-This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements.
+This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior. 
 
 ### Bittensor
 
@@ -110,6 +110,11 @@ To run a container for allocation, nvidia toolkit for docker needs to be install
 sudo apt-get install -y nvidia-container-toolkit
 sudo apt install -y nvidia-docker2
 ```
+
+### WanDB
+
+To log into the wandb project named opencompute from neuralinternet, miners and validators need a wandb API key.
+Rename the `.env.example` file to `.env` and replace the placeholder with your actual API key.
 
 ### Running subtensor locally
 
@@ -313,7 +318,7 @@ Flags that you can use with the validator script.
 - `--miner.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
 
 ## Benchmarking the machine
-
+### Benchmarking hashcat's performance directly:
 ```bash
 hashcat -b -m 610
 ```
@@ -329,6 +334,43 @@ Speed.#2.........: 12576.1 MH/s (75.69ms) @ Accel:8 Loops:1024 Thr:1024 Vec:1
 Recommended minimum hashrate for the current difficulty: >= 3000 MH/s.
 
 Difficulty will increase over time.
+
+### Benchmarking the system using challenge emulations:
+```bash
+cd compute-subnet
+python3 ./test-scripts/benchmark.py
+```
+
+> "What challenge difficulties would you like to benchmark?"
+
+Any positive integer or list of positive integers ranging from the minimum challenge difficulty (6) to the maximum challenge difficulty (12) can be entered. An invalid entry will default to the minimum or maximum challenge difficulty based on whichever is closer. Entering ```all``` will add 1 challenge of each available difficulty to the benchmark list.
+
+Example challenge difficulty selections:
+```bash
+Example 1: 6
+Example 2: 7 8 9
+Example 3: 10, 11, 12
+Example 4: all
+```
+> "How many benchmarks would you like to perform?"
+
+Any positive integer > 0, ```n```, can be used. This will benchmark each entered difficulty ```n``` times.\
+Example:
+```bash
+Difficulties = [6, 7, 8]
+Benchmarks to perform = 2
+Benchmarks performed: [6, 6, 7, 7, 8, 8]
+```
+
+> "What hashcat workload profile (1, 2, 3, or 4) would you like to use?"
+
+A workload profile from 1 to 4 can be used. An invalid or empty entry will default to workload profile 3.
+
+> "Enter any extra hashcat options to use. Leave this empty to use the recommended -O option. Enter None for no extended options."
+
+Enter any additional options for hashcat to use. It's recommended to use the ```-O``` option by either explicitly stating it or submitting a blank entry, which will use ```-O``` by default. Enter ```None``` to exclude all extra hashcat options. Additional options can be listed with the command ```hashcat -h```.
+
+![alt text](<miner_benchmark_sample.png>)
 
 ## Troubleshooting
 
