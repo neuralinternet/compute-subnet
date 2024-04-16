@@ -206,10 +206,7 @@ def run_miner_pow(
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
-    if len(queue) <= 0:
-        bt.logging.info(f"{run_id}: 💻 Challenge received")
-    else:
-        bt.logging.info(f"{run_id}: ⏳ An instance is already running - added in the queue.")
+    bt.logging.info(f"{run_id}: 💻 Challenge received")
 
     # Add to the queue the challenge id
     queue.append(run_id)
