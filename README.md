@@ -37,7 +37,6 @@ This repository requires python3.8 or higher. To install, simply clone this repo
 git clone https://github.com/neuralinternet/Compute-Subnet.git
 cd Compute-Subnet
 python3 -m pip install -r requirements.txt
-python3 -m pip install --no-deps -r requirements-compute.txt
 python3 -m pip install -e .
 ```
 
@@ -111,6 +110,11 @@ To run a container for allocation, nvidia toolkit for docker needs to be install
 sudo apt-get install -y nvidia-container-toolkit
 sudo apt install -y nvidia-docker2
 ```
+
+### WanDB
+
+To log into the wandb project named opencompute from neuralinternet, miners and validators need a wandb API key.
+Rename the `.env.example` file to `.env` and replace the placeholder with your actual API key.
 
 ### Running subtensor locally
 

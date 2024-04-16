@@ -23,6 +23,7 @@ import os
 import random
 import threading
 import traceback
+import hashlib
 from asyncio import AbstractEventLoop
 from typing import Dict, Tuple, List
 
@@ -44,6 +45,7 @@ from compute import (
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
     __version_as_int__,
+    validator_permit_stake,
     weights_rate_limit,
     specs_timeout,
 )
@@ -156,7 +158,7 @@ class Validator:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet.hotkey.ss58_address, os.path.basename(__file__))
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
 
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
@@ -265,31 +267,36 @@ class Validator:
     def sync_scores(self):
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
-        self.wandb.update_stats(self.stats)
+
+        # Fetch allocated hotkeys
+        allocated_hotkeys = self.wandb.get_allocated_hotkeys(self.get_valid_validator_hotkeys(), True)
 
         # Fetch docker requirement
-        has_docker: dict = select_has_docker_miners_hotkey(self.db)
+        has_docker_hotkeys = select_has_docker_miners_hotkey(self.db)
 
         self.pretty_print_dict_values(self.stats)
 
         # Calculate score
         for uid in self.uids:
             try:
-                try:
-                    # This part is to ensure the upgrade to 1.3.10 is running smoothly. But should theoretically be removed after it.
-                    if not self.finalized_specs_once:
-                        self.stats[uid]["has_docker"] = True
-                    else:
-                        self.stats[uid]["has_docker"] = has_docker[uid]
-                except KeyError:
+                # Determine if the user's hotkey has Docker
+                hotkey = self.stats[uid].get("ss58_address")
+                if hotkey in has_docker_hotkeys:
+                    self.stats[uid]["has_docker"] = True
+                elif not self.finalized_specs_once:
+                    self.stats[uid]["has_docker"] = True
+                else:
                     self.stats[uid]["has_docker"] = False
 
-                hotkey = self.stats[uid].get("ss58_address")
-                score = calc_score(self.stats[uid], hotkey=hotkey)
+                score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=allocated_hotkeys)
+                self.stats[uid]["score"] = score
             except (ValueError, KeyError):
                 score = 0
 
             self.scores[uid] = score
+
+        # Update stats in wandb
+        self.wandb.update_stats(self.stats)
 
         bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
 
@@ -344,10 +351,14 @@ class Validator:
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
 
-            if challenge_successes >= 20:
-                if last_20_challenge_failed <= 1:
+            # Adjust difficulty based on failure rates with more nuanced increments
+            if challenge_successes > 4:  # Adjusts the threshold from 20 to 4 for faster response
+                failure_rate = last_20_challenge_failed / 20
+                if failure_rate < 0.1:
+                    difficulty = min(current_difficulty + 2, pow_max_difficulty)
+                elif failure_rate < 0.2:
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
-                elif last_20_challenge_failed > 2:
+                elif failure_rate > 0.25:
                     difficulty = max(current_difficulty - 1, pow_min_difficulty)
                 else:
                     difficulty = current_difficulty
@@ -355,6 +366,7 @@ class Validator:
             pass
         except Exception as e:
             bt.logging.error(f"{e} => difficulty minimal: {pow_min_difficulty} attributed for {uid}")
+
         return max(difficulty, pow_min_difficulty)
 
     @staticmethod
@@ -451,6 +463,19 @@ class Validator:
         dict_filtered_axons = self.filter_axons(queryable_tuple_uids_axons=queryable)
         dict_filtered_axons = self.filter_axon_version(dict_filtered_axons=dict_filtered_axons)
         return dict_filtered_axons
+
+    def get_valid_validator_hotkeys(self):
+        valid_uids = []
+        uids = self.metagraph.uids.tolist()
+        for index, uid in enumerate(uids):
+            if self.metagraph.total_stake[index] > validator_permit_stake:
+                valid_uids.append(uid)
+        valid_hotkeys = []
+        for uid in valid_uids:
+            neuron = self.subtensor.neuron_for_uid(uid, self.config.netuid)
+            hotkey = neuron.hotkey
+            valid_hotkeys.append(hotkey)
+        return valid_hotkeys
 
     def execute_pow_request(self, uid, axon: bt.AxonInfo, _hash, _salt, mode, chars, mask, difficulty):
         dendrite = bt.dendrite(wallet=self.wallet)
@@ -561,6 +586,21 @@ class Validator:
         for hotkey, specs in results.values():
             bt.logging.info(f"{hotkey} - {specs}")
         """
+        self.finalized_specs_once = True
+    
+    def get_specs_wandb(self):
+
+        bt.logging.info(f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}")
+     
+        specs_dict = self.wandb.get_miner_specs(self._queryable_uids) 
+        # Update the local db with the data from wandb
+        update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
+
+        # Log the hotkey and specs
+        bt.logging.info(f"✅ Hardware list responses:")
+        for hotkey, specs in specs_dict.values():
+            bt.logging.info(f"{hotkey} - {specs}")
+
         self.finalized_specs_once = True
 
     def set_weights(self):
@@ -681,11 +721,22 @@ class Validator:
                         if not hasattr(self, "_queryable_uids"):
                             self._queryable_uids = self.get_queryable()
 
-                        self.loop.run_in_executor(None, self.execute_specs_request)
+                        # self.loop.run_in_executor(None, self.execute_specs_request) replaced by wandb query.
+                        self.get_specs_wandb()
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
                         self.sync_status()
+
+                        # Log chain data to wandb
+                        chain_data = {
+                            "Block": self.current_block,
+                            "Stake": float(self.metagraph.S[self.validator_subnet_uid].numpy()),
+                            "Rank": float(self.metagraph.R[self.validator_subnet_uid].numpy()),
+                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid].numpy()),
+                            "Emission": float(self.metagraph.E[self.validator_subnet_uid].numpy()),
+                        }
+                        self.wandb.log_chain_data(chain_data)
 
                     # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
                     if self.current_block - self.last_updated_block > weights_rate_limit:

@@ -115,7 +115,7 @@ class Miner:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet.hotkey.ss58_address, os.path.basename(__file__))
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
         self.wandb.update_specs()
 
         # Subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
@@ -319,10 +319,12 @@ class Miner:
 
     def update_allocation(self, synapse: Allocate):
         if not synapse.checking and isinstance(synapse.output, dict) and synapse.output.get("status") is True:
-            self.wandb.update_allocated(synapse.dendrite.hotkey)
-            bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}..")
-        if isinstance(synapse.output, dict) and synapse.output.get("status") is False:
-            self.wandb.update_allocated(None)
+            if synapse.timeline > 0:
+                self.wandb.update_allocated(synapse.dendrite.hotkey)
+                bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}.")
+            else:
+                self.wandb.update_allocated(None)
+                bt.logging.success(f"De-allocation made by {synapse.dendrite.hotkey}.")
 
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
     def allocate(self, synapse: Allocate) -> Allocate:
@@ -442,6 +444,7 @@ class Miner:
         """The Main Validation Loop"""
 
         block_next_updated_validator = self.current_block + 30
+        block_next_updated_specs = self.current_block + 150
         block_next_sync_status = self.current_block + 25
 
         time_next_updated_validator = None
@@ -462,12 +465,27 @@ class Miner:
                     time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
 
                 if self.current_block % block_next_updated_validator == 0 or block_next_updated_validator < self.current_block:
-                    block_next_updated_validator = self.current_block + 30  # ~ every 6 minutes
+                    block_next_updated_validator = self.current_block + 30  # 30 ~ every 6 minutes
                     self.get_updated_validator()
+                
+                if self.current_block % block_next_updated_specs == 0 or block_next_updated_specs < self.current_block:
+                    block_next_updated_specs = self.current_block + 150  # 150 ~ every 30 minutes
+                    self.wandb.update_specs()               
 
                 if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
-                    block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
+                    block_next_sync_status = self.current_block + 25  # 25 ~ every 5 minutes
                     self.sync_status()
+
+                    # Log chain data to wandb
+                    chain_data = {
+                        "Block": self.current_block,
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid].numpy()),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid].numpy()),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid].numpy()),
+                    }
+                    self.wandb.log_chain_data(chain_data)
 
                 # Periodically clear some vars
                 if len(self.blocks_done) > 1000:

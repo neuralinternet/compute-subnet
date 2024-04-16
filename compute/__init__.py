@@ -18,9 +18,9 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.4.1"
-__minimal_miner_version__ = "1.4.0"
-__minimal_validator_version__ = "1.4.1"
+__version__ = "1.4.2"
+__minimal_miner_version__ = "1.4.2"
+__minimal_validator_version__ = "1.4.2"
 
 version_split = __version__.split(".")
 __version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
@@ -36,7 +36,7 @@ specs_timeout = 60
 # Time before the proof of work requests will time out. time unit = seconds
 pow_timeout = 30
 # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
-pow_min_difficulty = 6
+pow_min_difficulty = 7
 # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
 pow_max_difficulty = 12
 # Model: BLAKE2b-512($pass.$salt)
@@ -49,6 +49,7 @@ miner_priority_challenge = 2  # Medium priority
 miner_priority_allocate = 3  # The highest priority
 miner_hashcat_location = "hashcat"
 miner_hashcat_workload_profile = "3"
+miner_hashcat_extended_options = "-O"
 
 SUSPECTED_EXPLOITERS_COLDKEYS = []
 SUSPECTED_EXPLOITERS_HOTKEYS = [

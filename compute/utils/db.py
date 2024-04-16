@@ -39,6 +39,7 @@ class ComputeDb:
             cursor.execute("CREATE TABLE IF NOT EXISTS allocation (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
+            cursor.execute("CREATE TABLE IF NOT EXISTS wandb_runs (hotkey TEXT PRIMARY KEY, run_id TEXT NOT NULL)")
 
             self.conn.commit()
         except Exception as e:

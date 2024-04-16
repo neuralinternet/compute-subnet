@@ -58,7 +58,7 @@ def run_hashcat(
     timeout: int = compute.pow_timeout,
     hashcat_path: str = compute.miner_hashcat_location,
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
-    hashcat_extended_options: str = "",
+    hashcat_extended_options: str = compute.miner_hashcat_extended_options,
     initial_start_time=None,
     execution_time=None,
 ):
