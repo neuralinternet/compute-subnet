@@ -104,7 +104,9 @@ def run_hashcat(
             mask,
             "-w",
             hashcat_workload_profile,
+            "2"
             hashcat_extended_options,
+            "-O"
         ]
         command_str = " ".join(shlex.quote(arg) for arg in command)
         bt.logging.trace(command_str)
