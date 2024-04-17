@@ -18,7 +18,7 @@
 
 import bittensor as bt
 import base64
-import docker
+import os
 from io import BytesIO
 
 from neurons.Miner.container import kill_container, run_container, check_container

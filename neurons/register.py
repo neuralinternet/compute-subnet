@@ -26,14 +26,13 @@ import json
 
 import bittensor as bt
 import torch
-import wandb
 import time
 
 import RSAEncryption as rsa
 from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
+from compute.wandb.wandb import ComputeWandb
 from neurons.Validator.database.allocate import select_allocate_miners_hotkey, update_allocation_db, get_miner_details
-from neurons.Validator.calculate_pow_score import check_latest_allocation_status
 from compute.utils.version import get_local_version
 
 from compute.utils.db import ComputeDb
@@ -205,27 +204,26 @@ def allocate_container_hotkey(config, hotkey, timeline, public_key):
     axon_candidate = []
     for axon in metagraph.axons:
         if axon.hotkey == hotkey:
-            register_response = dendrite.query(
+            check_allocation = dendrite.query(
                 axon,
-                Allocate(timeline=timeline, device_requirement=device_requirement, checking=False, public_key=public_key),
+                Allocate(timeline=timeline, device_requirement=device_requirement, checking=True),
                 timeout=60,
                 )
-            if register_response and register_response["status"] is True:
-                register_response["ip"] = axon.ip
-                register_response["hotkey"] = axon.hotkey
-                return register_response
+            if check_allocation  and check_allocation ["status"] is True:
+                register_response = dendrite.query(
+                    axon,
+                    Allocate(timeline=timeline, device_requirement=device_requirement, checking=False, public_key=public_key),
+                    timeout=60,
+                    )
+                if register_response and register_response["status"] is True:
+                    register_response["ip"] = axon.ip
+                    register_response["hotkey"] = axon.hotkey
+                    return register_response
 
     return {"status": False, "msg": "Requested resource is not available."}
 
 
-def allocate():
-    # Wandb is mandatory
-    if wandb.api.api_key is None:
-        print("The requested function is unavailable without Weights & Biases (wandb) integration.\n"
-              "Kindly note that the user must be logged in to wandb via API key to proceed.\n" 
-              "For assistance with obtaining the API key, please contact the Neural Internet team.")
-        return
-
+def allocate(wandb):
     config = get_config_cli()
     
     device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
@@ -240,7 +238,6 @@ def allocate():
         result_info = result["info"]
         private_key = private_key.encode("utf-8")
         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(result_info))
-        upload_wandb(result_hotkey, True)
         bt.logging.info(f"Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}")
 
         # Iterate through the miner specs details to get gpu_name
@@ -280,19 +277,13 @@ def allocate():
         print("-" * 100)  # Print a separator line
 
         update_allocation_db(result_hotkey,info,True)
+        update_allocation_wandb(wandb)
 
     else:
         bt.logging.info(f"Failed : {result['msg']}")
 
 
-def allocate_hotkey():
-    # Wandb is mandatory
-    if wandb.api.api_key is None:
-        print("The requested function is unavailable without Weights & Biases (wandb) integration.\n"
-              "Kindly note that the user must be logged in to wandb via API key to proceed.\n" 
-              "For assistance with obtaining the API key, please contact the Neural Internet team.")
-        return
-
+def allocate_hotkey(wandb):
     # Get hotkey:
     hotkey = input("Enter the hotkey of the resource to allocate: ")
 
@@ -321,7 +312,6 @@ def allocate_hotkey():
         result_info = result["info"]
         private_key = private_key.encode("utf-8")
         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(result_info))
-        upload_wandb(result_hotkey, True)
         bt.logging.info(f"Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}")
 
         info = json.loads(decrypted_info_str)
@@ -347,19 +337,13 @@ def allocate_hotkey():
         print("-" * 100)  # Print a separator line
 
         update_allocation_db(result_hotkey,info,True)
+        update_allocation_wandb(wandb)
 
     else:
         bt.logging.info(f"Failed : {result['msg']}")
 
 
-def deallocate():
-    # Wandb is mandatory
-    if wandb.api.api_key is None:
-        print("The requested function is unavailable without Weights & Biases (wandb) integration.\n"
-              "Kindly note that the user must be logged in to wandb via API key to proceed.\n" 
-              "For assistance with obtaining the API key, please contact the Neural Internet team.")
-        return
-
+def deallocate(wandb):
     # Get hotkey:
     hotkey = input("Enter the hotkey of the resource to de-allocate: ")
 
@@ -417,7 +401,7 @@ def deallocate():
             )
             if deregister_response and deregister_response["status"] is True:
                 update_allocation_db(result_hotkey, info, False)
-                upload_wandb(hotkey, False)
+                update_allocation_wandb(wandb)
                 print("Resource de-allocated successfully.")
             else:
                 print("De-allocation not successfull, please try again.")
@@ -430,93 +414,7 @@ def deallocate():
         cursor.close()
         db.close()
 
-
-def check_and_update_existing_allocations():
-
-    # Instantiate the connection to the db
-    db = ComputeDb()
-    cursor = db.get_cursor()
-
-    hotkey_list = []
-    public_key_list = []
-
-    try:
-        # Retrieve all records from the allocation table
-        cursor.execute("SELECT id, hotkey, details FROM allocation")
-        rows = cursor.fetchall()
-
-        # ANSI escape code for blue text
-        BLUE = '\033[94m'
-        # ANSI escape code to reset to default text color
-        RESET = '\033[0m'
-        print("=" * 100)  # Print a separator line for the title
-        print(f"{BLUE}LIST OF ALLOCATED RESOURCES{RESET}")
-        print("=" * 100)  # Print a separator line for the title
-
-        if not rows:
-            print("No resources allocated.")
-            return
-
-        for row in rows:
-            id, hotkey, details = row
-            info = json.loads(details) 
-
-            #add to list here, hotkey, public_key
-            hotkey_list.append(hotkey)
-            public_key_list.append(info['regkey'])
-
-    except Exception as e:
-        print(f"An error occurred while retrieving allocation details: {e}")
-    
-    config = get_config()
-
-    wallet = bt.wallet(config=config)
-    bt.logging.info(f"Wallet: {wallet}")
-
-    # The subtensor is our connection to the Bittensor blockchain.
-    subtensor = bt.subtensor(config=config)
-    bt.logging.info(f"Subtensor: {subtensor}")
-
-    # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-    dendrite = bt.dendrite(wallet=wallet)
-    bt.logging.info(f"Dendrite: {dendrite}")
-
-    # The metagraph holds the state of the network, letting us know about other miners.
-    metagraph = subtensor.metagraph(config.netuid)
-    bt.logging.info(f"Metagraph: {metagraph}")
-
-    wallet = bt.wallet(config=config)
-    subtensor = bt.subtensor(config=config)
-    bt.logging.info(f"Subtensor: {subtensor}")
-
-    # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-    dendrite = bt.dendrite(wallet=wallet)
-    metagraph = subtensor.metagraph(config.netuid)
-    
-    axons_to_check = []
-    for axon in metagraph.axons:
-        if axon.hotkey in hotkey_list:
-            axons_to_check.append(axon)
-
-    for hotkey in hotkey_list:
-        if hotkey not in axons_to_check:
-            update_allocation_db(hotkey=hotkey, info = "", flag=False) 
-
-    if len(axons_to_check) > 0:
-        responses = dendrite.query(axons_to_check, Allocate(timeline=0, device_requirement="", checking=True, public_key=public_key_list))
-
-        axon_failed_hotkey = []
-
-        for index, response in enumerate(responses):
-            hotkey = axons_to_check[index].hotkey
-            if response and response["status"] is False:
-                 update_allocation_db(hotkey=hotkey, info = "", flag=False) 
-
-def list_allocations():
-
-    # First check the current state of allocations, experimental and not in use in 1.3.11
-    # check_and_update_existing_allocations()
-
+def list_allocations(wandb):
     # Instantiate the connection to the db
     db = ComputeDb()
     cursor = db.get_cursor()
@@ -560,24 +458,7 @@ def list_allocations():
         db.close()
 
 
-def list_resources():
-
-    # Show and sync status from wandb based on user input: y/n
-    sync_status_input = input("Sync and show status (available/reserved)? This may take some time. y/n: ")
-    if sync_status_input.lower() in ['y', 'yes']:
-        sync_status = True
-    elif sync_status_input.lower() in ['n', 'no']:
-        sync_status = False
-    else:
-        print("Invalid input. Please respond with 'y' or 'n'.")
-
-    # Wandb is mandatory
-    if sync_status and wandb.api.api_key is None:
-        print("The requested function is unavailable without Weights & Biases (wandb) integration.\n"
-              "Kindly note that the user must be logged in to wandb via API key to proceed.\n" 
-              "For assistance with obtaining the API key, please contact the Neural Internet team.")
-        return
-    
+def list_resources(wandb): 
     db = ComputeDb()
 
     specs_details = get_miner_details(db)
@@ -650,11 +531,12 @@ def list_resources():
         
         # Allocation status
         status = "N/A"
-        if sync_status:
-            if check_latest_allocation_status(hotkey, False):
-                status = "Res."
-            else:
-                status = "Avail."
+        allocated_hotkeys =  wandb.get_allocated_hotkeys([], False)
+        
+        if hotkey in allocated_hotkeys:
+            status = "Res."
+        else:
+            status = "Avail."
 
         # Print the row with column separators
         row_data = [hotkey, gpu_name, gpu_capacity, gpu_count, cpu_count, ram, hard_disk, status]
@@ -689,22 +571,31 @@ def list_resources():
         summary_line = '|'.join(str(d).ljust(w) for d, w in zip(summary_data, [30, 15]))
         print(summary_line)
 
+def update_allocation_wandb(wandb):
+    hotkey_list = []
+    
+    # Instantiate the connection to the db
+    db = ComputeDb()
+    cursor = db.get_cursor()
 
-def upload_wandb(hotkey, flag):
     try:
-        # Initialize W&B
-        run = wandb.init(
-            project="allocated-miners", 
-            name="hotkeys", reinit=True, 
-            settings=wandb.Settings(_disable_stats=True, console='off'),
-            )
+        # Retrieve all records from the allocation table
+        cursor.execute("SELECT id, hotkey, details FROM allocation")
+        rows = cursor.fetchall()
         
-        # Log the hotkey along with the allocation_status
-        allocation_status = flag     
-        run.log({"key": hotkey, "allocated": allocation_status})
-        run.finish()
+        for row in rows:
+            id, hotkey, details = row
+            hotkey_list.append(hotkey)
+
     except Exception as e:
-        bt.logging.info(f"Error uploading to wandb : {e}")
+        print(f"An error occurred while retrieving allocation details: {e}")
+    finally:
+        cursor.close()
+        db.close()
+    try:
+        wandb.update_allocated_hotkeys(hotkey_list)
+    except Exception as e:
+        bt.logging.info(f"Error updating wandb : {e}")
         return
     
 
@@ -715,6 +606,12 @@ def print_welcome_message():
     print(f"Version: {get_local_version()}\n")
 
 def main():
+    
+    # Check wandb API-Key
+    config = get_config()
+    wallet = bt.wallet(config=config)
+    wandb = ComputeWandb(config, wallet, "validator.py")
+
     print_welcome_message()
 
     parser = argparse.ArgumentParser(description='Compute subnet CLI')
@@ -755,7 +652,7 @@ def main():
         try:
             args = parser.parse_args(command_input.split())
             if hasattr(args, 'func'):
-                args.func()
+                args.func(wandb)
         except SystemExit:
             # Catch the SystemExit exception to prevent the script from closing
             continue
