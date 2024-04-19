@@ -20,6 +20,43 @@ This repository contains an installation script for setting up a Bittensor miner
 
 This installation process requires Ubuntu 22.04.
 
+Use a Virtual Environment
+
+When working with Bittensor miners across various Subnets, it's highly recommended to use a virtual environment (venv) to isolate the dependencies and avoid potential conflicts. Each subnet may have different requirements, and using a separate virtual environment ensures that the dependencies are managed independently.
+
+To create and activate a virtual environment, follow these steps:
+
+1. Open a terminal and navigate to the directory where you want to create the virtual environment.
+
+2. Run the following command to create a new virtual environment:
+```
+python3 -m venv myenv
+```
+
+Replace `myenv` with your desired name for the virtual environment.
+
+3. Activate the virtual environment:
+- For Linux or macOS:
+  ```
+  source myenv/bin/activate
+  ```
+- For Windows:
+  ```
+  myenv\Scripts\activate
+  ```
+
+4. Once the virtual environment is activated, you'll see the name of the environment in your terminal prompt, indicating that you're now working within the isolated environment.
+
+5. Proceed with installing the required dependencies and running the Bittensor miner specific to the Subnet you're working on.
+
+6. To deactivate the virtual environment when you're done, simply run:
+```
+deactivate
+```
+Using a virtual environment ensures that the dependencies and requirements are isolated and avoids potential conflicts.
+
+Please remember to activate the appropriate virtual environment when you switch between Subnets or working on a different miner/project.
+
 To install Bittensor with SN27 dependencies, simply run the following command in your terminal:
 
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cisterciansis/Bittensor-Compute-Subnet-Installer-Script/main/install_sn27.sh)"
