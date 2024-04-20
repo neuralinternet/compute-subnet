@@ -58,9 +58,9 @@ Using a virtual environment ensures that the dependencies and requirements are i
 Please remember to activate the appropriate virtual environment when you switch between Subnets or working on a different miner/project.
 
 To install Bittensor with SN27 dependencies, simply run the following command in your terminal:
-
+```
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cisterciansis/Bittensor-Compute-Subnet-Installer-Script/main/install_sn27.sh)"
-
+```
 The script will guide you through the installation process and set up the necessary components for running a Bittensor miner on SN27.
 
 Please note that this script is designed for Linux systems with the apt package manager. If you're using a different Linux distribution or package manager, you may need to modify the script accordingly.
