@@ -158,8 +158,6 @@ class Validator:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
@@ -175,6 +173,9 @@ class Validator:
         # Initialize the local db
         self.db = ComputeDb()
         self.miners: dict = select_miners(self.db)
+
+        # Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
 
         # Step 3: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
