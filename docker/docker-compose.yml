@@ -1,0 +1,38 @@
+#######################################################################
+# File name : docker-compose.yml
+# Author : Thomas Chu (05/09/2024)
+# Author email : chu_liang_han@hotmail.com
+# Project : SN27
+# Project repository : 
+# 
+# Docker-compose file of SN27
+#######################################################################
+#version: '3.5'
+name: ni
+services:
+    sn27:
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: all
+                          capabilities:
+                              - gpu
+        volumes:
+            - bittensor:/root/.bittensor
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /usr/bin/docker:/usr/bin/docker
+        ports:
+            - 8091:8091
+        environment:
+            - BIND_ADDR=0.0.0.0:8091
+        stdin_open: true
+        tty: true
+        privileged: true
+        image: sn27:latest
+
+volumes:
+    bittensor:
+        external: true
+        name: bittensor
