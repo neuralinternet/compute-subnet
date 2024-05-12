@@ -41,6 +41,7 @@ def get_cpu_info():
 
         return info
     except Exception as e:
+        print(e)
         return {}
 
 
@@ -73,6 +74,7 @@ def get_gpu_info():
         return info
 
     except Exception as e:
+        print(e)
         return {}
 
 
@@ -122,6 +124,7 @@ def get_hard_disk_info():
 
         return info
     except Exception as e:
+        print(e)
         return {}
 
 
@@ -163,6 +166,7 @@ def get_ram_info():
 
         return info
     except Exception as e:
+        print(e)
         return {}
 
 
@@ -224,19 +228,24 @@ def check_docker_container(container_id_or_name: str):
         return False
 
 
-def get_perf_info():
-    cpu_info = get_cpu_info()
-    gpu_info = get_gpu_info()
-    hard_disk_info = get_hard_disk_info()
-    ram_info = get_ram_info()
-    has_docker = check_docker_availability()[0]
+def get_perf_info(encrypted=True):
+    try:
+        cpu_info = get_cpu_info()
+        gpu_info = get_gpu_info()
+        hard_disk_info = get_hard_disk_info()
+        ram_info = get_ram_info()
+        has_docker = check_docker_availability()[0]
 
-    perf_info = {"cpu": cpu_info, "gpu": gpu_info, "hard_disk": hard_disk_info, "ram": ram_info, "has_docker": has_docker}
-    perf_str = json.dumps(perf_info)
+        perf_info = {"cpu": cpu_info, "gpu": gpu_info, "hard_disk": hard_disk_info, "ram": ram_info, "has_docker": has_docker}
+        perf_str = json.dumps(perf_info)
 
-    cipher_suite = Fernet(secret_key)
-    encoded_str = cipher_suite.encrypt(perf_str.encode())
-    return encoded_str
+        if encrypted:
+            cipher_suite = Fernet(secret_key)
+            return cipher_suite.encrypt(perf_str.encode())
+        return perf_info
+    except (Exception, RuntimeError) as e:
+        print(e)
+        return ""
 
 
 if __name__ == "__main__":
