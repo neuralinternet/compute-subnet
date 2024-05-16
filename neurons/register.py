@@ -487,6 +487,7 @@ def list_resources(wandb):
     gpu_instances = {}
     total_gpu_counts = {}
 
+    allocated_hotkeys = wandb.get_allocated_hotkeys([], False)
     # Iterate through the miner specs details and print the table
     for hotkey, details in specs_details.items():
         if details:  # Check if details are not empty
@@ -531,7 +532,6 @@ def list_resources(wandb):
         
         # Allocation status
         status = "N/A"
-        allocated_hotkeys =  wandb.get_allocated_hotkeys([], False)
         
         if hotkey in allocated_hotkeys:
             status = "Res."

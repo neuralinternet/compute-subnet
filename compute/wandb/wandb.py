@@ -192,17 +192,15 @@ class ComputeWandb:
         This function gets all allocated hotkeys from all validators.
         Only relevant for validators.
         """
-        # Query all runs in the project
+        # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
-        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}")
+        validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                                       filters = {"config.role": "validator"})
 
          # Check if the runs list is empty
-        if not runs:
+        if not validator_runs:
             bt.logging.info("No validator info found in the project opencompute.")
             return []
-
-        # Filter runs where the role is 'validator'
-        validator_runs = [run for run in runs if run.config.get('role') == 'validator']
 
         # Initialize an empty list to store allocated keys from runs with a valid signature
         allocated_keys_list = []
@@ -238,7 +236,8 @@ class ComputeWandb:
         db_specs_dict = {}
 
         self.api.flush()
-        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}")
+        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                             filters={"config.role": "miner"})
 
         try:
             # Iterate over all runs in the opencompute project
