@@ -186,6 +186,9 @@ class Validator:
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
 
+        # Init groups challenged
+        self.groups_challenged = set()
+
         # Init the thread.
         self.lock = threading.Lock()
         self.threads: List[threading.Thread] = []
@@ -646,14 +649,13 @@ class Validator:
         except ValueError:
             return -1
 
-    def get_group_to_challenge(self, current_block, validator_index, num_groups):
-        epoch_block = current_block % 360
-        return (epoch_block + validator_index) % num_groups
+    def get_group_to_challenge(self, challenge_block, validator_index, num_groups):
+        return (challenge_block + validator_index) % num_groups
 
-    def select_miners_to_challenge(self, group_index):
-        queryable_uids = self.get_queryable()
+    def select_miners_to_challenge(self, group_index, num_groups):
+        queryable = self.get_queryable()
+        queryable_uids = list(queryable.keys())
         num_miners = len(queryable_uids)
-        num_groups = len(self.get_valid_validator_hotkeys())
         miners_per_group = num_miners // num_groups
         remainder_miners = num_miners % num_groups
 
@@ -666,15 +668,15 @@ class Validator:
 
         return queryable_uids[start_index:end_index]
 
-    def perform_pow_queries(self):
+    def perform_pow_queries(self, miner_uids_to_challenge):
 
         self.threads = []
 
-        for uid in self.miner_uids_to_challenge:
+        for uid in miner_uids_to_challenge:
             try:
                 axon = self._queryable_uids[uid]
                 difficulty = self.calc_difficulty(uid)
-                password, _hash, _salt, mode, chars, mask = self.run_validator_pow(length=difficulty)  # You need to implement this method
+                password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
                 self.pow_requests[uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
                 thread = threading.Thread(
                     target=self.execute_pow_request,
@@ -712,6 +714,7 @@ class Validator:
 
         min_response_time = 10  # Minimum number of blocks (2 minutes) for response
         extra_buffer = 5  # Additional buffer to ensure challenges are issued in time
+        margin = 15  # Margin to catch missed blocks
 
         bt.logging.info("Starting validator loop.")
         while True:
@@ -734,22 +737,29 @@ class Validator:
                     challenge_interval = (360 - min_response_time - extra_buffer) // num_groups
                     epoch_block = self.current_block % 360
 
-                    # Check if it's time to challenge a group
-                    if epoch_block % challenge_interval == 0 and epoch_block <= 360 - min_response_time - extra_buffer:
-                        group_index = self.get_group_to_challenge(epoch_block, validator_index, num_groups)
+                    # Find the previous valid challenge block within the margin
+                    previous_valid_epoch_block = (epoch_block // challenge_interval) * challenge_interval
+                    block_next_challenge = self.current_block//360*360 + previous_valid_epoch_block + challenge_interval
 
-                        # Perform pow queries
-                        if epoch_block == 0:
+                    if previous_valid_epoch_block == 0:
                             self.groups_challenged.clear()
                             self.pow_requests = {}
                             self.pow_responses = {}
                             self.new_pow_benchmark = {}
 
+                    # Check if it's time to challenge a group
+                    if (epoch_block - previous_valid_epoch_block < margin) and (epoch_block <= 360 - min_response_time - extra_buffer) and previous_valid_epoch_block > 0:
+                        group_index = self.get_group_to_challenge(previous_valid_epoch_block, validator_index, num_groups)
+
+                        # Perform pow queries group
                         if group_index not in self.groups_challenged:
                             self.groups_challenged.add(group_index)
-                            miner_uids_to_challenge = self.select_miners_to_challenge(group_index)
+                            if not hasattr(self, "_queryable_uids"):
+                                self._queryable_uids = self.get_queryable()
+                            miner_uids_to_challenge = self.select_miners_to_challenge(group_index, num_groups)
 
                             # Perform PoW queries
+                            bt.logging.info(f"💻 Querying for Challenge Group {group_index}:")
                             self.perform_pow_queries(miner_uids_to_challenge)
 
                              # Log benchmarks for the current group
@@ -770,16 +780,19 @@ class Validator:
                                                               }
 
                                 pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
+
+                                uids = [entry['uid'] for entry in pow_benchmarks_list]
+                                bt.logging.info(f"Successfully benchmarked UIDs: {uids}")
                                 update_challenge_details(self.db, pow_benchmarks_list)
 
-                                self.sync_scores()
                                 self.groups_challenged.clear()
+                                self.sync_scores()
 
                     # Perform specs queries
                     if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (
                         block_next_hardware_info < self.current_block and self.validator_perform_hardware_query
                     ):
-                        block_next_hardware_info = self.current_block + 150  # 150 -> ~ every 30 minutes
+                        block_next_hardware_info = self.current_block + 300  # 150 -> ~ every 60 minutes
 
                         if not hasattr(self, "_queryable_uids"):
                             self._queryable_uids = self.get_queryable()
