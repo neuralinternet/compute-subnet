@@ -68,7 +68,6 @@ from jose.exceptions import (
     ExpiredSignatureError,
     JWTError,
 )
-from passlib.context import CryptContext
 from pydantic import typing, BaseModel, Field
 from typing import List, Optional, Type, Union, Any, Annotated
 
@@ -77,7 +76,6 @@ from typing import List, Optional, Type, Union, Any, Annotated
 
 
 # Security configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_token_scheme = Annotated [str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
 
 class UserConfig(BaseModel):
