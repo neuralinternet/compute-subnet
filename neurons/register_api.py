@@ -37,8 +37,8 @@ import torch
 import time
 from datetime import datetime, timedelta, timezone
 import asyncio
-import secrets
 import multiprocessing
+import ssl
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -63,11 +63,6 @@ from fastapi import (
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import jwt
-from jose.exceptions import (
-    ExpiredSignatureError,
-    JWTError,
-)
 from pydantic import typing, BaseModel, Field
 from typing import List, Optional, Type, Union, Any, Annotated
 
@@ -165,14 +160,14 @@ class RegisterAPI:
         env_file = ".env"
         load_dotenv()
 
-        self.access_api_key = os.getenv("ACCESS_API_KEY")
-        self.refresh_api_key = os.getenv("REFRESH_API_KEY")
-
-        if not self.access_api_key:
-            self.access_api_key = secrets.token_urlsafe(32)
-            self.refresh_api_key = secrets.token_urlsafe(32)
-            set_key(dotenv_path=env_file, key_to_set="ACCESS_API_KEY", value_to_set=self.access_api_key)
-            set_key(dotenv_path=env_file, key_to_set="REFRESH_API_KEY", value_to_set=self.refresh_api_key)
+        # disable JWT and use SSL
+        #self.access_api_key = os.getenv("ACCESS_API_KEY")
+        #self.refresh_api_key = os.getenv("REFRESH_API_KEY")
+        #if not self.access_api_key:
+        #    self.access_api_key = secrets.token_urlsafe(32)
+        #    self.refresh_api_key = secrets.token_urlsafe(32)
+        #    set_key(dotenv_path=env_file, key_to_set="ACCESS_API_KEY", value_to_set=self.access_api_key)
+        #    set_key(dotenv_path=env_file, key_to_set="REFRESH_API_KEY", value_to_set=self.refresh_api_key)
 
         self.app = FastAPI()
         self.resync_period = 180
@@ -225,14 +220,15 @@ class RegisterAPI:
         async def read_root():
             return {"message": "Welcome to Compute Subnet API, Please login to access the API."}
 
-        @self.app.post(
-            "/login",
-            response_model=Token,
-            responses={
-                401: {"description": "Invalid authentication credentials"},
-                200: {"description": "User login successful"},
-            },
-        )
+        # disable login route
+        # @self.app.post(
+        #     "/login",
+        #     response_model=Token,
+        #     responses={
+        #         401: {"description": "Invalid authentication credentials"},
+        #         200: {"description": "User login successful"},
+        #     },
+        # )
         async def login_for_access_token(
             form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
         ) -> Token:
@@ -259,7 +255,7 @@ class RegisterAPI:
                 },
                 401: {
                     "model": ErrorResponse,
-                    "description": "Missing authorization token",
+                    "description": "Missing authorization",
                 },
                 404: {
                     "model": ErrorResponse,
@@ -273,7 +269,6 @@ class RegisterAPI:
         )
         async def allocate_spec(
             requirements: Requirement,
-            token: Union[str, Any] = Depends(self._verify_access_token),
         ) -> JSONResponse | HTTPException:
             """
             The GPU resource allocate API endpoint. <br>
@@ -281,7 +276,7 @@ class RegisterAPI:
             user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
             requirements: The GPU resource requirements which contain the GPU type, GPU size, and booking timeline. <br>
             """
-            if token:
+            if True:
                 if requirements:
                     device_requirement = {
                         "cpu": {"count": 1},
@@ -397,7 +392,7 @@ class RegisterAPI:
                 },
                 401: {
                     "model": ErrorResponse,
-                    "description": "Missing authorization token",
+                    "description": "Missing authorization",
                 },
                 404: {
                     "model": ErrorResponse,
@@ -411,7 +406,6 @@ class RegisterAPI:
         )
         async def allocate_hotkey(
             hotkey: str,
-            token: Union[str, Any] = Depends(self._verify_access_token),
         ) -> JSONResponse | HTTPException:
             """
             The GPU allocate by hotkey API endpoint. <br>
@@ -420,7 +414,7 @@ class RegisterAPI:
             user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
             hotkey: The miner hotkey to allocate the gpu resource. <br>
             """
-            if token:
+            if True:
                 if hotkey:
                     requirements = Requirement()
                     requirements.gpu_type = ""
@@ -537,7 +531,6 @@ class RegisterAPI:
         )
         async def deallocate(
             hotkey: str,
-            token: Union[str, Any] = Depends(self._verify_access_token),
         ) -> JSONResponse | HTTPException:
             """
             The GPU deallocate API endpoint. <br>
@@ -545,7 +538,7 @@ class RegisterAPI:
             user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
             """
-            if token:
+            if True:
                 # Instantiate the connection to the db
                 db = ComputeDb()
                 cursor = db.get_cursor()
@@ -657,14 +650,13 @@ class RegisterAPI:
             },
         )
         async def list_allocations(
-            token: Union[str, Any] = Depends(self._verify_access_token)
         ) -> JSONResponse | HTTPException:
             """
             The list allocation API endpoint. <br>
             The API will return the current allocation on the validator. <br>
             token: The user token for the authorization. <br>
             """
-            if not token:
+            if not True:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={
@@ -758,14 +750,13 @@ class RegisterAPI:
         )
         async def list_resources(
             gpu_type: Union[str, None] = None,
-            token: Union[str, Any] = Depends(self._verify_access_token)
         ) -> JSONResponse | HTTPException:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
             token: The user token for the authorization. <br>
             """
-            if not token:
+            if not True:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={
@@ -1159,7 +1150,9 @@ class RegisterAPI:
         """
         Run the FastAPI app. <br>
         """
-        uvicorn.run(self.app, host="0.0.0.0", port=API_DEFAULT_PORT, log_level="error")
+        uvicorn.run(self.app, host="0.0.0.0", port=API_DEFAULT_PORT,
+                    log_level="error", ssl_keyfile="key.pem", ssl_certfile="cert.pem",
+                    ssl_cert_reqs=1, ssl_ca_certs='cert.pem')
 
     def start(self):
         """

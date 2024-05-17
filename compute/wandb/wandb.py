@@ -195,7 +195,9 @@ class ComputeWandb:
         # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
         validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                                       filters = {"config.role": "validator"})
+                                       filters={"$and": [{"config.role": "validator"},
+                                                         {"config.config.netuid": self.config.netuid}]
+                                                })
 
          # Check if the runs list is empty
         if not validator_runs:
@@ -237,8 +239,10 @@ class ComputeWandb:
 
         self.api.flush()
         runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                             filters={"config.role": "miner"})
-
+                            filters={"$and": [{"config.role": "miner"},
+                                               {"config.config.netuid": self.config.netuid},
+                                               {"state": "running"}]
+                                    })
         try:
             # Iterate over all runs in the opencompute project
             for index, run in enumerate(runs, start=1):
