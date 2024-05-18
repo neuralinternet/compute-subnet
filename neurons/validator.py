@@ -343,10 +343,10 @@ class Validator:
 
             num_threads = pow_threads_per_difficulty.get(current_difficulty, 16)
             lower_threshold = num_threads / 3
-            upper_threshold = 2* num_threads / 3
+            upper_threshold = 2 * num_threads / 3
             if challenge_successes >= 20:
                 # dynamically, according to the number of challenges sent concurrently per difficulty
-                if last_20_challenge_failed <= 1:
+                if last_20_challenge_failed <= lower_threshold :
                     # i.e. if you failed less than a third of the challenges sent to you
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
                 elif last_20_challenge_failed > upper_threshold:
