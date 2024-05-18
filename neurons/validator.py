@@ -40,6 +40,7 @@ from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
     pow_max_difficulty,
+    pow_threads_per_difficulty,
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -634,16 +635,18 @@ class Validator:
                                 try:
                                     axon = self._queryable_uids[_uid]
                                     difficulty = self.calc_difficulty(_uid)
-                                    password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
-                                    self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
-                                    self.threads.append(
-                                        threading.Thread(
-                                            target=self.execute_pow_request,
-                                            args=(_uid, axon, _hash, _salt, mode, chars, mask, difficulty),
-                                            name=f"th_execute_pow_request-{_uid}",
-                                            daemon=True,
+                                    num_threads = pow_threads_per_difficulty.get(difficulty, 16)
+                                    for i in range(num_threads):
+                                        password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
+                                        self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
+                                        self.threads.append(
+                                            threading.Thread(
+                                                target=self.execute_pow_request,
+                                                args=(_uid, axon, _hash, _salt, mode, chars, mask, difficulty),
+                                                name=f"th_execute_pow_request-{_uid}-{num_threads}",
+                                                daemon=True,
+                                            )
                                         )
-                                    )
                                 except KeyError:
                                     continue
 

@@ -34,7 +34,7 @@ weights_rate_limit = 100
 # Time before the specs requests will time out. time unit = seconds
 specs_timeout = 60
 # Time before the proof of work requests will time out. time unit = seconds
-pow_timeout = 30
+pow_timeout = 120
 # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
 pow_min_difficulty = 6
 # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
@@ -43,6 +43,13 @@ pow_max_difficulty = 12
 pow_mode_blake2b512 = "610"
 pow_mode_ruby_on_rails_ra = "19500"
 pow_modes_list = [pow_mode_blake2b512, pow_mode_ruby_on_rails_ra]
+pow_threads_per_difficulty = {
+    8: 13,
+    9: 16,
+    10: 19,
+    11: 7,
+    12: 3,
+}
 # Model: BLAKE2b-512($pass.$salt)
 pow_default_mode = pow_mode_blake2b512
 pow_default_chars = str(string.ascii_letters + string.digits + "!@#$%^&*()-_+=[]{};:,.<>")
