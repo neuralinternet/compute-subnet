@@ -341,10 +341,16 @@ class Validator:
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
 
+            num_threads = pow_threads_per_difficulty.get(current_difficulty, 16)
+            lower_threshold = num_threads / 3
+            upper_threshold = 2* num_threads / 3
             if challenge_successes >= 20:
+                # dynamically, according to the number of challenges sent concurrently per difficulty
                 if last_20_challenge_failed <= 1:
+                    # i.e. if you failed less than a third of the challenges sent to you
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
-                elif last_20_challenge_failed > 2:
+                elif last_20_challenge_failed > upper_threshold:
+                    # i.e. if you failed more than a two thirds of the challenges sent to you
                     difficulty = max(current_difficulty - 1, pow_min_difficulty)
                 else:
                     difficulty = current_difficulty
@@ -477,7 +483,10 @@ class Validator:
         }
         with self.lock:
             self.pow_responses[uid] = response
-            self.new_pow_benchmark[uid] = result_data
+            if self.new_pow_benchmark.get(uid):
+                self.new_pow_benchmark[uid].append(result_data)
+            else:
+                self.new_pow_benchmark[uid] = [result_data]
             
             
     def execute_specs_request(self):
@@ -657,8 +666,10 @@ class Validator:
                             thread.join()
 
                         self.pow_benchmark = self.new_pow_benchmark
-                        self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() if v["success"] is True and v["elapsed_time"] < pow_timeout}
-
+                        self.pow_benchmark_success = {}
+                        for uid, v in self.pow_benchmark.items():
+                            self.pow_benchmark_success[uid] = [sub_v["success"] is True and sub_v["elapsed_time"] < pow_timeout for sub_v in v]
+                        
                         # Logs benchmarks for the validators
                         if len(self.pow_benchmark_success) > 0:
                             bt.logging.info("✅ Results success benchmarking:")
@@ -667,7 +678,11 @@ class Validator:
                         else:
                             bt.logging.warning("❌ Benchmarking: All miners failed. An issue occurred.")
 
-                        pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
+                        pow_benchmarks_list = []
+                        for uid, values_array in self.pow_benchmark.items():
+                            for values in values_array:
+                                pow_benchmarks_list.append({**values, "uid": uid})
+
                         update_challenge_details(self.db, pow_benchmarks_list)
 
                         self.sync_scores()
