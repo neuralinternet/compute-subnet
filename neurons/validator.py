@@ -41,6 +41,7 @@ from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
     pow_max_difficulty,
+    pow_threads_per_difficulty,
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -364,7 +365,7 @@ class Validator:
                     difficulty = min(current_difficulty + 2, pow_max_difficulty)
                 elif failure_rate < 0.2:
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
-                elif failure_rate > 0.25:
+                elif failure_rate > 0.5:
                     difficulty = max(current_difficulty - 1, pow_min_difficulty)
                 else:
                     difficulty = current_difficulty
@@ -519,7 +520,11 @@ class Validator:
         }
         with self.lock:
             self.pow_responses[uid] = response
-            self.new_pow_benchmark[uid] = result_data
+            if self.new_pow_benchmark.get(uid):
+                self.new_pow_benchmark[uid].append(result_data)
+            else:
+                self.new_pow_benchmark[uid] = [result_data]
+
 
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
@@ -678,15 +683,20 @@ class Validator:
             try:
                 axon = self._queryable_uids[uid]
                 difficulty = self.calc_difficulty(uid)
-                password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
-                self.pow_requests[uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
-                thread = threading.Thread(
-                    target=self.execute_pow_request,
-                    args=(uid, axon, _hash, _salt, mode, chars, mask, difficulty),
-                    name=f"th_execute_pow_request-{uid}",
-                    daemon=True,
-                )
-                self.threads.append(thread)
+                num_threads = pow_threads_per_difficulty.get(difficulty, 16)
+                pow_requests_for_uid = []
+                for i in range(num_threads):
+                    password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
+                    pow_requests_for_uid.append((password, _hash, _salt, mode, chars, mask, difficulty))
+                    self.threads.append(
+                        threading.Thread(
+                            target=self.execute_pow_request,
+                            args=(uid, axon, _hash, _salt, mode, chars, mask, difficulty),
+                            name=f"th_execute_pow_request-{uid}-{i}",
+                            daemon=True,
+                        )
+                    )
+                self.pow_requests[uid] = pow_requests_for_uid
             except KeyError:
                 continue
 
@@ -744,10 +754,10 @@ class Validator:
                     block_next_challenge = self.current_block//360*360 + previous_valid_epoch_block + challenge_interval
 
                     if previous_valid_epoch_block == 0:
-                            self.groups_challenged.clear()
-                            self.pow_requests = {}
-                            self.pow_responses = {}
-                            self.new_pow_benchmark = {}
+                        self.groups_challenged.clear()
+                        self.pow_requests = {}
+                        self.pow_responses = {}
+                        self.new_pow_benchmark = {}
 
                     # Check if it's time to challenge a group
                     if (epoch_block - previous_valid_epoch_block < margin) and (epoch_block <= 360 - min_response_time - extra_buffer) and previous_valid_epoch_block > 0:
@@ -777,13 +787,19 @@ class Validator:
                             if len(self.groups_challenged) == num_groups:
 
                                 self.pow_benchmark = self.new_pow_benchmark
-                                self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() 
-                                                              if v["success"] is True and v["elapsed_time"] < pow_timeout
-                                                              }
+                                self.pow_benchmark_success = {}
+                                uids = []
+                                for uid, v in self.pow_benchmark.items():
+                                    sub_array = [sub_v["success"] is True and sub_v["elapsed_time"] < pow_timeout for sub_v in v]
+                                    if len(sub_array):
+                                        uids.append(uid)
+                                        self.pow_benchmark_success[uid] = sub_array
 
-                                pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
-
-                                uids = [entry['uid'] for entry in pow_benchmarks_list]
+                                pow_benchmarks_list = []
+                                for uid, values_array in self.pow_benchmark.items():
+                                    for values in values_array:
+                                        pow_benchmarks_list.append({**values, "uid": uid})
+                                
                                 bt.logging.info(f"Successfully benchmarked UIDs: {uids}")
                                 update_challenge_details(self.db, pow_benchmarks_list)
 

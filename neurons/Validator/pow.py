@@ -17,6 +17,7 @@
 import hashlib
 import random
 import secrets
+import struct
 
 import bittensor as bt
 from cryptography.hazmat.backends import default_backend
@@ -26,10 +27,29 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import compute
 
 
-def gen_hash(password, salt=None):
-    salt = secrets.token_hex(8) if salt is None else salt
+def random_numeric_string(length):
+    numbers = '0123456789'
+    return ''.join([numbers[random.randint(0, 9)] for _ in range(length)])
+
+def gen_hash(password, mode=compute.pow_default_mode, salt=None):
+    if salt is None:
+        salt = secrets.token_hex(8) if mode == compute.pow_mode_blake2b512 else random_numeric_string(8)
     salted_password = password + salt
     data = salted_password.encode("utf-8")
+
+    if mode == compute.pow_mode_ruby_on_rails_ra:
+        if not salt:
+            salt = random_numeric_string(12)
+        site_key = random_numeric_string(12)
+        # Construct the base string with separators
+        base_string = f"{site_key}--{salt}--{password}--{site_key}"
+        # Apply SHA-1 iteratively for 10 rounds (including the initial one)
+        digest = hashlib.sha1(base_string.encode('utf-8')).hexdigest()
+        for _ in range(9):
+            digest = hashlib.sha1(f"{digest}--{salt}--{password}--{site_key}".encode('utf-8')).hexdigest()
+        # Format the final hash string
+        return f"{digest}", f"{salt}:{site_key}"
+    # compute.pow_mode_blake2b512:
     hash_result = hashlib.blake2b(data).hexdigest()
     return f"$BLAKE2${hash_result}", salt
 
@@ -49,11 +69,12 @@ def gen_random_string(available_chars=compute.pow_default_chars, length=compute.
     return "".join(random.choice(available_chars) for _ in range(length))
 
 
-def gen_password(available_chars=compute.pow_default_chars, length=compute.pow_min_difficulty):
+def gen_password(available_chars=compute.pow_default_chars, length=compute.pow_min_difficulty, mode=compute.pow_default_mode):
     try:
         password = gen_random_string(available_chars=available_chars, length=length)
+
         _mask = "".join(["?1" for _ in range(length)])
-        _hash, _salt = gen_hash(password)
+        _hash, _salt = gen_hash(password, mode)
         return password, _hash, _salt, _mask
     except Exception as e:
         bt.logging.error(f"Error during PoW generation (gen_password): {e}")
@@ -68,5 +89,10 @@ def run_validator_pow(length=compute.pow_min_difficulty):
     available_chars = list(available_chars)
     random.shuffle(available_chars)
     available_chars = "".join(available_chars)
-    password, _hash, _salt, _mask = gen_password(available_chars=available_chars[:10], length=length)
-    return password, _hash, _salt, compute.pow_default_mode, available_chars[:10], _mask
+    # only 2 modes for now, might switch to just 19500 to incentivize better GPUs
+    mode = compute.pow_modes_list[random.randint(0, len(compute.pow_modes_list))]
+    # parametrize length by mode, a 10-char 19500 hash is as hard as a 12-char 610 hash
+    if mode == compute.pow_mode_ruby_on_rails_ra:
+        length -= 2
+    password, _hash, _salt, _mask = gen_password(available_chars=available_chars[:10], length=length, mode=mode)
+    return password, _hash, _salt, mode, available_chars[:10], _mask
