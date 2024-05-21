@@ -684,9 +684,10 @@ class Validator:
                 axon = self._queryable_uids[uid]
                 difficulty = self.calc_difficulty(uid)
                 num_threads = pow_threads_per_difficulty.get(difficulty, 16)
+                pow_requests_for_uid = []
                 for i in range(num_threads):
                     password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
-                    self.pow_requests[uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
+                    pow_requests_for_uid.append((password, _hash, _salt, mode, chars, mask, difficulty))
                     self.threads.append(
                         threading.Thread(
                             target=self.execute_pow_request,
@@ -695,6 +696,7 @@ class Validator:
                             daemon=True,
                         )
                     )
+                self.pow_requests[uid] = pow_requests_for_uid
             except KeyError:
                 continue
 
@@ -790,7 +792,7 @@ class Validator:
                                 for uid, v in self.pow_benchmark.items():
                                     sub_array = [sub_v["success"] is True and sub_v["elapsed_time"] < pow_timeout for sub_v in v]
                                     if len(sub_array):
-                                      uids.append(uid)
+                                        uids.append(uid)
                                         self.pow_benchmark_success[uid] = sub_array
 
                                 pow_benchmarks_list = []
