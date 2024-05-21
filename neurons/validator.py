@@ -145,6 +145,8 @@ class Validator:
         self.validator_whitelist_updated_threshold = self.config.validator_whitelist_updated_threshold
 
         # Set up logging with the provided configuration and directory.
+        bt.logging.set_debug(self.config.logging.debug)
+        bt.logging.set_trace(self.config.logging.trace)
         bt.logging(config=self.config, logging_dir=self.config.full_path)
         bt.logging.info(f"Running validator for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
         # Log the configuration for reference.
