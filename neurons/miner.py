@@ -18,11 +18,11 @@
 import asyncio
 import json
 import os
+import time
 import traceback
 import typing
 
 import bittensor as bt
-import time
 
 from compute import (
     SUSPECTED_EXPLOITERS_HOTKEYS,
@@ -49,6 +49,8 @@ from compute.utils.version import (
 )
 from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
 from neurons.Miner.container import build_check_container
+from compute.wandb.wandb import ComputeWandb
+from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
@@ -100,6 +102,8 @@ class Miner:
         self.init_black_and_white_list()
 
         # Set up logging with the provided configuration and directory.
+        bt.logging.set_debug(self.config.logging.debug)
+        bt.logging.set_trace(self.config.logging.trace)
         bt.logging(config=self.config, logging_dir=self.config.full_path)
         bt.logging.info(f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
         # Log the configuration for reference.
@@ -143,6 +147,10 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        # Step 4: Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        self.wandb.update_specs()
 
         self.request_specs_processor = RequestSpecsProcessor()
 
@@ -312,9 +320,17 @@ class Miner:
     def priority_allocate(self, synapse: Allocate) -> float:
         return self.base_priority(synapse) + miner_priority_allocate
 
+    def update_allocation(self, synapse: Allocate):
+        if not synapse.checking and isinstance(synapse.output, dict) and synapse.output.get("status") is True:
+            if synapse.timeline > 0:
+                self.wandb.update_allocated(synapse.dendrite.hotkey)
+                bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}.")
+            else:
+                self.wandb.update_allocated(None)
+                bt.logging.success(f"De-allocation made by {synapse.dendrite.hotkey}.")
+
     # This is the Allocate function, which decides the miner's response to a valid, high-priority request.
-    @staticmethod
-    def allocate(synapse: Allocate) -> Allocate:
+    def allocate(self, synapse: Allocate) -> Allocate:
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
         checking = synapse.checking
@@ -335,6 +351,7 @@ class Miner:
             else:
                 result = deregister_allocation(public_key)
                 synapse.output = result
+        self.update_allocation(synapse)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
@@ -429,8 +446,9 @@ class Miner:
     async def start(self):
         """The Main Validation Loop"""
 
-        block_next_updated_validator = 1
-        block_next_sync_status = 1
+        block_next_updated_validator = self.current_block + 30
+        block_next_updated_specs = self.current_block + 150
+        block_next_sync_status = self.current_block + 25
 
         time_next_updated_validator = None
         time_next_sync_status = None
@@ -450,12 +468,27 @@ class Miner:
                     time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
 
                 if self.current_block % block_next_updated_validator == 0 or block_next_updated_validator < self.current_block:
-                    block_next_updated_validator = self.current_block + 30  # ~ every 6 minutes
+                    block_next_updated_validator = self.current_block + 30  # 30 ~ every 6 minutes
                     self.get_updated_validator()
+                
+                if self.current_block % block_next_updated_specs == 0 or block_next_updated_specs < self.current_block:
+                    block_next_updated_specs = self.current_block + 150  # 150 ~ every 30 minutes
+                    self.wandb.update_specs()               
 
                 if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
-                    block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
+                    block_next_sync_status = self.current_block + 25  # 25 ~ every 5 minutes
                     self.sync_status()
+
+                    # Log chain data to wandb
+                    chain_data = {
+                        "Block": self.current_block,
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid].numpy()),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid].numpy()),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid].numpy()),
+                    }
+                    self.wandb.log_chain_data(chain_data)
 
                 # Periodically clear some vars
                 if len(self.blocks_done) > 1000:
