@@ -17,28 +17,25 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
-
+import copy
 
 # Constants
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 10
-REFRESH_TOKEN_EXPIRE_MINUTES = 30
 API_DEFAULT_PORT = 8903
+DATA_SYNC_PERIOD = 180
+PUBLIC_WANDB_NAME = "opencompute"
+PUBLIC_WANDB_ENTITY = "neuralinternet"
 
 # Import Common Libraries
 import argparse
 import base64
 import os
 import json
-import pathlib
-from dotenv import load_dotenv, set_key
 import bittensor as bt
 import torch
 import time
 from datetime import datetime, timedelta, timezone
 import asyncio
 import multiprocessing
-import ssl
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -58,7 +55,6 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
-    BackgroundTasks,
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -66,12 +62,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import typing, BaseModel, Field
 from typing import List, Optional, Type, Union, Any, Annotated
 
-
-# Database connection details
-
-
 # Security configuration
-oauth2_token_scheme = Annotated [str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
+oauth2_token_scheme = Annotated[str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -124,6 +116,22 @@ class Resource(BaseModel):
     allocate_status: str = ""  # "Avail." or "Res."
 
 
+class Specs(BaseModel):
+    details: str = ""
+
+
+class ResourceQuery(BaseModel):
+    gpu_name: Optional[str] = None
+    cpu_count_min: Optional[int] = None
+    cpu_count_max: Optional[int] = None
+    gpu_capacity_min: Optional[float] = None
+    gpu_capacity_max: Optional[float] = None
+    hard_disk_total_min: Optional[float] = None
+    hard_disk_total_max: Optional[float] = None
+    ram_total_min: Optional[float] = None
+    ram_total_max: Optional[float] = None
+
+
 # Response Models
 class SuccessResponse(BaseModel):
     success: bool = True
@@ -149,38 +157,32 @@ class TokenData(BaseModel):
 class RegisterAPI:
     def __init__(
         self,
-        config: bt.config,
-        wallet: bt.wallet,
-        subtensor: bt.subtensor,
-        dendrite: bt.dendrite,
-        metagraph: bt.metagraph,
-        wandb: ComputeWandb,
+        config: Optional[bt.config] = None,
+        wallet: Optional[bt.wallet] = None,
+        subtensor: Optional[bt.subtensor] = None,
+        dendrite: Optional[bt.dendrite] = None,
+        metagraph: Optional[bt.metagraph] = None,
+        wandb: Optional[ComputeWandb] = None,
     ):
-        # Check ACCESS and REFRESH Key
-        env_file = ".env"
-        load_dotenv()
-
-        # disable JWT and use SSL
-        #self.access_api_key = os.getenv("ACCESS_API_KEY")
-        #self.refresh_api_key = os.getenv("REFRESH_API_KEY")
-        #if not self.access_api_key:
+        # Check ACCESS and REFRESH Key, disable JWT and use SSL
+        # env_file = ".env"
+        # load_dotenv()
+        # self.access_api_key = os.getenv("ACCESS_API_KEY")
+        # self.refresh_api_key = os.getenv("REFRESH_API_KEY")
+        # if not self.access_api_key:
         #    self.access_api_key = secrets.token_urlsafe(32)
         #    self.refresh_api_key = secrets.token_urlsafe(32)
         #    set_key(dotenv_path=env_file, key_to_set="ACCESS_API_KEY", value_to_set=self.access_api_key)
         #    set_key(dotenv_path=env_file, key_to_set="REFRESH_API_KEY", value_to_set=self.refresh_api_key)
 
         self.app = FastAPI()
-        self.resync_period = 180
-        self.metagraph_task = BackgroundTasks()
-        self.metagraph_task.add_task(self._refresh_metagraph)
         self._setup_routes()
-
         self.process = None
 
         # Compose User Config Data with bittensor config
         # Get the config from the user config
-        #self.config = self._get_config(user_config=user_config)
-        self.config = config
+        # self.config = self._get_config(user_config=user_config)
+        self.config = config.copy()
 
         # Wallet is the keypair that lets us sign messages to the blockchain.
         self.wallet = wallet
@@ -197,6 +199,8 @@ class RegisterAPI:
         # Initialize the W&B logging
         self.wandb = wandb
 
+        self.allocation_table = []
+
     def _setup_routes(self):
         @self.app.on_event("startup")
         async def startup_event():
@@ -204,8 +208,9 @@ class RegisterAPI:
             This function is called when the application starts. <br>
             It initializes the database connection and other necessary components. <br>
             """
-            # Initialize the config connection
-            pass
+            # Setup the repeated task
+            self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
+            self.allocation_task = asyncio.create_task(self._refresh_allocation())
 
         @self.app.on_event("shutdown")
         async def shutdown_event():
@@ -214,13 +219,14 @@ class RegisterAPI:
             """
             pass
 
-        # For User authentication function
-
-        @self.app.get("/")
+        # Entry point for the API
+        @self.app.get("/", tags=["Root"])
         async def read_root():
-            return {"message": "Welcome to Compute Subnet API, Please login to access the API."}
+            return {
+                "message": "Welcome to Compute Subnet Allocation API, Please login to access the API."
+            }
 
-        # disable login route
+        # disable login route for Token authentication
         # @self.app.post(
         #     "/login",
         #     response_model=Token,
@@ -229,9 +235,7 @@ class RegisterAPI:
         #         200: {"description": "User login successful"},
         #     },
         # )
-        async def login_for_access_token(
-            form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-        ) -> Token:
+        async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],) -> Token:
             user = self._authenticate_user(form_data.username, form_data.password)
             if not user:
                 raise HTTPException(
@@ -247,7 +251,8 @@ class RegisterAPI:
 
         @self.app.post(
             "/service/allocate_spec",
-            response_model=SuccessResponse,
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
             responses={
                 400: {
                     "model": ErrorResponse,
@@ -267,9 +272,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_spec(
-            requirements: Requirement,
-        ) -> JSONResponse | HTTPException:
+        async def allocate_spec(requirements: Requirement,) -> JSONResponse | HTTPException:
             """
             The GPU resource allocate API endpoint. <br>
             token: The user token for the authorization. <br>
@@ -345,6 +348,8 @@ class RegisterAPI:
 
                         update_allocation_db(result_hotkey, info, True)
                         self._update_allocation_wandb()
+                        self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
                             content={
@@ -384,7 +389,8 @@ class RegisterAPI:
 
         @self.app.post(
             "/service/allocate_hotkey",
-            response_model=Allocation,
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
             responses={
                 400: {
                     "model": ErrorResponse,
@@ -404,9 +410,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_hotkey(
-            hotkey: str,
-        ) -> JSONResponse | HTTPException:
+        async def allocate_hotkey(hotkey: str,) -> JSONResponse | HTTPException:
             """
             The GPU allocate by hotkey API endpoint. <br>
             User use this API to book a specific miner. <br>
@@ -469,6 +473,8 @@ class RegisterAPI:
 
                         update_allocation_db(result_hotkey, info, True)
                         self._update_allocation_wandb()
+                        self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
                             content={
@@ -508,7 +514,8 @@ class RegisterAPI:
 
         @self.app.post(
             "/service/deallocate",
-            response_model=dict,
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
             responses={
                 400: {
                     "model": ErrorResponse,
@@ -529,9 +536,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def deallocate(
-            hotkey: str,
-        ) -> JSONResponse | HTTPException:
+        async def deallocate(hotkey: str,) -> JSONResponse | HTTPException:
             """
             The GPU deallocate API endpoint. <br>
             token: The user token for the authorization. <br>
@@ -580,6 +585,8 @@ class RegisterAPI:
                         ):
                             update_allocation_db(result_hotkey, info, False)
                             self._update_allocation_wandb()
+                            self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+
                             return JSONResponse(
                                 status_code=status.HTTP_200_OK,
                                 content={
@@ -628,8 +635,9 @@ class RegisterAPI:
                 )
 
         @self.app.post(
-            "/service/list_allocations",
-            response_model=List[Allocation],
+            "/list/allocations_sql",
+            tags=["SQLite"],
+            response_model=SuccessResponse | ErrorResponse,
             responses={
                 401: {
                     "model": ErrorResponse,
@@ -649,24 +657,13 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_allocations(
-        ) -> JSONResponse | HTTPException:
+        async def list_allocations() -> JSONResponse | HTTPException:
             """
             The list allocation API endpoint. <br>
             The API will return the current allocation on the validator. <br>
             token: The user token for the authorization. <br>
             """
-            if not True:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
-                        "success": False,
-                        "message": "Missing authorization",
-                        "err_detail": "Please provide the authorization token",
-                    },
-                )
-
-            else:
+            if True:
                 db = ComputeDb()
                 cursor = db.get_cursor()
                 allocation_list = []
@@ -732,10 +729,20 @@ class RegisterAPI:
                         "data": jsonable_encoder(allocation_list),
                     },
                 )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
 
         @self.app.post(
-            "/service/list_resources",
-            response_model=List[Resource],
+            "/list/resources_sql",
+            tags=["SQLite"],
+            response_model=SuccessResponse | ErrorResponse,
             responses={
                 401: {"model": ErrorResponse, "description": "Missing authorization"},
                 404: {
@@ -748,24 +755,13 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_resources(
-            gpu_type: Union[str, None] = None,
-        ) -> JSONResponse | HTTPException:
+        async def list_resources(query: ResourceQuery = None,) -> JSONResponse | HTTPException:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
             token: The user token for the authorization. <br>
             """
-            if not True:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
-                        "success": False,
-                        "message": "Missing authorization",
-                        "err_detail": "Please provide the authorization token",
-                    },
-                )
-            else:
+            if True:
                 db = ComputeDb()
                 specs_details = get_miner_details(db)
 
@@ -777,7 +773,11 @@ class RegisterAPI:
                 total_gpu_counts = {}
 
                 # Get the allocated hotkeys from wandb
-                allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
+                if not self.allocation_table:
+                    allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
+                    self.allocation_table = allocated_hotkeys
+                else:
+                    allocated_hotkeys = self.allocation_table
 
                 if specs_details:
                     # Iterate through the miner specs details and print the table
@@ -841,19 +841,41 @@ class RegisterAPI:
                         else:
                             allocate_status = "Avail."
 
+                        add_resource = False
                         # Print the row with column separators
                         resource.hotkey = hotkey
-                        resource.cpu_count = cpu_count
-                        resource.gpu_name = gpu_name
-                        resource.gpu_capacity = gpu_capacity
-                        resource.gpu_count = gpu_count
-                        resource.ram = ram
-                        resource.hard_disk = hard_disk
-                        resource.allocate_status = allocate_status
-                        if gpu_type is not None:
-                            if gpu_type in resource.gpu_name:
-                                resource_list.append(resource)
+
+                        if query is None or query == {}:
+                            add_resource = True
                         else:
+                            if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                continue
+                            if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
+                                continue
+                            if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
+                                continue
+                            if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
+                                continue
+                            if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
+                                continue
+                            if query.ram_total_max is not None and float(ram) > query.ram_total_max:
+                                continue
+                            if query.ram_total_min is not None and float(ram) < query.ram_total_min:
+                                continue
+                            if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
+                                continue
+                            if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
+                                continue
+                            add_resource = True
+
+                        if add_resource:
+                            resource.cpu_count = cpu_count
+                            resource.gpu_name = gpu_name
+                            resource.gpu_capacity = gpu_capacity
+                            resource.gpu_count = gpu_count
+                            resource.ram = ram
+                            resource.hard_disk = hard_disk
+                            resource.allocate_status = allocate_status
                             resource_list.append(resource)
 
                     return JSONResponse(
@@ -874,11 +896,442 @@ class RegisterAPI:
                             "err_detail": "No resources found.",
                         },
                     )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
+
+        @self.app.post("/list/all_runs",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while getting runs from wandb",
+                           },
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
+                       }
+        )
+        def list_all_runs() -> JSONResponse | HTTPException:
+            """
+            This function gets all run resources.
+            """
+            db_specs_dict = {}
+            try:
+                # self.wandb.api.flush()
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"state": "running"},
+                    ]
+                }
+
+                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_id = run.id
+                        run_name = run.name
+                        run_description = run.description
+                        run_config = run.config
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if configs:
+                            db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
+                                                    "configs": configs}
+
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List run resources successfully.",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No runs available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                print(f"An error occurred while getting specs from wandb: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "success": False,
+                        "message": "Error occurred while getting runs from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post(
+            "/list/specs",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "Error occurred while getting specs from wandb",
+                },
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List spec resources successfully.",
+                },
+            },
+        )
+        async def list_specs() -> JSONResponse | HTTPException:
+            """
+            The list specs API endpoint. <br>
+            """
+            db_specs_dict = {}
+
+            try:
+                #self.wandb.api.flush()
+                runs = self.wandb.api.runs(
+                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filters={
+                        "$and": [
+                            {"config.role": "miner"},
+                            {"config.config.netuid": self.config.netuid},
+                            {"state": "running"},
+                            {"config.specs": {"$exists": True}},
+                        ]
+                    },
+                )
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_config = run.config
+                        hotkey = run_config.get("hotkey")
+                        specs = run_config.get("specs")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and specs:
+                            db_specs_dict[index] = {"hotkey": hotkey, "configs": configs, "specs": specs}
+
+                    # Return the db_specs_dict for further use or inspection
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No specs available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                bt.logging.error(
+                    f"An error occurred while getting specs from wandb: {e}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "success": False,
+                        "message": "Error occurred while getting specs from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/list/run_by_name",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while getting run from wandb",
+                           },
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
+                       }
+        )
+        def list_run_name(run_name: str) -> JSONResponse | HTTPException:
+            """
+            This function gets runs by name.
+            """
+            db_specs_dict = {}
+            try:
+                # self.wandb.api.flush()
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"display_name": run_name},
+                        {"state": "running"},
+                    ]
+                }
+
+                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_id = run.id
+                        run_name = run.name
+                        run_description = run.description
+                        run_config = run.config
+                        hotkey = run_config.get("hotkey")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and configs:
+                            db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
+                                                    "config": configs}
+
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List run by name",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No run available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                print(f"An error occurred while getting specs from wandb: {e}")
+
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "success": False,
+                        "message": "Error occurred while run from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/list/available",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while fetch available miner from wandb",
+                           },
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
+                       }
+        )
+
+        def list_available_miner(rent_status: bool = False) -> JSONResponse | HTTPException:
+            """
+            This function gets all available miners.
+            """
+            db_specs_dict = {}
+            try:
+                # self.wandb.api.flush()
+                if rent_status:
+                    filter_rule = {
+                        "config.allocated": {"$regex": "\d.*"},
+                        "config.config.netuid": self.config.netuid,
+                        "config.role": "miner",
+                        "state": "running",
+                    }
+                else:
+                    filter_rule = {
+                        "$or": [
+                            {"config.allocated": {"$regex": "null"}},
+                            {"config.allocated": {"$exists": False}},
+                        ],
+                        "config.config.netuid": self.config.netuid,
+                        "config.role": "miner",
+                        "state": "running",
+                    }
+
+                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_config = run.config
+                        hotkey = run_config.get("hotkey")
+                        specs = run.config.get("specs")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and configs:
+                            db_specs_dict[index] = {"hotkey": hotkey, "details": specs}
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No available miner",
+                            "data": {},
+                        },
+                    )
+
+                if rent_status:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List rented miners",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+                else:
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List available miners",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                print(f"An error occurred while fetching available miner from wandb: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "success": False,
+                        "message": "Error occurred while fetching available miner from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+
+        @self.app.post("/list/allocated_hotkeys",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while fetch allocated hotkey from wandb",
+                           },
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
+                       }
+        )
+        async def list_allocated_hotkeys() -> JSONResponse | HTTPException:
+            """
+            This function gets all allocated hotkeys from all validators.
+            Only relevant for validators.
+            """
+            try:
+                # wandb_api.flush()
+                filter_rule = {
+                    "$and": [
+                        {"config.role": "validator"},
+                        {"config.config.netuid": self.config.netuid},
+                        {"config.allocated_hotkeys": {"$regex": "\d.*"}},
+                    ]
+                }
+                # Query all runs in the project and Filter runs where the role is 'validator'
+                validator_runs = self.wandb.api.runs(
+                    path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule
+                )
+
+                # Check if the runs list is empty
+                if not validator_runs:
+                    print("No validator info found in the project opencompute.")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No validator info found in the project opencompute.",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "success": False,
+                        "message": "Error occurred while fetching allocated hotkey from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+            # Initialize an empty list to store allocated keys from runs with a valid signature
+            allocated_keys_list = []
+
+            # Verify the signature for each validator run
+            for run in validator_runs:
+                try:
+                    # Access the run's configuration
+                    run_config = run.config
+                    hotkey = run_config.get("hotkey")
+                    allocated_keys = run_config.get("allocated_hotkeys")
+                    id = run_config.get("id")
+                    name = run_config.get("name")
+
+                    # valid_validator_hotkey = hotkey in valid_validator_hotkeys
+
+                    # Allow all validator hotkeys for data retrieval only
+
+                    # if verify_run(id,name, hotkey, allocated_keys) and allocated_keys and valid_validator_hotkey:
+                    allocated_keys_list.extend(allocated_keys)  # Add the keys to the list
+
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List allocated hotkeys",
+                            "data": jsonable_encoder(allocated_keys_list),
+                        },
+                    )
+
+                except Exception as e:
+                    bt.logging.error(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
 
     @staticmethod
-    def _get_config(
-        user_config: UserConfig, requirements: Union[Requirement, None] = None
-    ):
+    def _get_config(user_config: UserConfig, requirements: Union[Requirement, None] = None):
         """
         Get the config from user config and spec requirement for the API. <br>
         user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
@@ -933,8 +1386,12 @@ class RegisterAPI:
 
         return config
 
-    # Generate ssh connection for given device requirements and timeline
+
     def _allocate_container(self, device_requirement, timeline, public_key):
+        """
+        Allocate the container with the given device requirement. <br>
+        """
+        # Generate ssh connection for given device requirements and timeline
         # Instantiate the connection to the db
         db = ComputeDb()
 
@@ -1003,8 +1460,12 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    # Generate ssh connection for given device requirements and timeline
+
     def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key):
+        """
+        Allocate the container with the given hotkey. <br>
+        Generate ssh connection for given device requirements and timeline. <br>
+        """
         device_requirement = {
             "cpu": {"count": 1},
             "gpu": {},
@@ -1048,9 +1509,10 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    def _update_allocation_wandb(
-        self,
-    ):
+    def _update_allocation_wandb(self,):
+        """
+        Update the allocated hotkeys in wandb. <br>
+        """
         hotkey_list = []
 
         # Instantiate the connection to the db
@@ -1082,10 +1544,24 @@ class RegisterAPI:
         Refresh the metagraph by resync_period. <br>
         """
         while True:
-            await asyncio.sleep(self.resync_period)
-            await self.metagraph.sync(lite=True, subtensor=self.subtensor)
+            if self.metagraph:
+                self.metagraph.sync(lite=True, subtensor=self.subtensor)
+                bt.logging.info(f"API: Metagraph refreshed")
+                await asyncio.sleep(DATA_SYNC_PERIOD)
+
+    async def _refresh_allocation(self):
+        """
+        Refresh the allocation by resync_period. <br>
+        """
+        while True:
+            self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+            bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
+            await asyncio.sleep(DATA_SYNC_PERIOD)
 
     def _authenticate_user(self, user_id: str, user_password: str) -> Union[str, bool]:
+        """
+        Authenticate the user with wallet hotkey and public_key info. <br>
+        """
         if not user_id or not user_password:
             return False
         if user_id == self.wallet.hotkey.ss58_address:
@@ -1096,9 +1572,10 @@ class RegisterAPI:
         else:
             return False
 
-    def _create_access_token(
-        self, data: dict, expires_delta: timedelta | None = None
-    ) -> str:
+    def _create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+        """
+        Create the access token for the user. <br>
+        """
         to_encode = data.copy()
         if expires_delta:
             expire = datetime.now(timezone.utc) + expires_delta
@@ -1110,9 +1587,10 @@ class RegisterAPI:
         encoded_jwt = jwt.encode(to_encode, self.access_api_key, algorithm=ALGORITHM)
         return encoded_jwt
 
-    def _verify_access_token(
-        self, token: oauth2_token_scheme,
-    ) -> Union [Any, None]:
+    def _verify_access_token(self, token: oauth2_token_scheme,) -> Union[Any, None]:
+        """
+        Verify the access token for the user. <br>
+        """
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -1137,12 +1615,12 @@ class RegisterAPI:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid Token",
                 headers={"WWW-Authenticate": "Bearer"},
-        )
-            #return {"error": "Invalid token"}
+            )
+            # return {"error": "Invalid token"}
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail= e.__repr__(),
+                detail=e.__repr__(),
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -1150,15 +1628,24 @@ class RegisterAPI:
         """
         Run the FastAPI app. <br>
         """
-        uvicorn.run(self.app, host="0.0.0.0", port=API_DEFAULT_PORT,
-                    log_level="error", ssl_keyfile="key.pem", ssl_certfile="cert.pem",
-                    ssl_cert_reqs=1, ssl_ca_certs='cert.pem')
+        uvicorn.run(
+            self.app,
+            host="0.0.0.0",
+            port=API_DEFAULT_PORT,
+            log_level="error",
+            ssl_keyfile="key.pem",
+            ssl_certfile="cert.pem",
+            ssl_cert_reqs=1,
+            ssl_ca_certs="cert.pem",
+        )
 
     def start(self):
         """
         Start the FastAPI app. <br>
         """
-        self.process = multiprocessing.Process(target=self.run, args=(), daemon=True).start()
+        self.process = multiprocessing.Process(
+            target=self.run, args=(), daemon=True
+        ).start()
 
     def stop(self):
         """

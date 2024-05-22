@@ -50,14 +50,40 @@ class ComputeWandb:
 
         try:
             if self.run_id is None:
-                # No existing run_id, so initialize a new run
-                run = wandb.init(project=PUBLIC_WANDB_NAME, entity=PUBLIC_WANDB_ENTITY, name=self.run_name )
-                self.run_id = run.id
+                # If the exist run_id is not found, get the latest run_id with the run_name on Wandb
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"display_name": self.run_name},
+                    ]
+                }
+                # Get all runs with the run_name
+                runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+
+                # Get the latest run
+                latest_run = runs[0]
+                self.run_id = latest_run.id
+
+                # change to use "auto" resume.  If the run_id is not found, it will create a new run
+                self.run = wandb.init(project=self.project.name, entity=self.entity, id=self.run_id, resume="auto")
                 # Store the new run_id in the database
                 self.save_run_id(self.hotkey, self.run_id)
+
+                # Remove the unused run_id from the database
+                for run in runs[1:]:
+                    run.delete(delete_artifacts=(True))
+
+                # Finish wandb
                 wandb.finish()
 
-            self.run = wandb.init(project=self.project.name, entity=self.entity, id=self.run_id, resume="allow")
+                # No existing run_id, so initialize a new run
+                # run = wandb.init(project=PUBLIC_WANDB_NAME, entity=PUBLIC_WANDB_ENTITY, name=self.run_name )
+                # self.run_id = run.id
+                # Store the new run_id in the database
+                # self.save_run_id(self.hotkey, self.run_id)
+                # wandb.finish()
+
+            self.run = wandb.init(project=self.project.name, entity=self.entity, id=self.run_id, resume="auto")
         except Exception as e:
             bt.logging.warning(f"wandb init failed: {e}")
 
@@ -196,7 +222,8 @@ class ComputeWandb:
         self.api.flush()
         validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                                        filters={"$and": [{"config.role": "validator"},
-                                                         {"config.config.netuid": self.config.netuid}]
+                                                         {"config.config.netuid": self.config.netuid},
+                                                         {"config.allocated_hotkeys": {"$exists": True}},]
                                                 })
 
          # Check if the runs list is empty
