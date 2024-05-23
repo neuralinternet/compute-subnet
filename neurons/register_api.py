@@ -21,7 +21,7 @@ import copy
 
 # Constants
 API_DEFAULT_PORT = 8903
-DATA_SYNC_PERIOD = 180
+DATA_SYNC_PERIOD = 60
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -39,8 +39,10 @@ import multiprocessing
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
+from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
+from compute.utils.parser import ComputeArgPaser
 from compute.wandb.wandb import ComputeWandb
 from neurons.Validator.database.allocate import (
     select_allocate_miners_hotkey,
@@ -64,6 +66,8 @@ from typing import List, Optional, Type, Union, Any, Annotated
 
 # Security configuration
 oauth2_token_scheme = Annotated[str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
+
+
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -182,22 +186,68 @@ class RegisterAPI:
         # Compose User Config Data with bittensor config
         # Get the config from the user config
         # self.config = self._get_config(user_config=user_config)
-        self.config = config.copy()
+        if config is None:
+            # Step 1: Parse the bittensor and compute subnet config
+            self.config = self._init_config()
 
-        # Wallet is the keypair that lets us sign messages to the blockchain.
-        self.wallet = wallet
+            # Set up logging with the provided configuration and directory.
+            bt.logging(config=self.config, logging_dir=self.config.full_path)
+            bt.logging.info(f"Running validator register for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+            
+            # Log the configuration for reference.
+            bt.logging.info(self.config)
+            bt.logging.info("Setting up bittensor objects.")
+            
+            # The wallet holds the cryptographic key pairs for the validator.
+            self.wallet = bt.wallet(config=self.config)
+            bt.logging.info(f"Wallet: {self.wallet}")
 
-        # The subtensor is our connection to the Bittensor blockchain.
-        self.subtensor = subtensor
+            self.wandb = ComputeWandb(self.config, self.wallet, "validator.py")
 
-        # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-        self.dendrite = dendrite
+            # The subtensor is our connection to the Bittensor blockchain.
+            self.subtensor = ComputeSubnetSubtensor(config=self.config)
+            bt.logging.info(f"Subtensor: {self.subtensor}")
 
-        # The metagraph holds the state of the network, letting us know about other miners.
-        self.metagraph = metagraph
+            # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
+            self.dendrite = bt.dendrite(wallet=self.wallet)
+            bt.logging.info(f"Dendrite: {self.dendrite}")
 
-        # Initialize the W&B logging
-        self.wandb = wandb
+            # The metagraph holds the state of the network, letting us know about other miners.
+            self.metagraph = self.subtensor.metagraph(self.config.netuid)
+            bt.logging.info(f"Metagraph: {self.metagraph}")
+
+            if self.config.axon.ip=="[::]":
+                self.ip_addr = "0.0.0.0"
+            else:
+                self.ip_addr = self.config.axon.ip
+
+            if self.config.axon.port is None:
+                self.port = API_DEFAULT_PORT
+            else:
+                self.port = self.config.axon.port
+            
+        else:
+            self.config = config.copy()
+            # Wallet is the keypair that lets us sign messages to the blockchain.
+            self.wallet = wallet
+            # The subtensor is our connection to the Bittensor blockchain.
+            self.subtensor = subtensor
+            # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
+            self.dendrite = dendrite
+            # The metagraph holds the state of the network, letting us know about other miners.
+            self.metagraph = metagraph
+            # Initialize the W&B logging
+            self.wandb = wandb
+
+            if self.config.axon.ip=="[::]":
+                self.ip_addr = "0.0.0.0"
+            else:
+                self.ip_addr = self.config.axon.ip
+
+            if self.config.axon.port is None:
+                self.port = API_DEFAULT_PORT
+            else:
+                self.port = self.config.axon.port
 
         self.allocation_table = []
 
@@ -211,6 +261,7 @@ class RegisterAPI:
             # Setup the repeated task
             self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
             self.allocation_task = asyncio.create_task(self._refresh_allocation())
+            bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
 
         @self.app.on_event("shutdown")
         async def shutdown_event():
@@ -350,6 +401,7 @@ class RegisterAPI:
                         self._update_allocation_wandb()
                         self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
+                        bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
                             content={
@@ -369,6 +421,7 @@ class RegisterAPI:
                             },
                         )
                 else:
+                    bt.logging.error(f"API: Invalid allocation request")
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail={
@@ -475,6 +528,7 @@ class RegisterAPI:
                         self._update_allocation_wandb()
                         self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
+                        bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
                             content={
@@ -494,6 +548,7 @@ class RegisterAPI:
                             },
                         )
                 else:
+                    bt.logging.error(f"API: Invalid allocation request")
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail={
@@ -587,6 +642,7 @@ class RegisterAPI:
                             self._update_allocation_wandb()
                             self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
+                            bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
                             return JSONResponse(
                                 status_code=status.HTTP_200_OK,
                                 content={
@@ -595,6 +651,7 @@ class RegisterAPI:
                                 },
                             )
                         else:
+                            bt.logging.error(f"API: Invalid {hotkey} de-allocation request")
                             raise HTTPException(
                                 status_code=status.HTTP_400_BAD_REQUEST,
                                 detail={
@@ -604,6 +661,7 @@ class RegisterAPI:
                                 },
                             )
                     else:
+                        bt.logging.info(f"API: No allocation details found for the provided hotkey")
                         raise HTTPException(
                             status_code=status.HTTP_404_NOT_FOUND,
                             detail={
@@ -613,6 +671,7 @@ class RegisterAPI:
                             },
                         )
                 except Exception as e:
+                    bt.logging.error(f"API: An error occurred during de-allocation {e.__repr__()}")
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail={
@@ -677,7 +736,7 @@ class RegisterAPI:
 
                     if not rows:
                         bt.logging.info(
-                            "API: No resources allocated. Allocate a resource with validator"
+                            f"API: No resources allocated. Allocate a resource with validator"
                         )
                         return JSONResponse(
                             status_code=status.HTTP_404_NOT_FOUND,
@@ -721,6 +780,7 @@ class RegisterAPI:
                     cursor.close()
                     db.close()
 
+                bt.logging.info(f"API: List allocations successfully")
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
@@ -878,6 +938,7 @@ class RegisterAPI:
                             resource.allocate_status = allocate_status
                             resource_list.append(resource)
 
+                    bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -888,6 +949,7 @@ class RegisterAPI:
                     )
 
                 else:
+                    bt.logging.info(f"API: There is no resource available")
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail={
@@ -952,6 +1014,7 @@ class RegisterAPI:
                             db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
                                                     "configs": configs}
 
+                    bt.logging.info(f"API: List run resources successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -962,6 +1025,7 @@ class RegisterAPI:
                     )
 
                 else:
+                    bt.logging.info(f"API: no runs available")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -973,7 +1037,7 @@ class RegisterAPI:
 
             except Exception as e:
                 # Handle the exception by logging an error message
-                print(f"An error occurred while getting specs from wandb: {e}")
+                bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={
@@ -1033,16 +1097,18 @@ class RegisterAPI:
                             db_specs_dict[index] = {"hotkey": hotkey, "configs": configs, "specs": specs}
 
                     # Return the db_specs_dict for further use or inspection
+                    bt.logging.info(f"API: List specs successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
                             "success": True,
-                            "message": "List resources successfully",
+                            "message": "List specs successfully",
                             "data": jsonable_encoder(db_specs_dict),
                         },
                     )
 
                 else:
+                    bt.logging.info(f"API: no specs available")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1055,7 +1121,7 @@ class RegisterAPI:
             except Exception as e:
                 # Handle the exception by logging an error message
                 bt.logging.error(
-                    f"An error occurred while getting specs from wandb: {e}"
+                    f"API: An error occurred while getting specs from wandb: {e}"
                 )
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -1114,6 +1180,7 @@ class RegisterAPI:
                             db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
                                                     "config": configs}
 
+                    bt.logging.info(f"API: list run by name is success")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1124,6 +1191,7 @@ class RegisterAPI:
                     )
 
                 else:
+                    bt.logging.info(f"API: no run available")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1135,7 +1203,7 @@ class RegisterAPI:
 
             except Exception as e:
                 # Handle the exception by logging an error message
-                print(f"An error occurred while getting specs from wandb: {e}")
+                bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
 
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -1201,6 +1269,7 @@ class RegisterAPI:
                         if hotkey and configs:
                             db_specs_dict[index] = {"hotkey": hotkey, "details": specs}
                 else:
+                    bt.logging.info(f"API: No available miners")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1211,6 +1280,7 @@ class RegisterAPI:
                     )
 
                 if rent_status:
+                    bt.logging.info(f"API: List rented miners is success")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1220,6 +1290,7 @@ class RegisterAPI:
                         },
                     )
                 else:
+                    bt.logging.info(f"API: List available miners is success")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1231,7 +1302,7 @@ class RegisterAPI:
 
             except Exception as e:
                 # Handle the exception by logging an error message
-                print(f"An error occurred while fetching available miner from wandb: {e}")
+                bt.logging.error(f"API: An error occurred while fetching available miner from wandb: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={
@@ -1263,7 +1334,7 @@ class RegisterAPI:
             Only relevant for validators.
             """
             try:
-                # wandb_api.flush()
+                self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.role": "validator"},
@@ -1271,6 +1342,7 @@ class RegisterAPI:
                         {"config.allocated_hotkeys": {"$regex": "\d.*"}},
                     ]
                 }
+
                 # Query all runs in the project and Filter runs where the role is 'validator'
                 validator_runs = self.wandb.api.runs(
                     path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule
@@ -1278,17 +1350,18 @@ class RegisterAPI:
 
                 # Check if the runs list is empty
                 if not validator_runs:
-                    print("No validator info found in the project opencompute.")
+                    bt.logging.info(f"API: No validator with allocated info in the project opencompute.")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
                             "success": True,
-                            "message": "No validator info found in the project opencompute.",
+                            "message": "No validator with allocated info in the project opencompute.",
                             "data": {},
                         },
                     )
 
             except Exception as e:
+                bt.logging.error(f"API: list_allocated_hotkeys error with {e.__repr__()}")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={
@@ -1318,6 +1391,7 @@ class RegisterAPI:
                     # if verify_run(id,name, hotkey, allocated_keys) and allocated_keys and valid_validator_hotkey:
                     allocated_keys_list.extend(allocated_keys)  # Add the keys to the list
 
+                    bt.logging.info(f"API: List allocated hotkeys is success")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1328,7 +1402,35 @@ class RegisterAPI:
                     )
 
                 except Exception as e:
-                    bt.logging.error(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
+                    bt.logging.error(f"API: Run ID: {run.id}, Name: {run.name}, Error: {e}")
+
+    @staticmethod
+    def _init_config():
+        """
+        This function is responsible for setting up and parsing command-line arguments.
+        :return: config
+        """
+        parser = ComputeArgPaser(description="This script aims to help allocation with the compute subnet.")
+        config = parser.config
+
+        # Step 3: Set up logging directory
+        # Logging is crucial for monitoring and debugging purposes.
+        config.full_path = os.path.expanduser(
+            "{}/{}/{}/netuid{}/{}/{}/".format(
+                config.logging.logging_dir,
+                config.wallet.name,
+                config.wallet.hotkey,
+                config.netuid,
+                "validator",
+                "register"
+            )
+        )
+        # Ensure the logging directory exists.
+        if not os.path.exists(config.full_path):
+            os.makedirs(config.full_path, exist_ok=True)
+
+        # Return the parsed config.
+        return config
 
     @staticmethod
     def _get_config(user_config: UserConfig, requirements: Union[Requirement, None] = None):
@@ -1630,8 +1732,8 @@ class RegisterAPI:
         """
         uvicorn.run(
             self.app,
-            host="0.0.0.0",
-            port=API_DEFAULT_PORT,
+            host=self.ip_addr,
+            port=self.port,
             log_level="error",
             ssl_keyfile="key.pem",
             ssl_certfile="cert.pem",
@@ -1641,7 +1743,7 @@ class RegisterAPI:
 
     def start(self):
         """
-        Start the FastAPI app. <br>
+        Start the FastAPI app in the process. <br>
         """
         self.process = multiprocessing.Process(
             target=self.run, args=(), daemon=True
@@ -1649,15 +1751,14 @@ class RegisterAPI:
 
     def stop(self):
         """
-        Stop the FastAPI app. <br>
+        Stop the FastAPI app in the process. <br>
         """
         if self.process:
             self.process.terminate()
             self.process.join()
 
-
 # Run the FastAPI app
 if __name__ == "__main__":
     os.environ["WANDB_SILENT"] = "true"
-    #register_app = RegisterAPI()
-    #register_app.run()
+    register_app = RegisterAPI()
+    register_app.run()

@@ -177,12 +177,6 @@ class Validator:
         self.db = ComputeDb()
         self.miners: dict = select_miners(self.db)
 
-        # Initialize the register API
-        bt.logging.info("Starting register API.")
-        self.register_app = RegisterAPI(config=self.config, wallet=self.wallet, subtensor=self.subtensor,
-                                        dendrite=self.dendrite, metagraph=self.metagraph, wandb=self.wandb)
-        self.register_app.start()
-
         # Step 3: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.uids: list = self.metagraph.uids.tolist()
@@ -777,10 +771,6 @@ class Validator:
             # If the user interrupts the program, gracefully exit.
             except KeyboardInterrupt:
                 self.db.close()
-
-                # Terminate the API server
-                self.register_app.stop()
-
                 bt.logging.success("Keyboard interrupt detected. Exiting validator.")
                 exit()
 
