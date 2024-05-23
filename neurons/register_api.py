@@ -21,7 +21,7 @@ import copy
 
 # Constants
 API_DEFAULT_PORT = 8903
-DATA_SYNC_PERIOD = 60
+DATA_SYNC_PERIOD = 180
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -260,7 +260,7 @@ class RegisterAPI:
             """
             # Setup the repeated task
             self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
-            self.allocation_task = asyncio.create_task(self._refresh_allocation())
+            #self.allocation_task = asyncio.create_task(self._refresh_allocation())
             bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
 
         @self.app.on_event("shutdown")
@@ -526,7 +526,7 @@ class RegisterAPI:
 
                         update_allocation_db(result_hotkey, info, True)
                         self._update_allocation_wandb()
-                        self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                        #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
                         bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
                         return JSONResponse(
@@ -640,7 +640,7 @@ class RegisterAPI:
                         ):
                             update_allocation_db(result_hotkey, info, False)
                             self._update_allocation_wandb()
-                            self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                            #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
                             bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
                             return JSONResponse(
@@ -833,11 +833,11 @@ class RegisterAPI:
                 total_gpu_counts = {}
 
                 # Get the allocated hotkeys from wandb
-                if not self.allocation_table:
-                    allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
-                    self.allocation_table = allocated_hotkeys
-                else:
-                    allocated_hotkeys = self.allocation_table
+                #if not self.allocation_table:
+                allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
+                #self.allocation_table = allocated_hotkeys
+                #else:
+                #allocated_hotkeys = self.allocation_table
 
                 if specs_details:
                     # Iterate through the miner specs details and print the table
@@ -989,7 +989,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                # self.wandb.api.flush()
+                self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.config.netuid": self.config.netuid},
@@ -1070,7 +1070,7 @@ class RegisterAPI:
             db_specs_dict = {}
 
             try:
-                #self.wandb.api.flush()
+                self.wandb.api.flush()
                 runs = self.wandb.api.runs(
                     f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                     filters={
@@ -1153,7 +1153,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                # self.wandb.api.flush()
+                self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.config.netuid": self.config.netuid},
@@ -1236,7 +1236,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                # self.wandb.api.flush()
+                self.wandb.api.flush()
                 if rent_status:
                     filter_rule = {
                         "config.allocated": {"$regex": "\d.*"},
