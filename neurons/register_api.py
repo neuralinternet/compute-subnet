@@ -67,8 +67,6 @@ from typing import List, Optional, Type, Union, Any, Annotated
 # Security configuration
 oauth2_token_scheme = Annotated[str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
 
-
-
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
     subtensor_network: str = Field(default="test", alias="subtensor.network")
@@ -79,12 +77,13 @@ class UserConfig(BaseModel):
     wallet_hotkey: str = Field(default="default", alias="wallet.hotkey")
     logging_debug: Union[str, None] = Field(default="", alias="logging.debug")
 
-
 class Requirement(BaseModel):
-    gpu_type: str = "a6000"
-    gpu_size: int = 3  # in GB
-    timeline: int = "90"  # timeline=90 day by spec, 30 day by hotkey
-
+    cpu_count: int = Field(default=1, description="CPU count")
+    gpu_type: str = Field(default="gpu", description="GPU Name")
+    gpu_size: int = Field(default=3, description="GPU size in GB")
+    ram: int = Field(default=1, description="RAM size in GB")
+    hard_disk: int = Field(default=1, description="Hard disk size in GB")
+    timeline: int = Field(default=90, description="Rent Timeline in day")  # timeline=90 day by spec, 30 day by hotkey
 
 class Allocation(BaseModel):
     resource: str = ""
@@ -96,18 +95,15 @@ class Allocation(BaseModel):
     ssh_password: str = ""
     ssh_command: str = ""
 
-
 class UserInfo(BaseModel):
     user_id: str = ""  # wallet.hokey.ss58address
     user_pass: str = ""  # wallet.public_key hashed value
     jwt_token: str = ""  # jwt token
 
-
 class ResourceGPU(BaseModel):
     gpu_name: str = ""
     gpu_capacity: int = 0
     gpu_count: int = 1
-
 
 class Resource(BaseModel):
     hotkey: str = ""
@@ -119,10 +115,8 @@ class Resource(BaseModel):
     hard_disk: str = "0"
     allocate_status: str = ""  # "Avail." or "Res."
 
-
 class Specs(BaseModel):
     details: str = ""
-
 
 class ResourceQuery(BaseModel):
     gpu_name: Optional[str] = None
@@ -135,24 +129,20 @@ class ResourceQuery(BaseModel):
     ram_total_min: Optional[float] = None
     ram_total_max: Optional[float] = None
 
-
 # Response Models
 class SuccessResponse(BaseModel):
     success: bool = True
     message: str
     data: Optional[dict] = None
 
-
 class ErrorResponse(BaseModel):
     success: bool = False
     message: str
     err_detail: Optional[str] = None
 
-
 class Token(BaseModel):
     access_token: str
     token_type: str
-
 
 class TokenData(BaseModel):
     username: str | None = None
@@ -326,22 +316,20 @@ class RegisterAPI:
         async def allocate_spec(requirements: Requirement,) -> JSONResponse | HTTPException:
             """
             The GPU resource allocate API endpoint. <br>
-            token: The user token for the authorization. <br>
-            user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
-            requirements: The GPU resource requirements which contain the GPU type, GPU size, and booking timeline. <br>
+            requirements: The GPU resource requirements which contain the GPU type, GPU size, ram, hard_disk and booking timeline. <br>
             """
             if True:
                 if requirements:
                     device_requirement = {
-                        "cpu": {"count": 1},
+                        "cpu": {"count": requirements.cpu_count},
                         "gpu": {},
-                        "hard_disk": {"capacity": 1073741824},
-                        "ram": {"capacity": 1073741824},
+                        "hard_disk": {"capacity": requirements.hard_disk * 1024.0**3},
+                        "ram": {"capacity": requirements.ram * 1024.0**3},
                     }
                     if requirements.gpu_type != "" and int(requirements.gpu_size) != 0:
                         device_requirement["gpu"] = {
                             "count": 1,
-                            "capacity": int(requirements.gpu_size) * 1024,
+                            "capacity": int(requirements.gpu_size) * 1000,
                             "type": requirements.gpu_type,
                         }
 
@@ -399,7 +387,7 @@ class RegisterAPI:
 
                         update_allocation_db(result_hotkey, info, True)
                         self._update_allocation_wandb()
-                        self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                        #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
                         bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
                         return JSONResponse(
@@ -467,8 +455,6 @@ class RegisterAPI:
             """
             The GPU allocate by hotkey API endpoint. <br>
             User use this API to book a specific miner. <br>
-            token: The user token for the authorization. <br>
-            user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
             hotkey: The miner hotkey to allocate the gpu resource. <br>
             """
             if True:
@@ -594,8 +580,6 @@ class RegisterAPI:
         async def deallocate(hotkey: str,) -> JSONResponse | HTTPException:
             """
             The GPU deallocate API endpoint. <br>
-            token: The user token for the authorization. <br>
-            user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
             """
             if True:
@@ -720,7 +704,6 @@ class RegisterAPI:
             """
             The list allocation API endpoint. <br>
             The API will return the current allocation on the validator. <br>
-            token: The user token for the authorization. <br>
             """
             if True:
                 db = ComputeDb()
@@ -819,7 +802,7 @@ class RegisterAPI:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
-            token: The user token for the authorization. <br>
+            query: The query parameter to filter the resources. <br>
             """
             if True:
                 db = ComputeDb()
@@ -847,8 +830,8 @@ class RegisterAPI:
                             try:
                                 # Extract GPU details
                                 gpu_miner = details["gpu"]
-                                gpu_capacity = "{:.2f}".format(
-                                    (gpu_miner["capacity"] / 1024)
+                                gpu_capacity = "{}".format(
+                                    (gpu_miner["capacity"])
                                 )
                                 gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                                 gpu_count = gpu_miner["count"]
@@ -859,14 +842,14 @@ class RegisterAPI:
 
                                 # Extract RAM details
                                 ram_miner = details["ram"]
-                                ram = "{:.2f}".format(
-                                    ram_miner["available"] / 1024.0**3
+                                ram = "{}".format(
+                                    ram_miner["available"]
                                 )
 
                                 # Extract Hard Disk details
                                 hard_disk_miner = details["hard_disk"]
-                                hard_disk = "{:.2f}".format(
-                                    hard_disk_miner["free"] / 1024.0**3
+                                hard_disk = "{}".format(
+                                    hard_disk_miner["free"]
                                 )
 
                                 # Update the GPU instances count
@@ -929,12 +912,12 @@ class RegisterAPI:
                             add_resource = True
 
                         if add_resource:
-                            resource.cpu_count = cpu_count
+                            resource.cpu_count = int(cpu_count)
                             resource.gpu_name = gpu_name
-                            resource.gpu_capacity = gpu_capacity
-                            resource.gpu_count = gpu_count
-                            resource.ram = ram
-                            resource.hard_disk = hard_disk
+                            resource.gpu_capacity = float(gpu_capacity)
+                            resource.gpu_count = int(gpu_count)
+                            resource.ram = float(ram)
+                            resource.hard_disk = float(hard_disk)
                             resource.allocate_status = allocate_status
                             resource_list.append(resource)
 
@@ -989,7 +972,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                self.wandb.api.flush()
+                #self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.config.netuid": self.config.netuid},
@@ -1070,7 +1053,7 @@ class RegisterAPI:
             db_specs_dict = {}
 
             try:
-                self.wandb.api.flush()
+                #self.wandb.api.flush()
                 runs = self.wandb.api.runs(
                     f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                     filters={
@@ -1153,7 +1136,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                self.wandb.api.flush()
+                #self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.config.netuid": self.config.netuid},
@@ -1236,7 +1219,7 @@ class RegisterAPI:
             """
             db_specs_dict = {}
             try:
-                self.wandb.api.flush()
+                #self.wandb.api.flush()
                 if rent_status:
                     filter_rule = {
                         "config.allocated": {"$regex": "\d.*"},
@@ -1334,7 +1317,7 @@ class RegisterAPI:
             Only relevant for validators.
             """
             try:
-                self.wandb.api.flush()
+                #self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.role": "validator"},
@@ -1576,7 +1559,7 @@ class RegisterAPI:
         }
         device_requirement["gpu"] = {
             "count": 1,
-            "capacity": int(requirements.gpu_size) * 1024,
+            "capacity": int(requirements.gpu_size) * 1000,
             "type": requirements.gpu_type,
         }
 
@@ -1734,11 +1717,11 @@ class RegisterAPI:
             self.app,
             host=self.ip_addr,
             port=self.port,
-            log_level="error",
-            ssl_keyfile="key.pem",
-            ssl_certfile="cert.pem",
-            ssl_cert_reqs=1,
-            ssl_ca_certs="cert.pem",
+            log_level="trace",
+            ssl_keyfile="server.key",
+            ssl_certfile="server.cer",
+            ssl_cert_reqs=1,  # 1 for client CERT optional, 2 for client CERT_REQUIRED
+            ssl_ca_certs="ca.cer",
         )
 
     def start(self):
