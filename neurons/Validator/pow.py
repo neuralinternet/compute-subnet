@@ -90,9 +90,11 @@ def run_validator_pow(length=compute.pow_min_difficulty):
     random.shuffle(available_chars)
     available_chars = "".join(available_chars)
     # only 2 modes for now, might switch to just 19500 to incentivize better GPUs
-    mode = compute.pow_modes_list[random.randint(0, len(compute.pow_modes_list))]
+    # mode = compute.pow_modes_list[random.randint(0, len(compute.pow_modes_list)-1)]
     # parametrize length by mode, a 10-char 19500 hash is as hard as a 12-char 610 hash
-    if mode == compute.pow_mode_ruby_on_rails_ra:
-        length -= 2
+    # if mode == compute.pow_mode_ruby_on_rails_ra:
+    #    length -= 2
+    # only one mode in v1.4.3
+    mode = compute.pow_default_mode
     password, _hash, _salt, _mask = gen_password(available_chars=available_chars[:10], length=length, mode=mode)
     return password, _hash, _salt, mode, available_chars[:10], _mask

@@ -18,9 +18,9 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.4.2"
-__minimal_miner_version__ = "1.4.2"
-__minimal_validator_version__ = "1.4.2"
+__version__ = "1.4.3"
+__minimal_miner_version__ = "1.4.3"
+__minimal_validator_version__ = "1.4.3"
 
 version_split = __version__.split(".")
 __version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
@@ -36,7 +36,7 @@ specs_timeout = 60
 # Time before the proof of work requests will time out. time unit = seconds
 pow_timeout = 120
 # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
-pow_min_difficulty = 7
+pow_min_difficulty = 8
 # Maximal proof of work difficulty, this to ensure a miner can not be rewarded for an unlimited unreasonable difficulty. Needs benchmark and adjustment.
 pow_max_difficulty = 12
 
