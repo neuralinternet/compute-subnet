@@ -60,15 +60,12 @@ def calc_score(response, hotkey, allocated_hotkeys, mock=False):
         challenge_difficulty_avg = prevent_none(response["last_20_difficulty_avg"])
         has_docker = response.get("has_docker", False)
 
-        if last_20_challenge_failed >= 10 or challenge_successes == 0:
-            return 0
-
         # Define base weights for the PoW
-        success_weight = 1
-        difficulty_weight = 1
-        time_elapsed_weight = 0.3
-        failed_penalty_weight = 0.4
-        allocation_weight = 0.21
+        success_weight = 1.0
+        difficulty_weight = 1.0
+        time_elapsed_weight = 0.35
+        failed_penalty_weight = 0.35
+        allocation_weight = 0.20
 
         # Just in case but in theory, it is not possible to fake the difficulty as it is sent by the validator
         # Same occurs for the time, it's calculated by the validator so miners cannot fake it
@@ -98,6 +95,9 @@ def calc_score(response, hotkey, allocated_hotkeys, mock=False):
         # The score for allocation is proportional to the average difficulty reached before allocation
         allocation_score = difficulty_modifier * allocation_weight
         allocation_status = hotkey in allocated_hotkeys
+
+        if last_20_challenge_failed >= 19 or challenge_successes == 0 and not allocation_status:
+            return 0
 
         # Calculate the score
         max_score_challenge = 100 * (success_weight + difficulty_weight + time_elapsed_weight)
