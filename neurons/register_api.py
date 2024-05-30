@@ -182,6 +182,8 @@ class RegisterAPI:
             self.config = self._init_config()
 
             # Set up logging with the provided configuration and directory.
+            bt.logging.set_debug(self.config.logging.debug)
+            bt.logging.set_trace(self.config.logging.trace)
             bt.logging(config=self.config, logging_dir=self.config.full_path)
             bt.logging.info(f"Running validator register for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
             
@@ -967,21 +969,30 @@ class RegisterAPI:
                            },
                        }
         )
-        def list_all_runs() -> JSONResponse | HTTPException:
+        def list_all_runs(hotkey: Optional[str] = None) -> JSONResponse | HTTPException:
             """
             This function gets all run resources.
             """
             db_specs_dict = {}
             try:
                 #self.wandb.api.flush()
-                filter_rule = {
-                    "$and": [
-                        {"config.config.netuid": self.config.netuid},
-                        {"state": "running"},
-                    ]
-                }
-
+                if hotkey:
+                    filter_rule = {
+                        "$and": [
+                            {"config.config.netuid": self.config.netuid},
+                            {"config.hotkey": hotkey},
+                            {"state": "running"},
+                        ]
+                    }
+                else:
+                    filter_rule = {
+                        "$and": [
+                            {"config.config.netuid": self.config.netuid},
+                            {"state": "running"},
+                        ]
+                    }
                 runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                append_entry = bool
 
                 if runs:
                     # Iterate over all runs in the opencompute project
@@ -991,12 +1002,24 @@ class RegisterAPI:
                         run_name = run.name
                         run_description = run.description
                         run_config = run.config
+                        run_state = run.state
+                        run_start_at = datetime.strptime(run.created_at, '%Y-%m-%dT%H:%M:%S')
                         configs = run_config.get("config")
+                        append_entry = True
+
+                        # for entry in db_specs_dict:
+                        #      if db_specs_dict[entry]["name"] == run_name:
+                        #          append_entry = False
+                        #          break
+#                                 date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
+#                                 if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
+#                                     db_specs_dict.pop(entry)
 
                         # check the signature
-                        if configs:
+                        if configs and append_entry:
                             db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
-                                                    "configs": configs}
+                                                    "configs": configs, "state": run_state, "start_at": run.created_at}
+
 
                     bt.logging.info(f"API: List run resources successfully")
                     return JSONResponse(
@@ -1047,7 +1070,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_specs() -> JSONResponse | HTTPException:
+        async def list_specs(hotkey: Optional[str] = None) -> JSONResponse | HTTPException:
             """
             The list specs API endpoint. <br>
             """
@@ -1055,16 +1078,28 @@ class RegisterAPI:
 
             try:
                 #self.wandb.api.flush()
-                runs = self.wandb.api.runs(
-                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                    filters={
+                if hotkey:
+                    filters = {
                         "$and": [
                             {"config.role": "miner"},
                             {"config.config.netuid": self.config.netuid},
                             {"state": "running"},
+                            {"config.hotkey": hotkey},
                             {"config.specs": {"$exists": True}},
                         ]
-                    },
+                    }
+                else:
+                    filters = {
+                        "$and": [
+                            {"config.role": "miner"},
+                            {"config.config.netuid": self.config.netuid},
+                            {"config.specs": {"$exists": True}},
+                            {"state": "running"},
+                        ]
+                    }
+                runs = self.wandb.api.runs(
+                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filters=filters,
                 )
 
                 if runs:
@@ -1072,13 +1107,15 @@ class RegisterAPI:
                     for index, run in enumerate(runs, start=1):
                         # Access the run's configuration
                         run_config = run.config
+                        run_state = run.state
                         hotkey = run_config.get("hotkey")
                         specs = run_config.get("specs")
                         configs = run_config.get("config")
 
                         # check the signature
                         if hotkey and specs:
-                            db_specs_dict[index] = {"hotkey": hotkey, "configs": configs, "specs": specs}
+                            db_specs_dict[index] = {"hotkey": hotkey, "configs": configs,
+                                                    "specs": specs, "state": run_state}
 
                     # Return the db_specs_dict for further use or inspection
                     bt.logging.info(f"API: List specs successfully")
