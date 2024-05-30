@@ -102,6 +102,8 @@ class Miner:
         self.init_black_and_white_list()
 
         # Set up logging with the provided configuration and directory.
+        bt.logging.set_debug(self.config.logging.debug)
+        bt.logging.set_trace(self.config.logging.trace)
         bt.logging(config=self.config, logging_dir=self.config.full_path)
         bt.logging.info(f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
         # Log the configuration for reference.
@@ -114,9 +116,6 @@ class Miner:
         # Wallet holds cryptographic information, ensuring secure transactions and communication.
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
-
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-        self.wandb.update_specs()
 
         # Subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
@@ -148,6 +147,11 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        # Step 4: Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        os.environ['WANDB_SILENT'] = 'true'
+        self.wandb.update_specs()
 
         self.request_specs_processor = RequestSpecsProcessor()
 
