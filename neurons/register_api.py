@@ -20,7 +20,8 @@
 import copy
 
 # Constants
-API_DEFAULT_PORT = 8903
+DEFAULT_SSL_MODE = 1    # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_API_PORT = 8903
 DATA_SYNC_PERIOD = 180
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
@@ -212,7 +213,7 @@ class RegisterAPI:
                 self.ip_addr = self.config.axon.ip
 
             if self.config.axon.port is None:
-                self.port = API_DEFAULT_PORT
+                self.port = DEFAULT_API_PORT
             else:
                 self.port = self.config.axon.port
             
@@ -235,7 +236,7 @@ class RegisterAPI:
                 self.ip_addr = self.config.axon.ip
 
             if self.config.axon.port is None:
-                self.port = API_DEFAULT_PORT
+                self.port = DEFAULT_API_PORT
             else:
                 self.port = self.config.axon.port
 
@@ -1713,16 +1714,20 @@ class RegisterAPI:
         """
         Run the FastAPI app. <br>
         """
-        uvicorn.run(
-            self.app,
-            host=self.ip_addr,
-            port=self.port,
-            log_level="trace",
-            ssl_keyfile="server.key",
-            ssl_certfile="server.cer",
-            ssl_cert_reqs=1,  # 1 for client CERT optional, 2 for client CERT_REQUIRED
-            ssl_ca_certs="ca.cer",
-        )
+        if os.path.exists("cert/ca.cer") and os.path.exists("cert/server.key") and os.path.exists("cert/server.cer"):
+            uvicorn.run(
+                self.app,
+                host=self.ip_addr,
+                port=self.port,
+                log_level="info",
+                ssl_keyfile="cert/server.key",
+                ssl_certfile="cert/server.cer",
+                ssl_cert_reqs=DEFAULT_SSL_MODE,  # 1 for client CERT optional, 2 for client CERT_REQUIRED
+                ssl_ca_certs="cert/ca.cer",
+            )
+        else:
+            bt.logging.error(f"API: No SSL certificate found, please generate one with /cert/gen_ca.sh")
+            exit(1)
 
     def start(self):
         """
