@@ -941,38 +941,43 @@ class RegisterAPI:
                         # Print the row with column separators
                         resource.hotkey = hotkey
 
-                        if query is None or query == {}:
-                            add_resource = True
-                        else:
-                            if query.gpu_name is not None and query.gpu_name not in gpu_name:
-                                continue
-                            if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
-                                continue
-                            if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
-                                continue
-                            if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
-                                continue
-                            if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
-                                continue
-                            if query.ram_total_max is not None and float(ram) > query.ram_total_max:
-                                continue
-                            if query.ram_total_min is not None and float(ram) < query.ram_total_min:
-                                continue
-                            if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
-                                continue
-                            if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
-                                continue
-                            add_resource = True
+                        try:
+                            if gpu_name != "Invalid details" and gpu_name != "No details available":
+                                if query is None or query == {}:
+                                    add_resource = True
+                                else:
+                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                        continue
+                                    if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
+                                        continue
+                                    if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
+                                        continue
+                                    if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
+                                        continue
+                                    if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
+                                        continue
+                                    if query.ram_total_max is not None and float(ram) > query.ram_total_max:
+                                        continue
+                                    if query.ram_total_min is not None and float(ram) < query.ram_total_min:
+                                        continue
+                                    if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
+                                        continue
+                                    if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
+                                        continue
+                                    add_resource = True
 
-                        if add_resource:
-                            resource.cpu_count = int(cpu_count)
-                            resource.gpu_name = gpu_name
-                            resource.gpu_capacity = float(gpu_capacity)
-                            resource.gpu_count = int(gpu_count)
-                            resource.ram = float(ram)
-                            resource.hard_disk = float(hard_disk)
-                            resource.allocate_status = allocate_status
-                            resource_list.append(resource)
+                                if add_resource:
+                                    resource.cpu_count = int(cpu_count)
+                                    resource.gpu_name = gpu_name
+                                    resource.gpu_capacity = float(gpu_capacity)
+                                    resource.gpu_count = int(gpu_count)
+                                    resource.ram = float(ram)
+                                    resource.hard_disk = float(hard_disk)
+                                    resource.allocate_status = allocate_status
+                                    resource_list.append(resource)
+                        except (KeyError, IndexError, TypeError, ValueError) as e:
+                            bt.logging.error(f"API: Error occurred while filtering resources: {e}")
+                            continue
 
                     bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(
