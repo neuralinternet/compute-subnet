@@ -20,9 +20,9 @@
 import copy
 
 # Constants
-DEFAULT_SSL_MODE = 1    # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903
-DATA_SYNC_PERIOD = 180
+DATA_SYNC_PERIOD = 300
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -58,15 +58,18 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
+    Request,
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import typing, BaseModel, Field
 from typing import List, Optional, Type, Union, Any, Annotated
 
 # Security configuration
 oauth2_token_scheme = Annotated[str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
+
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -78,6 +81,7 @@ class UserConfig(BaseModel):
     wallet_hotkey: str = Field(default="default", alias="wallet.hotkey")
     logging_debug: Union[str, None] = Field(default="", alias="logging.debug")
 
+
 class Requirement(BaseModel):
     cpu_count: int = Field(default=1, description="CPU count")
     gpu_type: str = Field(default="gpu", description="GPU Name")
@@ -85,6 +89,7 @@ class Requirement(BaseModel):
     ram: int = Field(default=1, description="RAM size in GB")
     hard_disk: int = Field(default=1, description="Hard disk size in GB")
     timeline: int = Field(default=90, description="Rent Timeline in day")  # timeline=90 day by spec, 30 day by hotkey
+
 
 class Allocation(BaseModel):
     resource: str = ""
@@ -96,15 +101,18 @@ class Allocation(BaseModel):
     ssh_password: str = ""
     ssh_command: str = ""
 
+
 class UserInfo(BaseModel):
     user_id: str = ""  # wallet.hokey.ss58address
     user_pass: str = ""  # wallet.public_key hashed value
     jwt_token: str = ""  # jwt token
 
+
 class ResourceGPU(BaseModel):
     gpu_name: str = ""
     gpu_capacity: int = 0
     gpu_count: int = 1
+
 
 class Resource(BaseModel):
     hotkey: str = ""
@@ -116,8 +124,10 @@ class Resource(BaseModel):
     hard_disk: str = "0"
     allocate_status: str = ""  # "Avail." or "Res."
 
+
 class Specs(BaseModel):
     details: str = ""
+
 
 class ResourceQuery(BaseModel):
     gpu_name: Optional[str] = None
@@ -130,20 +140,24 @@ class ResourceQuery(BaseModel):
     ram_total_min: Optional[float] = None
     ram_total_max: Optional[float] = None
 
+
 # Response Models
 class SuccessResponse(BaseModel):
     success: bool = True
     message: str
     data: Optional[dict] = None
 
+
 class ErrorResponse(BaseModel):
     success: bool = False
     message: str
     err_detail: Optional[str] = None
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
+
 
 class TokenData(BaseModel):
     username: str | None = None
@@ -151,13 +165,13 @@ class TokenData(BaseModel):
 
 class RegisterAPI:
     def __init__(
-        self,
-        config: Optional[bt.config] = None,
-        wallet: Optional[bt.wallet] = None,
-        subtensor: Optional[bt.subtensor] = None,
-        dendrite: Optional[bt.dendrite] = None,
-        metagraph: Optional[bt.metagraph] = None,
-        wandb: Optional[ComputeWandb] = None,
+            self,
+            config: Optional[bt.config] = None,
+            wallet: Optional[bt.wallet] = None,
+            subtensor: Optional[bt.subtensor] = None,
+            dendrite: Optional[bt.dendrite] = None,
+            metagraph: Optional[bt.metagraph] = None,
+            wandb: Optional[ComputeWandb] = None,
     ):
         # Check ACCESS and REFRESH Key, disable JWT and use SSL
         # env_file = ".env"
@@ -185,12 +199,13 @@ class RegisterAPI:
             bt.logging.set_debug(self.config.logging.debug)
             bt.logging.set_trace(self.config.logging.trace)
             bt.logging(config=self.config, logging_dir=self.config.full_path)
-            bt.logging.info(f"Running validator register for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
-            
+            bt.logging.info(
+                f"Running validator register for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+
             # Log the configuration for reference.
             bt.logging.info(self.config)
             bt.logging.info("Setting up bittensor objects.")
-            
+
             # The wallet holds the cryptographic key pairs for the validator.
             self.wallet = bt.wallet(config=self.config)
             bt.logging.info(f"Wallet: {self.wallet}")
@@ -209,7 +224,7 @@ class RegisterAPI:
             self.metagraph = self.subtensor.metagraph(self.config.netuid)
             bt.logging.info(f"Metagraph: {self.metagraph}")
 
-            if self.config.axon.ip=="[::]":
+            if self.config.axon.ip == "[::]":
                 self.ip_addr = "0.0.0.0"
             else:
                 self.ip_addr = self.config.axon.ip
@@ -218,7 +233,7 @@ class RegisterAPI:
                 self.port = DEFAULT_API_PORT
             else:
                 self.port = self.config.axon.port
-            
+
         else:
             self.config = config.copy()
             # Wallet is the keypair that lets us sign messages to the blockchain.
@@ -232,7 +247,7 @@ class RegisterAPI:
             # Initialize the W&B logging
             self.wandb = wandb
 
-            if self.config.axon.ip=="[::]":
+            if self.config.axon.ip == "[::]":
                 self.ip_addr = "0.0.0.0"
             else:
                 self.ip_addr = self.config.axon.ip
@@ -245,6 +260,21 @@ class RegisterAPI:
         self.allocation_table = []
 
     def _setup_routes(self):
+        # Define a custom validation error handler
+        @self.app.exception_handler(RequestValidationError)
+        async def validation_exception_handler(request: Request, exc: RequestValidationError):
+            # Customize the error response
+            errors = exc.errors()
+            custom_errors = [{"field": err['loc'][-1], "message": err['msg']} for err in errors]
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "success": False,
+                    "message": "Validation Error, Please check the request body.",
+                    "err_detail": custom_errors,
+                },
+            )
+
         @self.app.on_event("startup")
         async def startup_event():
             """
@@ -279,12 +309,12 @@ class RegisterAPI:
         #         200: {"description": "User login successful"},
         #     },
         # )
-        async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],) -> Token:
+        async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], ) -> Token:
             user = self._authenticate_user(form_data.username, form_data.password)
             if not user:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Incorrect username or password",
+                    content="Incorrect username or password",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -298,6 +328,10 @@ class RegisterAPI:
             tags=["Allocation"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource was successfully allocated",
+                },
                 400: {
                     "model": ErrorResponse,
                     "description": "Invalid allocation request",
@@ -310,13 +344,13 @@ class RegisterAPI:
                     "model": ErrorResponse,
                     "description": "Fail to allocate resource",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "Resource was successfully allocated",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def allocate_spec(requirements: Requirement,) -> JSONResponse | HTTPException:
+        async def allocate_spec(requirements: Requirement, ) -> JSONResponse:
             """
             The GPU resource allocate API endpoint. <br>
             requirements: The GPU resource requirements which contain the GPU type, GPU size, ram, hard_disk and booking timeline. <br>
@@ -326,8 +360,8 @@ class RegisterAPI:
                     device_requirement = {
                         "cpu": {"count": requirements.cpu_count},
                         "gpu": {},
-                        "hard_disk": {"capacity": requirements.hard_disk * 1024.0**3},
-                        "ram": {"capacity": requirements.ram * 1024.0**3},
+                        "hard_disk": {"capacity": requirements.hard_disk * 1024.0 ** 3},
+                        "ram": {"capacity": requirements.ram * 1024.0 ** 3},
                     }
                     if requirements.gpu_type != "" and int(requirements.gpu_size) != 0:
                         device_requirement["gpu"] = {
@@ -403,9 +437,9 @@ class RegisterAPI:
                         )
                     else:
                         bt.logging.info(f"API: Allocation Failed : {result['msg']}")
-                        raise HTTPException(
+                        return JSONResponse(
                             status_code=status.HTTP_404_NOT_FOUND,
-                            detail={
+                            content={
                                 "success": False,
                                 "message": "Fail to allocate resource",
                                 "err_detail": result["msg"],
@@ -413,18 +447,18 @@ class RegisterAPI:
                         )
                 else:
                     bt.logging.error(f"API: Invalid allocation request")
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail={
+                        content={
                             "success": False,
                             "message": "Invalid allocation request",
                             "err_detail": "Invalid requirement, please check the requirements",
                         },
                     )
             else:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Missing authorization",
                         "err_detail": "Please provide the authorization token",
@@ -436,6 +470,10 @@ class RegisterAPI:
             tags=["Allocation"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource was successfully allocated",
+                },
                 400: {
                     "model": ErrorResponse,
                     "description": "Invalid allocation request",
@@ -448,13 +486,13 @@ class RegisterAPI:
                     "model": ErrorResponse,
                     "description": "Fail to allocate resource",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "Resource was successfully allocated",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def allocate_hotkey(hotkey: str,) -> JSONResponse | HTTPException:
+        async def allocate_hotkey(hotkey: str, ) -> JSONResponse | HTTPException:
             """
             The GPU allocate by hotkey API endpoint. <br>
             User use this API to book a specific miner. <br>
@@ -528,9 +566,9 @@ class RegisterAPI:
                         )
                     else:
                         bt.logging.info(f"API: Allocation Failed : {result['msg']}")
-                        raise HTTPException(
+                        return JSONResponse(
                             status_code=status.HTTP_404_NOT_FOUND,
-                            detail={
+                            content={
                                 "success": False,
                                 "message": "Fail to allocate resource",
                                 "err_detail": result["msg"],
@@ -538,18 +576,18 @@ class RegisterAPI:
                         )
                 else:
                     bt.logging.error(f"API: Invalid allocation request")
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail={
+                        content={
                             "success": False,
                             "message": "Invalid allocation request",
                             "err_detail": "Invalid hotkey, please check the hotkey",
                         },
                     )
             else:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Missing authorization",
                         "err_detail": "Please provide the authorization token",
@@ -561,6 +599,10 @@ class RegisterAPI:
             tags=["Allocation"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource de-allocated successfully.",
+                },
                 400: {
                     "model": ErrorResponse,
                     "description": "De-allocation not successfully, please try again.",
@@ -574,13 +616,13 @@ class RegisterAPI:
                     "model": ErrorResponse,
                     "description": "No allocation details found for the provided hotkey.",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "Resource de-allocated successfully.",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def deallocate(hotkey: str,) -> JSONResponse | HTTPException:
+        async def deallocate(hotkey: str, ) -> JSONResponse | HTTPException:
             """
             The GPU deallocate API endpoint. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
@@ -622,12 +664,12 @@ class RegisterAPI:
                             timeout=60,
                         )
                         if (
-                            deregister_response
-                            and deregister_response["status"] is True
+                                deregister_response
+                                and deregister_response["status"] is True
                         ):
                             update_allocation_db(result_hotkey, info, False)
                             self._update_allocation_wandb()
-                            #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                            # self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
 
                             bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
                             return JSONResponse(
@@ -639,9 +681,9 @@ class RegisterAPI:
                             )
                         else:
                             bt.logging.error(f"API: Invalid {hotkey} de-allocation request")
-                            raise HTTPException(
+                            return JSONResponse(
                                 status_code=status.HTTP_400_BAD_REQUEST,
-                                detail={
+                                content={
                                     "success": False,
                                     "message": "Invalid de-allocation request",
                                     "err_detail": "De-allocation not successfully, please try again",
@@ -649,9 +691,9 @@ class RegisterAPI:
                             )
                     else:
                         bt.logging.info(f"API: No allocation details found for the provided hotkey")
-                        raise HTTPException(
+                        return JSONResponse(
                             status_code=status.HTTP_404_NOT_FOUND,
-                            detail={
+                            content={
                                 "success": False,
                                 "message": "No allocation details found for the provided hotkey.",
                                 "err_detail": "No allocation details found for the provided hotkey.",
@@ -659,9 +701,9 @@ class RegisterAPI:
                         )
                 except Exception as e:
                     bt.logging.error(f"API: An error occurred during de-allocation {e.__repr__()}")
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
+                        content={
                             "success": False,
                             "message": "An error occurred during de-allocation.",
                             "err_detail": e.__repr__(),
@@ -671,9 +713,9 @@ class RegisterAPI:
                     cursor.close()
                     db.close()
             else:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Missing authorization",
                         "err_detail": "Please provide the authorization token",
@@ -685,6 +727,10 @@ class RegisterAPI:
             tags=["SQLite"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List allocations successfully.",
+                },
                 401: {
                     "model": ErrorResponse,
                     "description": "Missing authorization token",
@@ -694,16 +740,16 @@ class RegisterAPI:
                     "description": "An error occurred while retrieving allocation details",
                 },
                 404: {
-                    "model": SuccessResponse,
+                    "model": ErrorResponse,
                     "description": "There is no allocation available",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "List allocations successfully.",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def list_allocations() -> JSONResponse | HTTPException:
+        async def list_allocations() -> JSONResponse:
             """
             The list allocation API endpoint. <br>
             The API will return the current allocation on the validator. <br>
@@ -727,7 +773,7 @@ class RegisterAPI:
                         return JSONResponse(
                             status_code=status.HTTP_404_NOT_FOUND,
                             content={
-                                "success": True,
+                                "success": False,
                                 "message": "No resources found.",
                                 "data": "No allocated resources found. Allocate a resource with validator.",
                             },
@@ -754,9 +800,9 @@ class RegisterAPI:
                     bt.logging.error(
                         f"API: An error occurred while retrieving allocation details: {e}"
                     )
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail={
+                        content={
                             "success": False,
                             "message": "An error occurred while retrieving allocation details.",
                             "err_detail": e.__repr__(),
@@ -776,9 +822,9 @@ class RegisterAPI:
                     },
                 )
             else:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Missing authorization",
                         "err_detail": "Please provide the authorization token",
@@ -790,18 +836,22 @@ class RegisterAPI:
             tags=["SQLite"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
                 401: {"model": ErrorResponse, "description": "Missing authorization"},
                 404: {
                     "model": ErrorResponse,
                     "description": "There is no resource available",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "List resources successfully.",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def list_resources(query: ResourceQuery = None,) -> JSONResponse | HTTPException:
+        async def list_resources(query: ResourceQuery = None, ) -> JSONResponse:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
@@ -819,11 +869,11 @@ class RegisterAPI:
                 total_gpu_counts = {}
 
                 # Get the allocated hotkeys from wandb
-                #if not self.allocation_table:
+                # if not self.allocation_table:
                 allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
-                #self.allocation_table = allocated_hotkeys
-                #else:
-                #allocated_hotkeys = self.allocation_table
+                # self.allocation_table = allocated_hotkeys
+                # else:
+                # allocated_hotkeys = self.allocation_table
 
                 if specs_details:
                     # Iterate through the miner specs details and print the table
@@ -833,8 +883,8 @@ class RegisterAPI:
                             try:
                                 # Extract GPU details
                                 gpu_miner = details["gpu"]
-                                gpu_capacity = "{}".format(
-                                    (gpu_miner["capacity"])
+                                gpu_capacity = "{:.2f}".format(
+                                    (gpu_miner["capacity"] / 1000)
                                 )
                                 gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                                 gpu_count = gpu_miner["count"]
@@ -845,23 +895,23 @@ class RegisterAPI:
 
                                 # Extract RAM details
                                 ram_miner = details["ram"]
-                                ram = "{}".format(
-                                    ram_miner["available"]
+                                ram = "{:.2f}".format(
+                                    ram_miner["available"] / 1024.0 ** 3
                                 )
 
                                 # Extract Hard Disk details
                                 hard_disk_miner = details["hard_disk"]
-                                hard_disk = "{}".format(
-                                    hard_disk_miner["free"]
+                                hard_disk = "{:.2f}".format(
+                                    hard_disk_miner["free"] / 1024.0 ** 3
                                 )
 
                                 # Update the GPU instances count
                                 gpu_key = (gpu_name, gpu_count)
                                 gpu_instances[gpu_key] = (
-                                    gpu_instances.get(gpu_key, 0) + 1
+                                        gpu_instances.get(gpu_key, 0) + 1
                                 )
                                 total_gpu_counts[gpu_name] = (
-                                    total_gpu_counts.get(gpu_name, 0) + gpu_count
+                                        total_gpu_counts.get(gpu_name, 0) + gpu_count
                                 )
 
                             except (KeyError, IndexError, TypeError):
@@ -936,18 +986,18 @@ class RegisterAPI:
 
                 else:
                     bt.logging.info(f"API: There is no resource available")
-                    raise HTTPException(
+                    return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
-                        detail={
+                        content={
                             "success": False,
                             "message": "There is no resource available",
                             "err_detail": "No resources found.",
                         },
                     )
             else:
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Missing authorization",
                         "err_detail": "Please provide the authorization token",
@@ -958,21 +1008,28 @@ class RegisterAPI:
                        tags=["WandB"],
                        response_model=SuccessResponse | ErrorResponse,
                        responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
                            401: {"model": ErrorResponse, "description": "Missing authorization"},
                            404: {
                                "model": ErrorResponse,
                                "description": "Error occurred while getting runs from wandb",
                            },
-                           200: {
-                               "model": SuccessResponse,
-                               "description": "List run resources successfully.",
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
                            },
                        }
-        )
-        def list_all_runs(hotkey: Optional[str] = None) -> JSONResponse | HTTPException:
+                       )
+        def list_all_runs(hotkey: Optional[str] = None,
+                          page_size: Optional[int] = None,
+                          page_number: Optional[int] = None) -> JSONResponse:
             """
             This function gets all run resources.
             """
+            db_list = []
             db_specs_dict = {}
             try:
                 #self.wandb.api.flush()
@@ -1011,15 +1068,27 @@ class RegisterAPI:
                         #      if db_specs_dict[entry]["name"] == run_name:
                         #          append_entry = False
                         #          break
-#                                 date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
-#                                 if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
-#                                     db_specs_dict.pop(entry)
+                        #                                 date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
+                        #                                 if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
+                        #                                     db_specs_dict.pop(entry)
 
                         # check the signature
                         if configs and append_entry:
+                            db_specs_dict = {}
                             db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
-                                                    "configs": configs, "state": run_state, "start_at": run.created_at}
+                                            "configs": configs, "state": run_state, "start_at": run.created_at}
+                            db_list.append(db_specs_dict)
 
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
 
                     bt.logging.info(f"API: List run resources successfully")
                     return JSONResponse(
@@ -1027,7 +1096,7 @@ class RegisterAPI:
                         content={
                             "success": True,
                             "message": "List run resources successfully.",
-                            "data": jsonable_encoder(db_specs_dict),
+                            "data": jsonable_encoder(result),
                         },
                     )
 
@@ -1045,9 +1114,9 @@ class RegisterAPI:
             except Exception as e:
                 # Handle the exception by logging an error message
                 bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Error occurred while getting runs from wandb",
                         "err_detail": e.__repr__(),
@@ -1059,21 +1128,28 @@ class RegisterAPI:
             tags=["WandB"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List spec resources successfully.",
+                },
                 401: {"model": ErrorResponse, "description": "Missing authorization"},
                 404: {
                     "model": ErrorResponse,
                     "description": "Error occurred while getting specs from wandb",
                 },
-                200: {
-                    "model": SuccessResponse,
-                    "description": "List spec resources successfully.",
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
                 },
             },
         )
-        async def list_specs(hotkey: Optional[str] = None) -> JSONResponse | HTTPException:
+        async def list_specs(hotkey: Optional[str] = None,
+                             page_size: Optional[int] = None,
+                             page_number: Optional[int] = None) -> JSONResponse:
             """
             The list specs API endpoint. <br>
             """
+            db_list = []
             db_specs_dict = {}
 
             try:
@@ -1114,8 +1190,21 @@ class RegisterAPI:
 
                         # check the signature
                         if hotkey and specs:
+                            db_specs_dict = {}
                             db_specs_dict[index] = {"hotkey": hotkey, "configs": configs,
                                                     "specs": specs, "state": run_state}
+                            db_list.append(db_specs_dict)
+
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
 
                     # Return the db_specs_dict for further use or inspection
                     bt.logging.info(f"API: List specs successfully")
@@ -1124,7 +1213,7 @@ class RegisterAPI:
                         content={
                             "success": True,
                             "message": "List specs successfully",
-                            "data": jsonable_encoder(db_specs_dict),
+                            "data": jsonable_encoder(result),
                         },
                     )
 
@@ -1144,9 +1233,9 @@ class RegisterAPI:
                 bt.logging.error(
                     f"API: An error occurred while getting specs from wandb: {e}"
                 )
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Error occurred while getting specs from wandb",
                         "err_detail": e.__repr__(),
@@ -1157,18 +1246,22 @@ class RegisterAPI:
                        tags=["WandB"],
                        response_model=SuccessResponse | ErrorResponse,
                        responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
                            401: {"model": ErrorResponse, "description": "Missing authorization"},
                            404: {
                                "model": ErrorResponse,
                                "description": "Error occurred while getting run from wandb",
                            },
-                           200: {
-                               "model": SuccessResponse,
-                               "description": "List run resources successfully.",
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
                            },
                        }
-        )
-        def list_run_name(run_name: str) -> JSONResponse | HTTPException:
+                       )
+        def list_run_name(run_name: str) -> JSONResponse:
             """
             This function gets runs by name.
             """
@@ -1226,9 +1319,9 @@ class RegisterAPI:
                 # Handle the exception by logging an error message
                 bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
 
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Error occurred while run from wandb",
                         "err_detail": e.__repr__(),
@@ -1239,22 +1332,28 @@ class RegisterAPI:
                        tags=["WandB"],
                        response_model=SuccessResponse | ErrorResponse,
                        responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
                            401: {"model": ErrorResponse, "description": "Missing authorization"},
                            404: {
                                "model": ErrorResponse,
                                "description": "Error occurred while fetch available miner from wandb",
                            },
-                           200: {
-                               "model": SuccessResponse,
-                               "description": "List available resources successfully.",
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
                            },
                        }
-        )
-
-        def list_available_miner(rent_status: bool = False) -> JSONResponse | HTTPException:
+                       )
+        def list_available_miner(rent_status: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
             """
             This function gets all available miners.
             """
+            db_list = []
             db_specs_dict = {}
             try:
                 #self.wandb.api.flush()
@@ -1288,7 +1387,20 @@ class RegisterAPI:
 
                         # check the signature
                         if hotkey and configs:
+                            db_specs_dict = {}
                             db_specs_dict[index] = {"hotkey": hotkey, "details": specs}
+                            db_list.append(db_specs_dict)
+
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
                 else:
                     bt.logging.info(f"API: No available miners")
                     return JSONResponse(
@@ -1307,7 +1419,7 @@ class RegisterAPI:
                         content={
                             "success": True,
                             "message": "List rented miners",
-                            "data": jsonable_encoder(db_specs_dict),
+                            "data": jsonable_encoder(result),
                         },
                     )
                 else:
@@ -1317,39 +1429,42 @@ class RegisterAPI:
                         content={
                             "success": True,
                             "message": "List available miners",
-                            "data": jsonable_encoder(db_specs_dict),
+                            "data": jsonable_encoder(result),
                         },
                     )
 
             except Exception as e:
                 # Handle the exception by logging an error message
                 bt.logging.error(f"API: An error occurred while fetching available miner from wandb: {e}")
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Error occurred while fetching available miner from wandb",
                         "err_detail": e.__repr__(),
                     },
                 )
 
-
         @self.app.post("/list/allocated_hotkeys",
                        tags=["WandB"],
                        response_model=SuccessResponse | ErrorResponse,
                        responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
                            401: {"model": ErrorResponse, "description": "Missing authorization"},
                            404: {
                                "model": ErrorResponse,
                                "description": "Error occurred while fetch allocated hotkey from wandb",
                            },
-                           200: {
-                               "model": SuccessResponse,
-                               "description": "List available resources successfully.",
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
                            },
                        }
-        )
-        async def list_allocated_hotkeys() -> JSONResponse | HTTPException:
+                       )
+        async def list_allocated_hotkeys() -> JSONResponse:
             """
             This function gets all allocated hotkeys from all validators.
             Only relevant for validators.
@@ -1383,9 +1498,9 @@ class RegisterAPI:
 
             except Exception as e:
                 bt.logging.error(f"API: list_allocated_hotkeys error with {e.__repr__()}")
-                raise HTTPException(
+                return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail={
+                    content={
                         "success": False,
                         "message": "Error occurred while fetching allocated hotkey from wandb",
                         "err_detail": e.__repr__(),
@@ -1509,7 +1624,6 @@ class RegisterAPI:
 
         return config
 
-
     def _allocate_container(self, device_requirement, timeline, public_key):
         """
         Allocate the container with the given device requirement. <br>
@@ -1583,7 +1697,6 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-
     def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key):
         """
         Allocate the container with the given hotkey. <br>
@@ -1632,7 +1745,7 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    def _update_allocation_wandb(self,):
+    def _update_allocation_wandb(self, ):
         """
         Update the allocated hotkeys in wandb. <br>
         """
@@ -1681,6 +1794,26 @@ class RegisterAPI:
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
+    @staticmethod
+    def _paginate_list(items, page_number, page_size):
+        # Calculate the start and end indices of the items on the current page
+        start_index = (page_number - 1) * page_size
+        end_index = start_index + page_size
+
+        # Get the items on the current page
+        page_items = items[start_index:end_index]
+
+        # Determine if there are more pages
+        has_next_page = end_index < len(items)
+        next_page_number = page_number + 1 if has_next_page else None
+
+        return {
+            "page_items": page_items,
+            "page_number": page_number,
+            "page_size": page_size,
+            "next_page_number": next_page_number
+        }
+
     def _authenticate_user(self, user_id: str, user_password: str) -> Union[str, bool]:
         """
         Authenticate the user with wallet hotkey and public_key info. <br>
@@ -1710,40 +1843,40 @@ class RegisterAPI:
         encoded_jwt = jwt.encode(to_encode, self.access_api_key, algorithm=ALGORITHM)
         return encoded_jwt
 
-    def _verify_access_token(self, token: oauth2_token_scheme,) -> Union[Any, None]:
+    def _verify_access_token(self, token: oauth2_token_scheme, ) -> Union[Any, None]:
         """
         Verify the access token for the user. <br>
         """
-        credentials_exception = HTTPException(
+        credentials_exception = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
+            content="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
         try:
             payload = jwt.decode(token, self.access_api_key, algorithms=[ALGORITHM])
             username: str = payload.get("sub")
             if username is None:
-                raise credentials_exception
+                return credentials_exception
             token_data = TokenData(username=username)
             return payload
 
         except ExpiredSignatureError:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Credential is Expired",
+                content="Credential is Expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         except JWTError:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Token",
+                content="Invalid Token",
                 headers={"WWW-Authenticate": "Bearer"},
             )
             # return {"error": "Invalid token"}
         except Exception as e:
-            raise HTTPException(
+            return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=e.__repr__(),
+                content=e.__repr__(),
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -1781,6 +1914,7 @@ class RegisterAPI:
         if self.process:
             self.process.terminate()
             self.process.join()
+
 
 # Run the FastAPI app
 if __name__ == "__main__":
