@@ -64,7 +64,7 @@ def run_hashcat(
     initial_start_time=None,
     execution_time=None,
     session: str = None,
-    max_concurrent = 15
+    max_concurrent: int
 ):
     if initial_start_time:
         start_time = initial_start_time
