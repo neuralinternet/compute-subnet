@@ -206,7 +206,7 @@ def run_miner_pow(
     hashcat_path: str = compute.miner_hashcat_location,
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
-    max_concurrent: int = 15
+    max_concurrent: int
 ):
     bt.logging.info(f"{run_id}: 💻 Challenge received")
 
@@ -224,6 +224,6 @@ def run_miner_pow(
         hashcat_workload_profile=hashcat_workload_profile,
         hashcat_extended_options=hashcat_extended_options,
         session=str(uuid.uuid4()).replace("-", ""),
-        max_concurrent
+        max_concurrent=max_concurrent
     )
     return result
