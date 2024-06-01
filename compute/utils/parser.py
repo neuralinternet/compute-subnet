@@ -55,6 +55,12 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="List of coldkeys to whitelist. Default: [].",
             default=[],
         )
+        self.add_argument(
+            "--max_concurrents",
+            type=int,
+            default=15,
+            help="The maximum number of concurrent hashcat tasks to run.",
+        )
 
         self.add_validator_argument()
         self.add_miner_argument()
