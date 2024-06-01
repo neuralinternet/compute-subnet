@@ -79,7 +79,7 @@ def run_hashcat(
                 "error": "Run id missing from queue?",
             }
 
-        if queue and len(queue) > max_concurrent):
+        if queue and len(queue) > max_concurrent:
             time.sleep(1)
             continue
 
