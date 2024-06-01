@@ -64,6 +64,7 @@ def run_hashcat(
     initial_start_time=None,
     execution_time=None,
     session: str = None,
+    max_concurrent = 15
 ):
     if initial_start_time:
         start_time = initial_start_time
@@ -72,7 +73,7 @@ def run_hashcat(
         start_time = time.time()
         real_timeout = timeout - (time.time() - start_time)
 
-    if queue and run_id not in queue:
+    if queue and (run_id not in queue or len(queue) > max_concurrent):
         time.sleep(1)
         execution_time = time.time() - start_time
         return run_hashcat(
@@ -205,6 +206,7 @@ def run_miner_pow(
     hashcat_path: str = compute.miner_hashcat_location,
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
+    max_concurrent: int = 15
 ):
     bt.logging.info(f"{run_id}: 💻 Challenge received")
 
@@ -222,5 +224,6 @@ def run_miner_pow(
         hashcat_workload_profile=hashcat_workload_profile,
         hashcat_extended_options=hashcat_extended_options,
         session=str(uuid.uuid4()).replace("-", ""),
+        max_concurrent
     )
     return result
