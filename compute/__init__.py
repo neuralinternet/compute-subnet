@@ -44,11 +44,11 @@ pow_mode_blake2b512 = "610"
 pow_mode_ruby_on_rails_ra = "19500"
 pow_modes_list = [pow_mode_blake2b512, pow_mode_ruby_on_rails_ra]
 pow_threads_per_difficulty = {
-    8: 13,
-    9: 16,
-    10: 19,
-    11: 7,
-    12: 3,
+    8: 1, #13,
+    9: 1, #16,
+    10: 1, #19,
+    11: 1, #7,
+    12: 1, #3,
 }
 # Model: BLAKE2b-512($pass.$salt)
 pow_default_mode = pow_mode_blake2b512
