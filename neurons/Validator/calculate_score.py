@@ -16,7 +16,6 @@
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
 
-# Note: This code is currently not in use! check calculate_pow_score.py
 
 import numpy as np
 import wandb
