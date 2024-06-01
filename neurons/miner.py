@@ -383,6 +383,7 @@ class Miner:
             hashcat_path=self.hashcat_path,
             hashcat_workload_profile=self.hashcat_workload_profile,
             hashcat_extended_options=self.hashcat_extended_options,
+            max_concurrent=self.config.max_concurrent
         )
         synapse.output = result
         return synapse
