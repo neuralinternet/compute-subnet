@@ -72,7 +72,7 @@ def run_hashcat(
         elapsed_time = current_time - initial_start_time
         real_timeout = timeout - elapsed_time
 
-        if run_id not in queue:
+        if queue and run_id not in queue:
             return {
                 "password": None,
                 "local_execution_time": elapsed_time,
