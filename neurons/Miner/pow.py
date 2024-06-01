@@ -61,7 +61,7 @@ def run_hashcat(
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = compute.miner_hashcat_extended_options,
     initial_start_time=None,
-    session: str,
+    session: str=None,
     max_concurrent: int
 ):
     if not initial_start_time:
