@@ -56,7 +56,7 @@ class ComputeArgPaser(argparse.ArgumentParser):
             default=[],
         )
         self.add_argument(
-            "--max_concurrents",
+            "--max_concurrent",
             type=int,
             default=15,
             help="The maximum number of concurrent hashcat tasks to run.",
