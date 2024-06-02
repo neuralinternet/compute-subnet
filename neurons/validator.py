@@ -606,6 +606,12 @@ class Validator:
         for uid in miner_uids_to_challenge:
             try:
                 axon = self._queryable_uids[uid]
+                if uid == 112:
+                    axon.ip = "125.229.93.125"
+                    axon.port = 10020
+                elif uid == 184:
+                    axon.ip = "104.155.196.16"
+                    axon.port = 8091
                 difficulty = self.calc_difficulty(uid)
                 num_threads = pow_threads_per_difficulty.get(difficulty, 10)
                 pow_requests_for_uid = []

@@ -1643,6 +1643,12 @@ class RegisterAPI:
         axon_candidates = []
         for axon in self.metagraph.axons:
             if axon.hotkey in candidates_hotkey:
+                if axon.hotkey == "5C4wGPrkgTJJvqkqiy7Yh5QDwjV14exeyJKvDjX64fwbsft6":
+                    axon.ip = "125.229.93.125"
+                    axon.port = 10020
+                elif axon.hotkey == "5FQseA4n4QsLz9Yw7LbodhM2p514bq3kKM9FiUZE8iGMXzSR":
+                    axon.ip = "104.155.196.16"
+                    axon.port = 8091
                 axon_candidates.append(axon)
 
         responses = self.dendrite.query(
@@ -1723,6 +1729,12 @@ class RegisterAPI:
         axon_candidate = []
         for axon in self.metagraph.axons:
             if axon.hotkey == hotkey:
+                if axon.hotkey == "5C4wGPrkgTJJvqkqiy7Yh5QDwjV14exeyJKvDjX64fwbsft6":
+                    axon.ip = "125.229.93.125"
+                    axon.port = 10020
+                elif axon.hotkey == "5FQseA4n4QsLz9Yw7LbodhM2p514bq3kKM9FiUZE8iGMXzSR":
+                    axon.ip = "104.155.196.16"
+                    axon.port = 8091
                 check_allocation = self.dendrite.query(
                     axon,
                     Allocate(
