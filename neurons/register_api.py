@@ -64,6 +64,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.concurrency import run_in_threadpool
 from pydantic import typing, BaseModel, Field
 from typing import List, Optional, Type, Union, Any, Annotated
 
@@ -184,7 +185,7 @@ class RegisterAPI:
         #    set_key(dotenv_path=env_file, key_to_set="ACCESS_API_KEY", value_to_set=self.access_api_key)
         #    set_key(dotenv_path=env_file, key_to_set="REFRESH_API_KEY", value_to_set=self.refresh_api_key)
 
-        self.app = FastAPI()
+        self.app = FastAPI(debug=False)
         self._setup_routes()
         self.process = None
 
@@ -297,7 +298,7 @@ class RegisterAPI:
         @self.app.get("/", tags=["Root"])
         async def read_root():
             return {
-                "message": "Welcome to Compute Subnet Allocation API, Please login to access the API."
+                "message": "Welcome to Compute Subnet Allocation API, Please access the API via endpoint."
             }
 
         # disable login route for Token authentication
@@ -372,9 +373,10 @@ class RegisterAPI:
 
                     timeline = int(requirements.timeline)
                     private_key, public_key = rsa.generate_key_pair()
-                    result = self._allocate_container(
-                        device_requirement, timeline, public_key
-                    )
+                    #result = self._allocate_container(
+                    #    device_requirement, timeline, public_key
+                    #)
+                    result = await run_in_threadpool(self._allocate_container, device_requirement, timeline, public_key)
 
                     if result["status"] is True:
                         result_hotkey = result["hotkey"]
@@ -389,7 +391,8 @@ class RegisterAPI:
 
                         # Iterate through the miner specs details to get gpu_name
                         db = ComputeDb()
-                        specs_details = get_miner_details(db)
+                        #specs_details = get_miner_details(db)
+                        specs_details = await run_in_threadpool(get_miner_details, db)
                         db.close()
 
                         for key, details in specs_details.items():
@@ -423,8 +426,8 @@ class RegisterAPI:
                         allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
 
                         update_allocation_db(result_hotkey, info, True)
-                        self._update_allocation_wandb()
-                        #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                        # self._update_allocation_wandb()
+                        await self._update_allocation_wandb()
 
                         bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
                         return JSONResponse(
@@ -506,13 +509,15 @@ class RegisterAPI:
                     requirements.timeline = 30
 
                     private_key, public_key = rsa.generate_key_pair()
-                    result = self._allocate_container_hotkey(
-                        requirements, hotkey, requirements.timeline, public_key
-                    )
+                    # result = self._allocate_container_hotkey(
+                    #     requirements, hotkey, requirements.timeline, public_key
+                    # )
+                    result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey, requirements.timeline, public_key)
 
                     # Iterate through the miner specs details to get gpu_name
                     db = ComputeDb()
-                    specs_details = get_miner_details(db)
+                    #specs_details = get_miner_details(db)
+                    specs_details = await run_in_threadpool(get_miner_details, db)
                     for key, details in specs_details.items():
                         if str(key) == str(hotkey) and details:
                             try:
@@ -552,8 +557,7 @@ class RegisterAPI:
                         allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
 
                         update_allocation_db(result_hotkey, info, True)
-                        self._update_allocation_wandb()
-                        #self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                        await self._update_allocation_wandb()
 
                         bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
                         return JSONResponse(
@@ -653,6 +657,13 @@ class RegisterAPI:
 
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
+                        if axon.hotkey == "5C4wGPrkgTJJvqkqiy7Yh5QDwjV14exeyJKvDjX64fwbsft6":
+                            axon.ip = "125.229.93.125"
+                            axon.port = 10020
+                        elif axon.hotkey == "5FQseA4n4QsLz9Yw7LbodhM2p514bq3kKM9FiUZE8iGMXzSR":
+                            axon.ip = "104.155.196.16"
+                            axon.port = 8091
+
                         deregister_response = self.dendrite.query(
                             axon,
                             Allocate(
@@ -668,8 +679,7 @@ class RegisterAPI:
                                 and deregister_response["status"] is True
                         ):
                             update_allocation_db(result_hotkey, info, False)
-                            self._update_allocation_wandb()
-                            # self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+                            await self._update_allocation_wandb()
 
                             bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
                             return JSONResponse(
@@ -859,7 +869,7 @@ class RegisterAPI:
             """
             if True:
                 db = ComputeDb()
-                specs_details = get_miner_details(db)
+                specs_details = await run_in_threadpool(get_miner_details,db)
 
                 bt.logging.info(f"API: List resources on compute subnet")
 
@@ -869,11 +879,7 @@ class RegisterAPI:
                 total_gpu_counts = {}
 
                 # Get the allocated hotkeys from wandb
-                # if not self.allocation_table:
-                allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False)
-                # self.allocation_table = allocated_hotkeys
-                # else:
-                # allocated_hotkeys = self.allocation_table
+                allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys,[], False)
 
                 if specs_details:
                     # Iterate through the miner specs details and print the table
@@ -1028,7 +1034,7 @@ class RegisterAPI:
                            },
                        }
                        )
-        def list_all_runs(hotkey: Optional[str] = None,
+        async def list_all_runs(hotkey: Optional[str] = None,
                           page_size: Optional[int] = None,
                           page_number: Optional[int] = None) -> JSONResponse:
             """
@@ -1053,7 +1059,7 @@ class RegisterAPI:
                             {"state": "running"},
                         ]
                     }
-                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
                 append_entry = bool
 
                 if runs:
@@ -1073,9 +1079,9 @@ class RegisterAPI:
                         #      if db_specs_dict[entry]["name"] == run_name:
                         #          append_entry = False
                         #          break
-                        #                                 date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
-                        #                                 if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
-                        #                                     db_specs_dict.pop(entry)
+                        #      date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
+                        #      if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
+                        #         db_specs_dict.pop(entry)
 
                         # check the signature
                         if configs and append_entry:
@@ -1160,7 +1166,7 @@ class RegisterAPI:
             try:
                 #self.wandb.api.flush()
                 if hotkey:
-                    filters = {
+                    filter_rule = {
                         "$and": [
                             {"config.role": "miner"},
                             {"config.config.netuid": self.config.netuid},
@@ -1170,7 +1176,7 @@ class RegisterAPI:
                         ]
                     }
                 else:
-                    filters = {
+                    filter_rule = {
                         "$and": [
                             {"config.role": "miner"},
                             {"config.config.netuid": self.config.netuid},
@@ -1178,10 +1184,8 @@ class RegisterAPI:
                             {"state": "running"},
                         ]
                     }
-                runs = self.wandb.api.runs(
-                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                    filters=filters,
-                )
+
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
 
                 if runs:
                     # Iterate over all runs in the opencompute project
@@ -1266,7 +1270,7 @@ class RegisterAPI:
                            },
                        }
                        )
-        def list_run_name(run_name: str) -> JSONResponse:
+        async def list_run_name(run_name: str) -> JSONResponse:
             """
             This function gets runs by name.
             """
@@ -1281,7 +1285,7 @@ class RegisterAPI:
                     ]
                 }
 
-                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
 
                 if runs:
                     # Iterate over all runs in the opencompute project
@@ -1352,7 +1356,7 @@ class RegisterAPI:
                            },
                        }
                        )
-        def list_available_miner(rent_status: bool = False,
+        async def list_available_miner(rent_status: bool = False,
                                  page_size: Optional[int] = None,
                                  page_number: Optional[int] = None) -> JSONResponse:
             """
@@ -1380,7 +1384,8 @@ class RegisterAPI:
                         "state": "running",
                     }
 
-                runs = self.wandb.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
                 if runs:
                     # Iterate over all runs in the opencompute project
                     for index, run in enumerate(runs, start=1):
@@ -1485,9 +1490,7 @@ class RegisterAPI:
                 }
 
                 # Query all runs in the project and Filter runs where the role is 'validator'
-                validator_runs = self.wandb.api.runs(
-                    path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule
-                )
+                validator_runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
 
                 # Check if the runs list is empty
                 if not validator_runs:
@@ -1762,7 +1765,7 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    def _update_allocation_wandb(self, ):
+    async def _update_allocation_wandb(self, ):
         """
         Update the allocated hotkeys in wandb. <br>
         """
@@ -1787,7 +1790,7 @@ class RegisterAPI:
             cursor.close()
             db.close()
         try:
-            self.wandb.update_allocated_hotkeys(hotkey_list)
+            await run_in_threadpool(self.wandb.update_allocated_hotkeys, hotkey_list)
         except Exception as e:
             bt.logging.info(f"API: Error updating wandb : {e}")
             return
