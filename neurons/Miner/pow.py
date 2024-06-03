@@ -13,9 +13,7 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import uuid
 import shlex
-import traceback
 import subprocess
 from typing import Union
 
@@ -49,7 +47,7 @@ def hashcat_verify(_hash, output) -> Union[str, None]:
     return None
 
 
-# no longer a FIFO
+# @fifo
 def run_hashcat(
     run_id: str,
     _hash: str,
@@ -63,7 +61,6 @@ def run_hashcat(
     hashcat_extended_options: str = compute.miner_hashcat_extended_options,
     initial_start_time=None,
     execution_time=None,
-    session: str = None,
 ):
     if initial_start_time:
         start_time = initial_start_time
@@ -72,7 +69,7 @@ def run_hashcat(
         start_time = time.time()
         real_timeout = timeout - (time.time() - start_time)
 
-    if queue and run_id not in queue:
+    if queue and queue[0] != run_id:
         time.sleep(1)
         execution_time = time.time() - start_time
         return run_hashcat(
@@ -87,7 +84,6 @@ def run_hashcat(
             hashcat_extended_options=hashcat_extended_options,
             initial_start_time=start_time,
             execution_time=execution_time,
-            session=session,
         )
     else:
         bt.logging.info(f"{run_id}: ♻️  Challenge processing")
@@ -108,8 +104,6 @@ def run_hashcat(
             mask,
             "-w",
             hashcat_workload_profile,
-            "--session",
-            session,
             hashcat_extended_options,
         ]
         command_str = " ".join(shlex.quote(arg) for arg in command)
@@ -141,22 +135,6 @@ def run_hashcat(
                     "error": None,
                 }
         else:
-            if process.returncode == 255:
-                time.sleep(1)
-                return run_hashcat(
-                    run_id=run_id,
-                    _hash=_hash,
-                    salt=salt,
-                    mode=mode,
-                    chars=chars,
-                    mask=mask,
-                    timeout=int(timeout - execution_time),
-                    hashcat_path=hashcat_path,
-                    hashcat_workload_profile=hashcat_workload_profile,
-                    hashcat_extended_options=hashcat_extended_options,
-                    initial_start_time=start_time,
-                    session=session,
-                )
             error_message = f"{run_id}: ❌ Hashcat execution failed with code {process.returncode}: {process.stderr}"
             bt.logging.warning(error_message)
             queue.popleft()
@@ -178,7 +156,6 @@ def run_hashcat(
         }
     except Exception as e:
         execution_time = time.time() - start_time
-        traceback.print_exc()
         bt.logging.warning(f"{unknown_error_message}: {e}")
         queue.popleft()
         return {
@@ -206,7 +183,10 @@ def run_miner_pow(
     hashcat_workload_profile: str = compute.miner_hashcat_workload_profile,
     hashcat_extended_options: str = "",
 ):
-    bt.logging.info(f"{run_id}: 💻 Challenge received")
+    if len(queue) <= 0:
+        bt.logging.info(f"{run_id}: 💻 Challenge received")
+    else:
+        bt.logging.info(f"{run_id}: ⏳ An instance running - added in the queue.")
 
     # Add to the queue the challenge id
     queue.append(run_id)
@@ -221,6 +201,5 @@ def run_miner_pow(
         hashcat_path=hashcat_path,
         hashcat_workload_profile=hashcat_workload_profile,
         hashcat_extended_options=hashcat_extended_options,
-        session=str(uuid.uuid4()).replace("-", ""),
     )
     return result
