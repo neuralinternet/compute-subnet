@@ -19,7 +19,7 @@ import string
 
 # Define the version of the template module.
 __version__ = "1.4.4"
-__minimal_miner_version__ = "1.4.4"
+__minimal_miner_version__ = "1.4.2"
 __minimal_validator_version__ = "1.4.4"
 
 version_split = __version__.split(".")
