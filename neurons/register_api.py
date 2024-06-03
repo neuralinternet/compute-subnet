@@ -1365,7 +1365,7 @@ class RegisterAPI:
             db_list = []
             db_specs_dict = {}
             try:
-                #self.wandb.api.flush()
+                self.wandb.api.flush()
                 if rent_status:
                     filter_rule = {
                         "config.allocated": {"$regex": "\d.*"},
@@ -1480,7 +1480,7 @@ class RegisterAPI:
             Only relevant for validators.
             """
             try:
-                #self.wandb.api.flush()
+                self.wandb.api.flush()
                 filter_rule = {
                     "$and": [
                         {"config.role": "validator"},
