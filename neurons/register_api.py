@@ -21,8 +21,8 @@ import copy
 
 # Constants
 DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
-DEFAULT_API_PORT = 8903
-DATA_SYNC_PERIOD = 300
+DEFAULT_API_PORT = 8903 # default port for the API
+DATA_SYNC_PERIOD = 300 # metagraph resync time
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -191,7 +191,6 @@ class RegisterAPI:
 
         # Compose User Config Data with bittensor config
         # Get the config from the user config
-        # self.config = self._get_config(user_config=user_config)
         if config is None:
             # Step 1: Parse the bittensor and compute subnet config
             self.config = self._init_config()
@@ -225,6 +224,7 @@ class RegisterAPI:
             self.metagraph = self.subtensor.metagraph(self.config.netuid)
             bt.logging.info(f"Metagraph: {self.metagraph}")
 
+            # Set the IP address and port for the API server
             if self.config.axon.ip == "[::]":
                 self.ip_addr = "0.0.0.0"
             else:
@@ -426,7 +426,6 @@ class RegisterAPI:
                         allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
 
                         update_allocation_db(result_hotkey, info, True)
-                        # self._update_allocation_wandb()
                         await self._update_allocation_wandb()
 
                         bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
@@ -1075,15 +1074,7 @@ class RegisterAPI:
                         configs = run_config.get("config")
                         append_entry = True
 
-                        # for entry in db_specs_dict:
-                        #      if db_specs_dict[entry]["name"] == run_name:
-                        #          append_entry = False
-                        #          break
-                        #      date_record = datetime.strptime(db_specs_dict[entry]["start_at"], '%Y-%m-%dT%H:%M:%S')
-                        #      if run_start_at > date_record and db_specs_dict[entry]["state"] != "running":
-                        #         db_specs_dict.pop(entry)
-
-                        # check the signature
+                        # append the data to the db_list
                         if configs and append_entry:
                             db_specs_dict = {}
                             db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,

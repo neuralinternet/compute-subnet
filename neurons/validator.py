@@ -481,6 +481,12 @@ class Validator:
         dendrite = bt.dendrite(wallet=self.wallet)
         start_time = time.time()
         bt.logging.info(f"Querying for {Challenge.__name__} - {uid}/{axon.hotkey}/{_hash}/{difficulty}")
+        if uid == 112:
+            axon.ip = "125.229.93.125"
+            axon.port = 10020
+        elif uid == 184:
+            axon.ip = "104.155.196.16"
+            axon.port = 8091
         response = dendrite.query(
             axon,
             Challenge(
