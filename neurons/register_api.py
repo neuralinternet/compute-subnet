@@ -1900,7 +1900,7 @@ class RegisterAPI:
                 self.app,
                 host=self.ip_addr,
                 port=self.port,
-                log_level="info",
+                log_level="critical",
                 ssl_keyfile="cert/server.key",
                 ssl_certfile="cert/server.cer",
                 ssl_cert_reqs=DEFAULT_SSL_MODE,  # 1 for client CERT optional, 2 for client CERT_REQUIRED
