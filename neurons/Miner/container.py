@@ -61,6 +61,8 @@ def kill_container():
         if running_container:
             running_container.stop()
             running_container.remove()
+            # Remove all dangling images
+            client.images.prune(filters={"dangling": True})
             # bt.logging.info("Container was killed successfully")
             return True
         else:
@@ -105,8 +107,9 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
         with open(dockerfile_path, "w") as dockerfile:
             dockerfile.write(dockerfile_content)
 
-        # Build the Docker image
-        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path), tag=image_name)
+        # Build the Docker image and remove the intermediate containers
+        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path), tag=image_name,
+                            rm=True)
         # Create the Docker volume with the specified size
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
