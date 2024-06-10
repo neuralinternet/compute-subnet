@@ -376,7 +376,10 @@ class RegisterAPI:
                     #result = self._allocate_container(
                     #    device_requirement, timeline, public_key
                     #)
+                    run_start = time.time()
                     result = await run_in_threadpool(self._allocate_container, device_requirement, timeline, public_key)
+                    run_end = time.time()
+                    bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
                     if result["status"] is True:
                         result_hotkey = result["hotkey"]
@@ -511,7 +514,10 @@ class RegisterAPI:
                     # result = self._allocate_container_hotkey(
                     #     requirements, hotkey, requirements.timeline, public_key
                     # )
+                    run_start = time.time()
                     result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey, requirements.timeline, public_key)
+                    run_end = time.time()
+                    bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
                     # Iterate through the miner specs details to get gpu_name
                     db = ComputeDb()
@@ -663,16 +669,13 @@ class RegisterAPI:
                             axon.ip = "104.155.196.16"
                             axon.port = 8091
 
-                        deregister_response = self.dendrite.query(
-                            axon,
-                            Allocate(
-                                timeline=0,
-                                device_requirement={},
-                                checking=False,
-                                public_key=regkey,
-                            ),
-                            timeout=60,
-                        )
+
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey, )
+                        deregister_response = await run_in_threadpool(self.dendrite.query, axon, allocate_class, timeout=60)
+                        run_end = time.time()
+                        bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
                         if (
                                 deregister_response
                                 and deregister_response["status"] is True
@@ -1690,7 +1693,7 @@ class RegisterAPI:
                     checking=False,
                     public_key=public_key,
                 ),
-                timeout=60,
+                timeout=100,
             )
             if register_response and register_response["status"] is True:
                 register_response["ip"] = axon.ip
@@ -1747,7 +1750,7 @@ class RegisterAPI:
                             checking=False,
                             public_key=public_key,
                         ),
-                        timeout=60,
+                        timeout=100,
                     )
                     if register_response and register_response["status"] is True:
                         register_response["ip"] = axon.ip
