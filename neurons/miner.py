@@ -21,6 +21,7 @@ import os
 import time
 import traceback
 import typing
+import multiprocessing
 
 import bittensor as bt
 
@@ -48,7 +49,7 @@ from compute.utils.version import (
     get_remote_version,
 )
 from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
-from neurons.Miner.container import build_check_container
+from neurons.Miner.container import build_check_container, build_sample_container
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
@@ -128,6 +129,10 @@ class Miner:
 
         build_check_container('my-compute-subnet','sn27-check-container')
         has_docker, msg = check_docker_availability()
+
+        # Build sample container image to speed up the allocation process
+        sample_docker = multiprocessing.Process(target=build_sample_container)
+        sample_docker.start()
 
         if not has_docker:
             bt.logging.error(msg)
