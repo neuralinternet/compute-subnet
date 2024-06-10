@@ -41,6 +41,7 @@ from Validator.pow import gen_hash, run_validator_pow
 from compute import (
     pow_min_difficulty,
     pow_max_difficulty,
+    pow_threads_per_difficulty,
     pow_timeout,
     SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
@@ -62,6 +63,7 @@ from neurons.Validator.database.allocate import update_miner_details, select_has
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 
+from register_api import RegisterAPI
 
 class Validator:
     blocks_done: set = set()
@@ -145,6 +147,8 @@ class Validator:
         self.validator_whitelist_updated_threshold = self.config.validator_whitelist_updated_threshold
 
         # Set up logging with the provided configuration and directory.
+        bt.logging.set_debug(self.config.logging.debug)
+        bt.logging.set_trace(self.config.logging.trace)
         bt.logging(config=self.config, logging_dir=self.config.full_path)
         bt.logging.info(f"Running validator for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
         # Log the configuration for reference.
@@ -157,8 +161,6 @@ class Validator:
         # The wallet holds the cryptographic key pairs for the validator.
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
-
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
 
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
@@ -176,6 +178,10 @@ class Validator:
         self.db = ComputeDb()
         self.miners: dict = select_miners(self.db)
 
+        # Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        os.environ['WANDB_SILENT'] = 'true'
+
         # Step 3: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.uids: list = self.metagraph.uids.tolist()
@@ -184,6 +190,9 @@ class Validator:
         self.sync_status()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
+
+        # Init groups challenged
+        self.groups_challenged = set()
 
         # Init the thread.
         self.lock = threading.Lock()
@@ -351,14 +360,16 @@ class Validator:
             last_20_challenge_failed = force_to_float_or_default(stat.get("last_20_challenge_failed"))
             challenge_successes = force_to_float_or_default(stat.get("challenge_successes"))
 
+            num_threads = pow_threads_per_difficulty.get(current_difficulty, 10)
+
             # Adjust difficulty based on failure rates with more nuanced increments
-            if challenge_successes > 4:  # Adjusts the threshold from 20 to 4 for faster response
+            if challenge_successes >= num_threads:
                 failure_rate = last_20_challenge_failed / 20
                 if failure_rate < 0.1:
                     difficulty = min(current_difficulty + 2, pow_max_difficulty)
                 elif failure_rate < 0.2:
                     difficulty = min(current_difficulty + 1, pow_max_difficulty)
-                elif failure_rate > 0.25:
+                elif failure_rate > 0.5:
                     difficulty = max(current_difficulty - 1, pow_min_difficulty)
                 else:
                     difficulty = current_difficulty
@@ -463,6 +474,14 @@ class Validator:
         dict_filtered_axons = self.filter_axons(queryable_tuple_uids_axons=queryable)
         dict_filtered_axons = self.filter_axon_version(dict_filtered_axons=dict_filtered_axons)
         return dict_filtered_axons
+    
+    def get_valid_validator_uids(self):
+        valid_uids = []
+        uids = self.metagraph.uids.tolist()
+        for index, uid in enumerate(uids):
+            if self.metagraph.total_stake[index] > validator_permit_stake:
+                valid_uids.append(uid)
+        return valid_uids
 
     def get_valid_validator_hotkeys(self):
         valid_uids = []
@@ -481,12 +500,6 @@ class Validator:
         dendrite = bt.dendrite(wallet=self.wallet)
         start_time = time.time()
         bt.logging.info(f"Querying for {Challenge.__name__} - {uid}/{axon.hotkey}/{_hash}/{difficulty}")
-        if uid == 112:
-            axon.ip = "125.229.93.125"
-            axon.port = 10020
-        elif uid == 184:
-            axon.ip = "104.155.196.16"
-            axon.port = 8091
         response = dendrite.query(
             axon,
             Challenge(
@@ -501,7 +514,7 @@ class Validator:
         )
         elapsed_time = time.time() - start_time
         response_password = response.get("password", "")
-        hashed_response = gen_hash(response_password, _salt)[0] if response_password else ""
+        hashed_response = gen_hash(response_password, mode, _salt)[0] if response_password else ""
         success = True if _hash == hashed_response else False
         result_data = {
             "ss58_address": axon.hotkey,
@@ -511,89 +524,11 @@ class Validator:
         }
         with self.lock:
             self.pow_responses[uid] = response
-            self.new_pow_benchmark[uid] = result_data
+            if self.new_pow_benchmark.get(uid):
+                self.new_pow_benchmark[uid].append(result_data)
+            else:
+                self.new_pow_benchmark[uid] = [result_data]
 
-    def execute_specs_request(self):
-        if len(self.queryable_for_specs) > 0:
-            return
-        else:
-            # Miners to query this block
-            self.queryable_for_specs = self.queryable.copy()
-
-        bt.logging.info(f"💻 Initialisation of the {Specs.__name__} queries...")
-        # # Prepare app_data for benchmarking
-        # # Generate secret key for app
-        secret_key = Fernet.generate_key()
-        cipher_suite = Fernet(secret_key)
-        # # Compile the script and generate an exe.
-        ag.run(secret_key)
-        try:
-            main_dir = os.path.dirname(os.path.abspath(__file__))
-            file_name = os.path.join(main_dir, "Validator/dist/script")
-            # Read the exe file and save it to app_data.
-            with open(file_name, "rb") as file:
-                # Read the entire content of the EXE file
-                app_data = file.read()
-        except Exception as e:
-            bt.logging.error(f"{e}")
-            return
-
-        results = {}
-        while len(self.queryable_for_specs) > 0:
-            uids = list(self.queryable_for_specs.keys())
-            queryable_for_specs_uids = random.sample(uids, self.validator_specs_batch_size) if len(uids) > self.validator_specs_batch_size else uids
-            queryable_for_specs_uid = []
-            queryable_for_specs_axon = []
-            queryable_for_specs_hotkey = []
-
-            for uid, axon in self.queryable_for_specs.items():
-                if uid in queryable_for_specs_uids:
-                    queryable_for_specs_uid.append(uid)
-                    queryable_for_specs_axon.append(axon)
-                    queryable_for_specs_hotkey.append(axon.hotkey)
-
-            for uid in queryable_for_specs_uids:
-                del self.queryable_for_specs[uid]
-
-            try:
-                # Query the miners for benchmarking
-                bt.logging.info(f"💻 Hardware list of uids queried: {queryable_for_specs_uid}")
-                responses = self.dendrite.query(queryable_for_specs_axon, Specs(specs_input=repr(app_data)), timeout=specs_timeout)
-
-                # Format responses and save them to benchmark_responses
-                for index, response in enumerate(responses):
-                    try:
-                        if response:
-                            binary_data = ast.literal_eval(response)  # Convert str to binary data
-                            decrypted = cipher_suite.decrypt(binary_data)  # Decrypt str to binary data
-                            decoded_data = json.loads(decrypted.decode())  # Convert data to object
-                            results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], decoded_data)
-                        else:
-                            results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-                    except cryptography.fernet.InvalidToken:
-                        bt.logging.warning(f"{queryable_for_specs_hotkey[index]} - InvalidToken")
-                        results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-                    except Exception as _:
-                        traceback.print_exc()
-                        results[queryable_for_specs_uid[index]] = (queryable_for_specs_hotkey[index], {})
-
-            except Exception as e:
-                traceback.print_exc()
-
-        update_miner_details(self.db, list(results.keys()), list(results.values()))
-        bt.logging.info(f"✅ Hardware list responses:")
-
-        # Hardware list response hotfix 1.3.11
-        db = ComputeDb()
-        hardware_details = get_miner_details(db)
-        for hotkey, specs in hardware_details.items():
-            bt.logging.info(f"{hotkey} - {specs}")
-        """
-        for hotkey, specs in results.values():
-            bt.logging.info(f"{hotkey} - {specs}")
-        """
-        self.finalized_specs_once = True
-    
     def get_specs_wandb(self):
 
         bt.logging.info(f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}")
@@ -625,11 +560,9 @@ class Validator:
             version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
-        if isinstance(result, bool) and result or isinstance(result, tuple) and result[0]:
-            bt.logging.info(result)
+        if result:
             bt.logging.success("✅ Successfully set weights.")
         else:
-            bt.logging.error(result)
             bt.logging.error("❌ Failed to set weights.")
 
     def next_info(self, cond, next_block):
@@ -637,6 +570,68 @@ class Validator:
             return calculate_next_block_time(self.current_block, next_block)
         else:
             return None
+
+    def get_validator_index(self):
+        valid_hotkeys = self.get_valid_validator_hotkeys()
+        try:
+            return valid_hotkeys.index(self.config.wallet.hotkey)
+        except ValueError:
+            return -1
+
+    def get_group_to_challenge(self, challenge_block, validator_index, num_groups):
+        return (challenge_block + validator_index) % num_groups
+
+    def select_miners_to_challenge(self, group_index, num_groups):
+        queryable = self.get_queryable()
+        queryable_uids = list(queryable.keys())
+        num_miners = len(queryable_uids)
+        miners_per_group = num_miners // num_groups
+        remainder_miners = num_miners % num_groups
+
+        start_index = group_index * miners_per_group
+        end_index = start_index + miners_per_group
+
+        # Include remainder miners in the last group
+        if group_index == num_groups - 1:
+            end_index += remainder_miners
+
+        selected_miners = queryable_uids[start_index:end_index]
+
+        return selected_miners
+
+    def perform_pow_queries(self, miner_uids_to_challenge):
+
+        self.threads = []
+
+        for uid in miner_uids_to_challenge:
+            try:
+                axon = self._queryable_uids[uid]
+                difficulty = self.calc_difficulty(uid)
+                num_threads = pow_threads_per_difficulty.get(difficulty, 10)
+                pow_requests_for_uid = []
+                for i in range(num_threads):
+                    password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
+                    pow_requests_for_uid.append((password, _hash, _salt, mode, chars, mask, difficulty))
+                    self.threads.append(
+                        threading.Thread(
+                            target=self.execute_pow_request,
+                            args=(uid, axon, _hash, _salt, mode, chars, mask, difficulty),
+                            name=f"th_execute_pow_request-{uid}-{i}",
+                            daemon=True,
+                        )
+                    )
+                self.pow_requests[uid] = pow_requests_for_uid
+            except KeyError:
+                continue
+
+        for thread in self.threads:
+            thread.start()
+
+        for thread in self.threads:
+            thread.join()
+
+        # Clear threads after they have completed
+        self.threads.clear()
 
     async def start(self):
         """The Main Validation Loop"""
@@ -653,6 +648,10 @@ class Validator:
         time_next_set_weights = None
         time_next_hardware_info = None
 
+        min_response_time = 10  # Minimum number of blocks (2 minutes) for response
+        extra_buffer = 5  # Additional buffer to ensure challenges are issued in time
+        margin = 15  # Margin to catch missed blocks
+
         bt.logging.info("Starting validator loop.")
         while True:
             try:
@@ -668,63 +667,75 @@ class Validator:
                         not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info
                     )
 
-                    # Perform pow queries
-                    if self.current_block % block_next_challenge == 0 or block_next_challenge < self.current_block:
-                        # Next block the validators will challenge again.
-                        block_next_challenge = self.current_block + random.randint(50, 80)  # 50,80 -> between ~ 10 and 16 minutes
+                    # Determine the group to challenge based on the current block
+                    validator_index = self.get_validator_index()
+                    num_groups = len(self.get_valid_validator_hotkeys())
+                    challenge_interval = (360 - min_response_time - extra_buffer) // num_groups
+                    epoch_block = self.current_block % 360
 
-                        # Filter axons with stake and ip address.
-                        self._queryable_uids = self.get_queryable()
+                    # Find the previous valid challenge block within the margin
+                    previous_valid_epoch_block = (epoch_block // challenge_interval) * challenge_interval
+                    block_next_challenge = self.current_block//360*360 + previous_valid_epoch_block + challenge_interval
 
+                    if previous_valid_epoch_block == 0:
+                        self.groups_challenged.clear()
                         self.pow_requests = {}
+                        self.pow_responses = {}
                         self.new_pow_benchmark = {}
 
-                        self.threads = []
-                        for i in range(0, len(self.uids), self.validator_challenge_batch_size):
-                            for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
-                                try:
-                                    axon = self._queryable_uids[_uid]
-                                    difficulty = self.calc_difficulty(_uid)
-                                    password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
-                                    self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
-                                    self.threads.append(
-                                        threading.Thread(
-                                            target=self.execute_pow_request,
-                                            args=(_uid, axon, _hash, _salt, mode, chars, mask, difficulty),
-                                            name=f"th_execute_pow_request-{_uid}",
-                                            daemon=True,
-                                        )
-                                    )
-                                except KeyError:
-                                    continue
+                    # Check if it's time to challenge a group
+                    if (epoch_block - previous_valid_epoch_block < margin) and (epoch_block <= 360 - min_response_time - extra_buffer) and previous_valid_epoch_block > 0:
+                        group_index = self.get_group_to_challenge(previous_valid_epoch_block, validator_index, num_groups)
 
-                        for thread in self.threads:
-                            thread.start()
+                        # Perform pow queries group
+                        if group_index not in self.groups_challenged:
+                            self.groups_challenged.add(group_index)
+                            if not hasattr(self, "_queryable_uids"):
+                                self._queryable_uids = self.get_queryable()
+                            miner_uids_to_challenge = self.select_miners_to_challenge(group_index, num_groups)
 
-                        for thread in self.threads:
-                            thread.join()
+                            # Perform PoW queries
+                            group_uids = ", ".join(map(str, miner_uids_to_challenge))
+                            bt.logging.info(f"💻 Querying for Challenge Group {group_index} with UIDs: {group_uids}")
+                            self.perform_pow_queries(miner_uids_to_challenge)
 
-                        self.pow_benchmark = self.new_pow_benchmark
-                        self.pow_benchmark_success = {k: v for k, v in self.pow_benchmark.items() if v["success"] is True and v["elapsed_time"] < pow_timeout}
+                             # Log benchmarks for the current group
+                            if any(uid in self.new_pow_benchmark for uid in miner_uids_to_challenge):
+                                bt.logging.info(f"✅ Results success benchmarking for Group {group_index}:")
+                                for uid in miner_uids_to_challenge:
+                                    if uid in self.new_pow_benchmark:
+                                        bt.logging.info(f"{uid}: {self.new_pow_benchmark[uid]}")
+                            else:
+                                bt.logging.warning(f"❌ Benchmarking for Group {group_index}: All miners failed. An issue occurred.")
 
-                        # Logs benchmarks for the validators
-                        if len(self.pow_benchmark_success) > 0:
-                            bt.logging.info("✅ Results success benchmarking:")
-                            for uid, benchmark in self.pow_benchmark_success.items():
-                                bt.logging.info(f"{uid}: {benchmark}")
-                        else:
-                            bt.logging.warning("❌ Benchmarking: All miners failed. An issue occurred.")
+                            # Check if all groups have been challenged
+                            if len(self.groups_challenged) == num_groups:
 
-                        pow_benchmarks_list = [{**values, "uid": uid} for uid, values in self.pow_benchmark.items()]
-                        update_challenge_details(self.db, pow_benchmarks_list)
+                                self.pow_benchmark = self.new_pow_benchmark
+                                self.pow_benchmark_success = {}
+                                uids = []
+                                for uid, v in self.pow_benchmark.items():
+                                    sub_array = [sub_v["success"] is True and sub_v["elapsed_time"] < pow_timeout for sub_v in v]
+                                    if len(sub_array):
+                                        uids.append(uid)
+                                        self.pow_benchmark_success[uid] = sub_array
 
-                        self.sync_scores()
+                                pow_benchmarks_list = []
+                                for uid, values_array in self.pow_benchmark.items():
+                                    for values in values_array:
+                                        pow_benchmarks_list.append({**values, "uid": uid})
+                                
+                                bt.logging.info(f"✅ Successfully benchmarked all Groups with UIDs: {uids}")
+                                update_challenge_details(self.db, pow_benchmarks_list)
+
+                                self.groups_challenged.clear()
+                                self.sync_scores()
 
                     # Perform specs queries
                     if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (
                         block_next_hardware_info < self.current_block and self.validator_perform_hardware_query
                     ):
-                        block_next_hardware_info = self.current_block + 150  # 150 -> ~ every 30 minutes
+                        block_next_hardware_info = self.current_block + 300  # 300 -> ~ every 60 minutes
 
                         if not hasattr(self, "_queryable_uids"):
                             self._queryable_uids = self.get_queryable()
