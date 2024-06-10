@@ -22,7 +22,7 @@ import copy
 # Constants
 DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903 # default port for the API
-DATA_SYNC_PERIOD = 300 # metagraph resync time
+DATA_SYNC_PERIOD = 600 # metagraph resync time
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
