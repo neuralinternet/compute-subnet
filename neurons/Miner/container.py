@@ -224,9 +224,10 @@ def build_sample_container():
         images = client.images.list(all=True)
 
         for image in images:
-            if image_name in image.tags[0]:
-                bt.logging.info("Sample container image already exists.")
-                return {"status": True}
+            if image.tags:
+                if image_name in image.tags[0]:
+                    bt.logging.info("Sample container image already exists.")
+                    return {"status": True}
 
         password = password_generator(10)
 
