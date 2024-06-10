@@ -59,7 +59,10 @@ def kill_container():
                 running_container = container
                 break
         if running_container:
-            running_container.stop()
+            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+            running_container.exec_run(cmd="kill -15 1")
+            running_container.wait()
+            # running_container.stop()
             running_container.remove()
             # Remove all dangling images
             client.images.prune(filters={"dangling": True})
@@ -124,6 +127,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
             device_requests=device_requests,
             environment=["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port},
+            init=True,
         )
 
         # Check the status to determine if the container ran successfully
@@ -146,10 +150,10 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
     
             return {"status": True, "info": encrypted_info}
         else:
-            # bt.logging.info(f"Container falied with status : {container.status}")
+            bt.logging.info(f"Container falied with status : {container.status}")
             return {"status": False}
     except Exception as e:
-        # bt.logging.info(f"Error running container {e}")
+        bt.logging.info(f"Error running container {e}")
         return {"status": False}
 
 
@@ -258,5 +262,5 @@ def build_sample_container():
         bt.logging.info("Sample container image was created successfully.")
         return {"status": True}
     except Exception as e:
-        # bt.logging.info(f"Error running container {e}")
+        bt.logging.info(f"Error build sample container {e}")
         return {"status": False}
