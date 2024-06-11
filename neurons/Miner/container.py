@@ -59,8 +59,13 @@ def kill_container():
                 running_container = container
                 break
         if running_container:
-            running_container.stop()
+            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+            running_container.exec_run(cmd="kill -15 1")
+            running_container.wait()
+            # running_container.stop()
             running_container.remove()
+            # Remove all dangling images
+            client.images.prune(filters={"dangling": True})
             # bt.logging.info("Container was killed successfully")
             return True
         else:
@@ -105,8 +110,9 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
         with open(dockerfile_path, "w") as dockerfile:
             dockerfile.write(dockerfile_content)
 
-        # Build the Docker image
-        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path), tag=image_name)
+        # Build the Docker image and remove the intermediate containers
+        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path), tag=image_name,
+                            rm=True)
         # Create the Docker volume with the specified size
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
@@ -121,6 +127,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
             device_requests=device_requests,
             environment=["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port},
+            init=True,
         )
 
         # Check the status to determine if the container ran successfully
@@ -143,10 +150,10 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
     
             return {"status": True, "info": encrypted_info}
         else:
-            # bt.logging.info(f"Container falied with status : {container.status}")
+            bt.logging.info(f"Container falied with status : {container.status}")
             return {"status": False}
     except Exception as e:
-        # bt.logging.info(f"Error running container {e}")
+        bt.logging.info(f"Error running container {e}")
         return {"status": False}
 
 
@@ -206,3 +213,55 @@ def build_check_container(image_name: str, container_name: str):
         pass
     finally:
         client.close()
+
+
+def build_sample_container():
+    """
+    Build a sample container to speed up the process of building the container
+    """
+    try:
+        client = docker.from_env()
+        images = client.images.list(all=True)
+
+        for image in images:
+            if image.tags:
+                if image_name in image.tags[0]:
+                    bt.logging.info("Sample container image already exists.")
+                    return {"status": True}
+
+        password = password_generator(10)
+
+        # Step 1: Build the Docker image with an SSH server
+        dockerfile_content = (
+            """
+            FROM ubuntu
+            RUN apt-get update && apt-get install -y openssh-server
+            RUN mkdir -p /run/sshd  # Create the /run/sshd directory
+            RUN echo 'root:'{}'' | chpasswd
+            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            CMD ["/usr/sbin/sshd", "-D"]
+            """.format(password)
+        )
+
+        # Ensure the tmp directory exists within the current directory
+        tmp_dir_path = os.path.join('.', 'tmp')
+        os.makedirs(tmp_dir_path, exist_ok=True)
+
+        # Path for the Dockerfile within the tmp directory
+        dockerfile_path = os.path.join(tmp_dir_path, 'dockerfile')
+        with open(dockerfile_path, "w") as dockerfile:
+            dockerfile.write(dockerfile_content)
+
+        # Build the Docker image and remove the intermediate containers
+        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path),
+                            tag=image_name, rm=True)
+        # Create the Docker volume with the specified size
+        # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
+
+        bt.logging.info("Sample container image was created successfully.")
+        return {"status": True}
+    except Exception as e:
+        bt.logging.info(f"Error build sample container {e}")
+        return {"status": False}

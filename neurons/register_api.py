@@ -1,7 +1,7 @@
 # The MIT License (MIT)
 # Copyright © 2023 Crazydevlegend
 # Copyright © 2023 Rapiiidooo
-# Cp[yright @ 2024 Thomas Chu
+# Copyright @ 2024 Skynet
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -17,54 +17,59 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 # Step 1: Import necessary libraries and modules
+import copy
 
+# Constants
+DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_API_PORT = 8903 # default port for the API
+DATA_SYNC_PERIOD = 600 # metagraph resync time
+PUBLIC_WANDB_NAME = "opencompute"
+PUBLIC_WANDB_ENTITY = "neuralinternet"
 
+# Import Common Libraries
 import argparse
 import base64
 import os
-import pyfiglet
 import json
 import bittensor as bt
 import torch
 import time
+from datetime import datetime, timedelta, timezone
+import asyncio
+import multiprocessing
 
-from starlette.responses import JSONResponse
-from sympy.codegen.fnodes import allocated
-
+# Import Compute Subnet Libraries
 import RSAEncryption as rsa
+from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
+from compute.utils.parser import ComputeArgPaser
 from compute.wandb.wandb import ComputeWandb
 from neurons.Validator.database.allocate import (
-     select_allocate_miners_hotkey,
-     update_allocation_db,
-     get_miner_details,
-)
-from compute.utils.version import get_local_version
-from compute.utils.db import ComputeDb
-from register import (
-     allocate_container,
-     allocate_container_hotkey,
-     update_allocation_wandb,
+    select_allocate_miners_hotkey,
+    update_allocation_db,
+    get_miner_details,
 )
 
+# Import FastAPI Libraries
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, status, Request, Response
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    status,
+    Request,
+)
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import JSONResponse
-
-# from passlib.context import CryptContext
+from fastapi.concurrency import run_in_threadpool
 from pydantic import typing, BaseModel, Field
-from typing import List, Optional, Type, Union, Any
-
-# Database connection details
-DATABASE_URL = "sqlite:///data.db"
+from typing import List, Optional, Type, Union, Any, Annotated
 
 # Security configuration
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")
+oauth2_token_scheme = Annotated[str, Depends(OAuth2PasswordBearer(tokenUrl="login"))]
 
 
 class UserConfig(BaseModel):
@@ -79,9 +84,12 @@ class UserConfig(BaseModel):
 
 
 class Requirement(BaseModel):
-    gpu_type: str = "a6000"
-    gpu_size: int = 3000
-    timeline: int = "90" # timeline=90 day by spec, 30 day by hotkey
+    cpu_count: int = Field(default=1, description="CPU count")
+    gpu_type: str = Field(default="gpu", description="GPU Name")
+    gpu_size: int = Field(default=3, description="GPU size in GB")
+    ram: int = Field(default=1, description="RAM size in GB")
+    hard_disk: int = Field(default=1, description="Hard disk size in GB")
+    timeline: int = Field(default=90, description="Rent Timeline in day")  # timeline=90 day by spec, 30 day by hotkey
 
 
 class Allocation(BaseModel):
@@ -96,9 +104,9 @@ class Allocation(BaseModel):
 
 
 class UserInfo(BaseModel):
-    user_id: str = ""
-    user_pass: str = ""
-    token: str = ""
+    user_id: str = ""  # wallet.hokey.ss58address
+    user_pass: str = ""  # wallet.public_key hashed value
+    jwt_token: str = ""  # jwt token
 
 
 class ResourceGPU(BaseModel):
@@ -118,590 +126,1800 @@ class Resource(BaseModel):
     allocate_status: str = ""  # "Avail." or "Res."
 
 
-app = FastAPI()
+class Specs(BaseModel):
+    details: str = ""
 
 
-@app.on_event("startup")
-async def startup_event():
-    """
-    This function is called when the application starts. <br>
-    It initializes the database connection and other necessary components. <br>
-    """
-    # Initialize the config connection
-    global config, wandb
-    user_config = UserConfig()
-    user_config.netuid = "15"
-    user_config.subtensor_network = "test"
-    user_config.subtensor_chain_endpoint = ""
-    user_config.wallet_name = "validator"
-    user_config.wallet_hotkey = "default"
-    user_config.logging_debug = ""
-    config = get_config_api(user_config=user_config)
-    # Initialize the W&B logging
-    wandb = get_wandb_api(config)
+class ResourceQuery(BaseModel):
+    gpu_name: Optional[str] = None
+    cpu_count_min: Optional[int] = None
+    cpu_count_max: Optional[int] = None
+    gpu_capacity_min: Optional[float] = None
+    gpu_capacity_max: Optional[float] = None
+    hard_disk_total_min: Optional[float] = None
+    hard_disk_total_max: Optional[float] = None
+    ram_total_min: Optional[float] = None
+    ram_total_max: Optional[float] = None
 
 
-
-# For User authentication function
-@app.post(
-    "/user/login",
-    response_model=UserInfo,
-    responses={
-        401: {"description": "Invalid authentication credentials"},
-        200: {"description": "User login successful"},
-    },
-)
-async def login(
-    user_id: str,
-    user_pass: str,
-):
-    """
-    The user login API endpoint. <br>
-    user_id: The user ID. <br>
-    user_pass: The user password. <br>
-    user will be authenticated and a token will be returned. <br>
-    """
-    if not user_pass or not user_id:
-        # credentials_exception = HTTPException(
-        #         status_code=status.HTTP_401_UNAUTHORIZED,
-        #         detail="Invalid authentication credentials",
-        #         headers={"WWW-Authenticate": "Bearer"},
-        return {"status": "error", "message": "user_id and user_pass not found"}
-    else:
-        #     username = form_data.username
-        #     password = form_data.password
-        #     user = await self.verify_password(username, password)
-        #     if not user:
-        #         raise HTTPException(
-        #             status_code=status.HTTP_400_BAD_REQUEST,
-        #             detail="Incorrect username or password",
-        #         )
-        #     access_token = f"Bearer {username}"  # Simple token format (replace with JWT for better security)
-        #     return {"access_token": access_token, "token_type": "bearer"}
-        username = f"Bearer {token}"  # Extract username from token format
-        is_valid = await self.verify_password(
-            username, ""
-        )  # Empty password for verification
-        if not is_valid:
-            raise credentials_exception
-        #   return pwd_context.verify(plain_password, user.hashed_password)
-        return {"apiKey": token}
-
-        # User registration methods
+# Response Models
+class SuccessResponse(BaseModel):
+    success: bool = True
+    message: str
+    data: Optional[dict] = None
 
 
-@app.post(
-    "/service/allocate_spec",
-    response_model=Allocation,
-    responses={
-        400: {"description": "Invalid allocation request"},
-        401: {"description": "Missing authorization"},
-        404: {"description": "Fail to get allocation"},
-        201: {"description": "Resource was successfully allocated"},
-    },
-)
-async def allocate_spec(
-    token: str,
-    requirements: Requirement,
-) -> JSONResponse:
-    """
-    The GPU resource allocate API endpoint. <br>
-    token: The user token for the authorization. <br>
-    user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
-    requirements: The GPU resource requirements which contain the GPU type, GPU size, and booking timeline. <br>
-    """
-    if token:
-        if requirements:
-            config.gpu_type = requirements.gpu_type
-            config.gpu_size = int(requirements.gpu_size)
-            config.timeline = int(requirements.timeline)
+class ErrorResponse(BaseModel):
+    success: bool = False
+    message: str
+    err_detail: Optional[str] = None
 
-            device_requirement = {
-                "cpu": {"count": 1},
-                "gpu": {},
-                "hard_disk": {"capacity": 1073741824},
-                "ram": {"capacity": 1073741824},
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+
+
+class RegisterAPI:
+    def __init__(
+            self,
+            config: Optional[bt.config] = None,
+            wallet: Optional[bt.wallet] = None,
+            subtensor: Optional[bt.subtensor] = None,
+            dendrite: Optional[bt.dendrite] = None,
+            metagraph: Optional[bt.metagraph] = None,
+            wandb: Optional[ComputeWandb] = None,
+    ):
+        # Check ACCESS and REFRESH Key, disable JWT and use SSL
+        # env_file = ".env"
+        # load_dotenv()
+        # self.access_api_key = os.getenv("ACCESS_API_KEY")
+        # self.refresh_api_key = os.getenv("REFRESH_API_KEY")
+        # if not self.access_api_key:
+        #    self.access_api_key = secrets.token_urlsafe(32)
+        #    self.refresh_api_key = secrets.token_urlsafe(32)
+        #    set_key(dotenv_path=env_file, key_to_set="ACCESS_API_KEY", value_to_set=self.access_api_key)
+        #    set_key(dotenv_path=env_file, key_to_set="REFRESH_API_KEY", value_to_set=self.refresh_api_key)
+
+        self.app = FastAPI(debug=False)
+        self._setup_routes()
+        self.process = None
+
+        # Compose User Config Data with bittensor config
+        # Get the config from the user config
+        if config is None:
+            # Step 1: Parse the bittensor and compute subnet config
+            self.config = self._init_config()
+
+            # Set up logging with the provided configuration and directory.
+            bt.logging.set_debug(self.config.logging.debug)
+            bt.logging.set_trace(self.config.logging.trace)
+            bt.logging(config=self.config, logging_dir=self.config.full_path)
+            bt.logging.info(
+                f"Running validator register for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+
+            # Log the configuration for reference.
+            bt.logging.info(self.config)
+            bt.logging.info("Setting up bittensor objects.")
+
+            # The wallet holds the cryptographic key pairs for the validator.
+            self.wallet = bt.wallet(config=self.config)
+            bt.logging.info(f"Wallet: {self.wallet}")
+
+            self.wandb = ComputeWandb(self.config, self.wallet, "validator.py")
+
+            # The subtensor is our connection to the Bittensor blockchain.
+            self.subtensor = ComputeSubnetSubtensor(config=self.config)
+            bt.logging.info(f"Subtensor: {self.subtensor}")
+
+            # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
+            self.dendrite = bt.dendrite(wallet=self.wallet)
+            bt.logging.info(f"Dendrite: {self.dendrite}")
+
+            # The metagraph holds the state of the network, letting us know about other miners.
+            self.metagraph = self.subtensor.metagraph(self.config.netuid)
+            bt.logging.info(f"Metagraph: {self.metagraph}")
+
+            # Set the IP address and port for the API server
+            if self.config.axon.ip == "[::]":
+                self.ip_addr = "0.0.0.0"
+            else:
+                self.ip_addr = self.config.axon.ip
+
+            if self.config.axon.port is None:
+                self.port = DEFAULT_API_PORT
+            else:
+                self.port = self.config.axon.port
+
+        else:
+            self.config = config.copy()
+            # Wallet is the keypair that lets us sign messages to the blockchain.
+            self.wallet = wallet
+            # The subtensor is our connection to the Bittensor blockchain.
+            self.subtensor = subtensor
+            # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
+            self.dendrite = dendrite
+            # The metagraph holds the state of the network, letting us know about other miners.
+            self.metagraph = metagraph
+            # Initialize the W&B logging
+            self.wandb = wandb
+
+            if self.config.axon.ip == "[::]":
+                self.ip_addr = "0.0.0.0"
+            else:
+                self.ip_addr = self.config.axon.ip
+
+            if self.config.axon.port is None:
+                self.port = DEFAULT_API_PORT
+            else:
+                self.port = self.config.axon.port
+
+        self.allocation_table = []
+
+    def _setup_routes(self):
+        # Define a custom validation error handler
+        @self.app.exception_handler(RequestValidationError)
+        async def validation_exception_handler(request: Request, exc: RequestValidationError):
+            # Customize the error response
+            errors = exc.errors()
+            custom_errors = [{"field": err['loc'][-1], "message": err['msg']} for err in errors]
+            return JSONResponse(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                content={
+                    "success": False,
+                    "message": "Validation Error, Please check the request body.",
+                    "err_detail": custom_errors,
+                },
+            )
+
+        @self.app.on_event("startup")
+        async def startup_event():
+            """
+            This function is called when the application starts. <br>
+            It initializes the database connection and other necessary components. <br>
+            """
+            # Setup the repeated task
+            self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
+            #self.allocation_task = asyncio.create_task(self._refresh_allocation())
+            bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
+
+        @self.app.on_event("shutdown")
+        async def shutdown_event():
+            """
+            This function is called when the application stops. <br>
+            """
+            pass
+
+        # Entry point for the API
+        @self.app.get("/", tags=["Root"])
+        async def read_root():
+            return {
+                "message": "Welcome to Compute Subnet Allocation API, Please access the API via endpoint."
             }
-            if config.gpu_type != "" and config.gpu_size != 0:
-                device_requirement["gpu"] = {
-                    "count": 1,
-                    "capacity": config.gpu_size,
-                    "type": config.gpu_type,
-                }
-            timeline = int(requirements.timeline)
-            private_key, public_key = rsa.generate_key_pair()
-            result = allocate_container(config, device_requirement, timeline, public_key)
 
-            if result["status"] is True:
-                result_hotkey = result["hotkey"]
-                result_info = result["info"]
-                private_key = private_key.encode("utf-8")
-                decrypted_info_str = rsa.decrypt_data(
-                    private_key, base64.b64decode(result_info)
+        # disable login route for Token authentication
+        # @self.app.post(
+        #     "/login",
+        #     response_model=Token,
+        #     responses={
+        #         401: {"description": "Invalid authentication credentials"},
+        #         200: {"description": "User login successful"},
+        #     },
+        # )
+        async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], ) -> Token:
+            user = self._authenticate_user(form_data.username, form_data.password)
+            if not user:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content="Incorrect username or password",
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
-                bt.logging.info(
-                    f"Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}"
-                )
+            access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+            access_token = self._create_access_token(
+                data={"sub": user}, expires_delta=access_token_expires
+            )
+            return Token(access_token=access_token, token_type="bearer")
 
-                # Iterate through the miner specs details to get gpu_name
-                db = ComputeDb()
-                specs_details = get_miner_details(db)
-                for key, details in specs_details.items():
-                    if str(key) == str(result_hotkey) and details:
-                        try:
-                            gpu_miner = details["gpu"]
-                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
-                            break
-                        except (KeyError, IndexError, TypeError):
-                            gpu_name = "Invalid details"
+        @self.app.post(
+            "/service/allocate_spec",
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource was successfully allocated",
+                },
+                400: {
+                    "model": ErrorResponse,
+                    "description": "Invalid allocation request",
+                },
+                401: {
+                    "model": ErrorResponse,
+                    "description": "Missing authorization",
+                },
+                404: {
+                    "model": ErrorResponse,
+                    "description": "Fail to allocate resource",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def allocate_spec(requirements: Requirement, ) -> JSONResponse:
+            """
+            The GPU resource allocate API endpoint. <br>
+            requirements: The GPU resource requirements which contain the GPU type, GPU size, ram, hard_disk and booking timeline. <br>
+            """
+            if True:
+                if requirements:
+                    device_requirement = {
+                        "cpu": {"count": requirements.cpu_count},
+                        "gpu": {},
+                        "hard_disk": {"capacity": requirements.hard_disk * 1024.0 ** 3},
+                        "ram": {"capacity": requirements.ram * 1024.0 ** 3},
+                    }
+                    if requirements.gpu_type != "" and int(requirements.gpu_size) != 0:
+                        device_requirement["gpu"] = {
+                            "count": 1,
+                            "capacity": int(requirements.gpu_size) * 1000,
+                            "type": requirements.gpu_type,
+                        }
+
+                    timeline = int(requirements.timeline)
+                    private_key, public_key = rsa.generate_key_pair()
+                    #result = self._allocate_container(
+                    #    device_requirement, timeline, public_key
+                    #)
+                    run_start = time.time()
+                    result = await run_in_threadpool(self._allocate_container, device_requirement, timeline, public_key)
+                    run_end = time.time()
+                    bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
+
+                    if result["status"] is True:
+                        result_hotkey = result["hotkey"]
+                        result_info = result["info"]
+                        private_key = private_key.encode("utf-8")
+                        decrypted_info_str = rsa.decrypt_data(
+                            private_key, base64.b64decode(result_info)
+                        )
+                        bt.logging.info(
+                            f"API: Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}"
+                        )
+
+                        # Iterate through the miner specs details to get gpu_name
+                        db = ComputeDb()
+                        #specs_details = get_miner_details(db)
+                        specs_details = await run_in_threadpool(get_miner_details, db)
+                        db.close()
+
+                        for key, details in specs_details.items():
+                            if str(key) == str(result_hotkey) and details:
+                                try:
+                                    gpu_miner = details["gpu"]
+                                    gpu_name = str(
+                                        gpu_miner["details"][0]["name"]
+                                    ).lower()
+                                    break
+                                except (KeyError, IndexError, TypeError):
+                                    gpu_name = "Invalid details"
+                            else:
+                                gpu_name = "No details available"
+
+                        info = json.loads(decrypted_info_str)
+                        info["ip"] = result["ip"]
+                        info["resource"] = gpu_name
+                        info["regkey"] = public_key
+
+                        await asyncio.sleep(1)
+
+                        allocated = Allocation()
+                        allocated.resource = info["resource"]
+                        allocated.hotkey = result_hotkey
+                        # allocated.regkey = info["regkey"]
+                        allocated.ssh_ip = info["ip"]
+                        allocated.ssh_port = info["port"]
+                        allocated.ssh_username = info["username"]
+                        allocated.ssh_password = info["password"]
+                        allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
+
+                        update_allocation_db(result_hotkey, info, True)
+                        await self._update_allocation_wandb()
+
+                        bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource was successfully allocated",
+                                "data": jsonable_encoder(allocated),
+                            },
+                        )
                     else:
-                        gpu_name = "No details available"
-
-                info = json.loads(decrypted_info_str)
-                info["ip"] = result["ip"]
-                info["resource"] = gpu_name
-                info["regkey"] = public_key
-
-                time.sleep(1)
-
-                allocated = Allocation()
-                allocated.resource = info["resource"]
-                allocated.hotkey = result_hotkey
-                # allocated.regkey = info["regkey"]
-                allocated.ssh_ip = info["ip"]
-                allocated.ssh_port = info["port"]
-                allocated.ssh_username = info["username"]
-                allocated.ssh_password = info["password"]
-                allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
-
-                update_allocation_db(result_hotkey, info, True)
-                update_allocation_wandb(wandb)
-                return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(allocated))
-            else:
-                bt.logging.info(f"Failed : {result['msg']}")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"msg": result['msg']})
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"msg": "Invalid allocation request"})
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"msg": "Missing authorization"},
-        )
-
-
-@app.post(
-    "/service/allocate_hotkey",
-    response_model=Allocation,
-    responses={
-        400: {"description": "Invalid allocation request"},
-        401: {"description": "Missing authorization"},
-        404: {"description": "Fail to get allocation"},
-        201: {"description": "Resource was successfully allocated"},
-    },
-)
-async def allocate_hotkey(
-    token: str,
-    hotkey: str,
-) -> JSONResponse:
-    """
-    The GPU allocate by hotkey API endpoint. <br>
-    User use this API to book a specific miner. <br>
-    token: The user token for the authorization. <br>
-    user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
-    hotkey: The miner hotkey to allocate the gpu resource. <br>
-    """
-    if token:
-        if hotkey:
-            timeline = 30
-            private_key, public_key = rsa.generate_key_pair()
-            result = allocate_container_hotkey(config, hotkey, timeline, public_key)
-
-            # Iterate through the miner specs details to get gpu_name
-            db = ComputeDb()
-            specs_details = get_miner_details(db)
-            for key, details in specs_details.items():
-                if str(key) == str(hotkey) and details:
-                    try:
-                        gpu_miner = details["gpu"]
-                        gpu_name = str(gpu_miner["details"][0]["name"]).lower()
-                        break
-                    except (KeyError, IndexError, TypeError):
-                        gpu_name = "Invalid details"
+                        bt.logging.info(f"API: Allocation Failed : {result['msg']}")
+                        return JSONResponse(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            content={
+                                "success": False,
+                                "message": "Fail to allocate resource",
+                                "err_detail": result["msg"],
+                            },
+                        )
                 else:
-                    gpu_name = "No details available"
-
-            if result["status"] is True:
-                result_hotkey = result["hotkey"]
-                result_info = result["info"]
-                private_key = private_key.encode("utf-8")
-                decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(result_info))
-                bt.logging.info(
-                    f"Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}"
+                    bt.logging.error(f"API: Invalid allocation request")
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "success": False,
+                            "message": "Invalid allocation request",
+                            "err_detail": "Invalid requirement, please check the requirements",
+                        },
+                    )
+            else:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
                 )
 
-                info = json.loads(decrypted_info_str)
-                info["ip"] = result["ip"]
-                info["resource"] = gpu_name
-                info["regkey"] = public_key
+        @self.app.post(
+            "/service/allocate_hotkey",
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource was successfully allocated",
+                },
+                400: {
+                    "model": ErrorResponse,
+                    "description": "Invalid allocation request",
+                },
+                401: {
+                    "model": ErrorResponse,
+                    "description": "Missing authorization",
+                },
+                404: {
+                    "model": ErrorResponse,
+                    "description": "Fail to allocate resource",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def allocate_hotkey(hotkey: str, ) -> JSONResponse | HTTPException:
+            """
+            The GPU allocate by hotkey API endpoint. <br>
+            User use this API to book a specific miner. <br>
+            hotkey: The miner hotkey to allocate the gpu resource. <br>
+            """
+            if True:
+                if hotkey:
+                    requirements = Requirement()
+                    requirements.gpu_type = ""
+                    requirements.gpu_size = 0
+                    requirements.timeline = 30
 
-                time.sleep(1)
-                allocated = Allocation()
-                allocated.resource = info["resource"]
-                allocated.hotkey = result_hotkey
-                # allocated.regkey = info["regkey"]
-                allocated.ssh_ip = info["ip"]
-                allocated.ssh_port = info["port"]
-                allocated.ssh_username = info["username"]
-                allocated.ssh_password = info["password"]
-                allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
+                    private_key, public_key = rsa.generate_key_pair()
+                    # result = self._allocate_container_hotkey(
+                    #     requirements, hotkey, requirements.timeline, public_key
+                    # )
+                    run_start = time.time()
+                    result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey, requirements.timeline, public_key)
+                    run_end = time.time()
+                    bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
-                update_allocation_db(result_hotkey, info, True)
-                update_allocation_wandb(wandb)
-                return JSONResponse(status_code=status.HTTP_201_CREATED, content=jsonable_encoder(allocated))
+                    # Iterate through the miner specs details to get gpu_name
+                    db = ComputeDb()
+                    #specs_details = get_miner_details(db)
+                    specs_details = await run_in_threadpool(get_miner_details, db)
+                    for key, details in specs_details.items():
+                        if str(key) == str(hotkey) and details:
+                            try:
+                                gpu_miner = details["gpu"]
+                                gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                                break
+                            except (KeyError, IndexError, TypeError):
+                                gpu_name = "Invalid details"
+                        else:
+                            gpu_name = "No details available"
+
+                    if result["status"] is True:
+                        result_hotkey = result["hotkey"]
+                        result_info = result["info"]
+                        private_key = private_key.encode("utf-8")
+                        decrypted_info_str = rsa.decrypt_data(
+                            private_key, base64.b64decode(result_info)
+                        )
+                        bt.logging.info(
+                            f"API: Allocation successfully : {decrypted_info_str}, 'ip':{result['ip']}"
+                        )
+
+                        info = json.loads(decrypted_info_str)
+                        info["ip"] = result["ip"]
+                        info["resource"] = gpu_name
+                        info["regkey"] = public_key
+
+                        time.sleep(1)
+                        allocated = Allocation()
+                        allocated.resource = info["resource"]
+                        allocated.hotkey = result_hotkey
+                        # allocated.regkey = info["regkey"]
+                        allocated.ssh_ip = info["ip"]
+                        allocated.ssh_port = info["port"]
+                        allocated.ssh_username = info["username"]
+                        allocated.ssh_password = info["password"]
+                        allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
+
+                        update_allocation_db(result_hotkey, info, True)
+                        await self._update_allocation_wandb()
+
+                        bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource was successfully allocated",
+                                "data": jsonable_encoder(allocated),
+                            },
+                        )
+                    else:
+                        bt.logging.info(f"API: Allocation Failed : {result['msg']}")
+                        return JSONResponse(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            content={
+                                "success": False,
+                                "message": "Fail to allocate resource",
+                                "err_detail": result["msg"],
+                            },
+                        )
+                else:
+                    bt.logging.error(f"API: Invalid allocation request")
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "success": False,
+                            "message": "Invalid allocation request",
+                            "err_detail": "Invalid hotkey, please check the hotkey",
+                        },
+                    )
             else:
-                bt.logging.info(f"Failed : {result['msg']}")
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"msg": result['msg']})
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"msg": "Invalid allocation request"})
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"msg": "Missing authorization"},
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
+
+        @self.app.post(
+            "/service/deallocate",
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource de-allocated successfully.",
+                },
+                400: {
+                    "model": ErrorResponse,
+                    "description": "De-allocation not successfully, please try again.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                403: {
+                    "model": ErrorResponse,
+                    "description": "An error occurred during de-allocation",
+                },
+                404: {
+                    "model": ErrorResponse,
+                    "description": "No allocation details found for the provided hotkey.",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def deallocate(hotkey: str, ) -> JSONResponse | HTTPException:
+            """
+            The GPU deallocate API endpoint. <br>
+            hotkey: The miner hotkey to deallocate the gpu resource. <br>
+            """
+            if True:
+                # Instantiate the connection to the db
+                db = ComputeDb()
+                cursor = db.get_cursor()
+
+                try:
+                    # Retrieve the allocation details for the given hotkey
+                    cursor.execute(
+                        "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                        (hotkey,),
+                    )
+                    row = cursor.fetchone()
+
+                    if row:
+                        # Parse the JSON string in the 'details' column
+                        info = json.loads(row[0])
+                        result_hotkey = row[1]
+
+                        username = info["username"]
+                        password = info["password"]
+                        port = info["port"]
+                        ip = info["ip"]
+                        regkey = info["regkey"]
+
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        if axon.hotkey == "5C4wGPrkgTJJvqkqiy7Yh5QDwjV14exeyJKvDjX64fwbsft6":
+                            axon.ip = "125.229.93.125"
+                            axon.port = 10020
+                        elif axon.hotkey == "5FQseA4n4QsLz9Yw7LbodhM2p514bq3kKM9FiUZE8iGMXzSR":
+                            axon.ip = "104.155.196.16"
+                            axon.port = 8091
+
+
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey, )
+                        deregister_response = await run_in_threadpool(self.dendrite.query, axon, allocate_class, timeout=60)
+                        run_end = time.time()
+                        bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if (
+                                deregister_response
+                                and deregister_response["status"] is True
+                        ):
+                            update_allocation_db(result_hotkey, info, False)
+                            await self._update_allocation_wandb()
+
+                            bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
+                            return JSONResponse(
+                                status_code=status.HTTP_200_OK,
+                                content={
+                                    "success": True,
+                                    "message": "Resource de-allocated successfully.",
+                                },
+                            )
+                        else:
+                            bt.logging.error(f"API: Invalid {hotkey} de-allocation request")
+                            return JSONResponse(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                content={
+                                    "success": False,
+                                    "message": "Invalid de-allocation request",
+                                    "err_detail": "De-allocation not successfully, please try again",
+                                },
+                            )
+                    else:
+                        bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                        return JSONResponse(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            content={
+                                "success": False,
+                                "message": "No allocation details found for the provided hotkey.",
+                                "err_detail": "No allocation details found for the provided hotkey.",
+                            },
+                        )
+                except Exception as e:
+                    bt.logging.error(f"API: An error occurred during de-allocation {e.__repr__()}")
+                    return JSONResponse(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        content={
+                            "success": False,
+                            "message": "An error occurred during de-allocation.",
+                            "err_detail": e.__repr__(),
+                        },
+                    )
+                finally:
+                    cursor.close()
+                    db.close()
+            else:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
+
+        @self.app.post(
+            "/list/allocations_sql",
+            tags=["SQLite"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List allocations successfully.",
+                },
+                401: {
+                    "model": ErrorResponse,
+                    "description": "Missing authorization token",
+                },
+                403: {
+                    "model": ErrorResponse,
+                    "description": "An error occurred while retrieving allocation details",
+                },
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no allocation available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def list_allocations() -> JSONResponse:
+            """
+            The list allocation API endpoint. <br>
+            The API will return the current allocation on the validator. <br>
+            """
+            if True:
+                db = ComputeDb()
+                cursor = db.get_cursor()
+                allocation_list = []
+
+                try:
+                    # Retrieve all records from the allocation table
+                    cursor.execute("SELECT id, hotkey, details FROM allocation")
+                    rows = cursor.fetchall()
+
+                    bt.logging.info(f"API: List Allocation Resources")
+
+                    if not rows:
+                        bt.logging.info(
+                            f"API: No resources allocated. Allocate a resource with validator"
+                        )
+                        return JSONResponse(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            content={
+                                "success": False,
+                                "message": "No resources found.",
+                                "data": "No allocated resources found. Allocate a resource with validator.",
+                            },
+                        )
+
+                    for row in rows:
+                        id, hotkey, details = row
+                        info = json.loads(details)
+                        entry = Allocation()
+
+                        entry.hotkey = hotkey
+                        # entry.regkey = info["regkey"]
+                        entry.resource = info["resource"]
+                        entry.ssh_username = info["username"]
+                        entry.ssh_password = info["password"]
+                        entry.ssh_port = info["port"]
+                        entry.ssh_ip = info["ip"]
+                        entry.ssh_command = (
+                            f"ssh {info['username']}@{info['ip']} -p {info['port']}"
+                        )
+                        allocation_list.append(entry)
+
+                except Exception as e:
+                    bt.logging.error(
+                        f"API: An error occurred while retrieving allocation details: {e}"
+                    )
+                    return JSONResponse(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        content={
+                            "success": False,
+                            "message": "An error occurred while retrieving allocation details.",
+                            "err_detail": e.__repr__(),
+                        },
+                    )
+                finally:
+                    cursor.close()
+                    db.close()
+
+                bt.logging.info(f"API: List allocations successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "success": True,
+                        "message": "List allocations successfully.",
+                        "data": jsonable_encoder(allocation_list),
+                    },
+                )
+            else:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
+
+        @self.app.post(
+            "/list/resources_sql",
+            tags=["SQLite"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def list_resources(query: ResourceQuery = None, ) -> JSONResponse:
+            """
+            The list resources API endpoint. <br>
+            The API will return the current miner resource and their detail specs on the validator. <br>
+            query: The query parameter to filter the resources. <br>
+            """
+            if True:
+                db = ComputeDb()
+                specs_details = await run_in_threadpool(get_miner_details,db)
+
+                bt.logging.info(f"API: List resources on compute subnet")
+
+                # Initialize a dictionary to keep track of GPU instances
+                resource_list = []
+                gpu_instances = {}
+                total_gpu_counts = {}
+
+                # Get the allocated hotkeys from wandb
+                allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys,[], False)
+
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        if details:  # Check if details are not empty
+                            resource = Resource()
+                            try:
+                                # Extract GPU details
+                                gpu_miner = details["gpu"]
+                                gpu_capacity = "{:.2f}".format(
+                                    (gpu_miner["capacity"] / 1000)
+                                )
+                                gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                                gpu_count = gpu_miner["count"]
+
+                                # Extract CPU details
+                                cpu_miner = details["cpu"]
+                                cpu_count = cpu_miner["count"]
+
+                                # Extract RAM details
+                                ram_miner = details["ram"]
+                                ram = "{:.2f}".format(
+                                    ram_miner["available"] / 1024.0 ** 3
+                                )
+
+                                # Extract Hard Disk details
+                                hard_disk_miner = details["hard_disk"]
+                                hard_disk = "{:.2f}".format(
+                                    hard_disk_miner["free"] / 1024.0 ** 3
+                                )
+
+                                # Update the GPU instances count
+                                gpu_key = (gpu_name, gpu_count)
+                                gpu_instances[gpu_key] = (
+                                        gpu_instances.get(gpu_key, 0) + 1
+                                )
+                                total_gpu_counts[gpu_name] = (
+                                        total_gpu_counts.get(gpu_name, 0) + gpu_count
+                                )
+
+                            except (KeyError, IndexError, TypeError):
+                                gpu_name = "Invalid details"
+                                gpu_capacity = "N/A"
+                                gpu_count = "N/A"
+                                cpu_count = "N/A"
+                                ram = "N/A"
+                                hard_disk = "N/A"
+                        else:
+                            gpu_name = "No details available"
+                            gpu_capacity = "N/A"
+                            gpu_count = "N/A"
+                            cpu_count = "N/A"
+                            ram = "N/A"
+                            hard_disk = "N/A"
+
+                        # Allocation status
+                        allocate_status = "N/A"
+
+                        if hotkey in allocated_hotkeys:
+                            allocate_status = "Res."
+                        else:
+                            allocate_status = "Avail."
+
+                        add_resource = False
+                        # Print the row with column separators
+                        resource.hotkey = hotkey
+
+                        try:
+                            if gpu_name != "Invalid details" and gpu_name != "No details available":
+                                if query is None or query == {}:
+                                    add_resource = True
+                                else:
+                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                        continue
+                                    if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
+                                        continue
+                                    if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
+                                        continue
+                                    if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
+                                        continue
+                                    if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
+                                        continue
+                                    if query.ram_total_max is not None and float(ram) > query.ram_total_max:
+                                        continue
+                                    if query.ram_total_min is not None and float(ram) < query.ram_total_min:
+                                        continue
+                                    if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
+                                        continue
+                                    if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
+                                        continue
+                                    add_resource = True
+
+                                if add_resource:
+                                    resource.cpu_count = int(cpu_count)
+                                    resource.gpu_name = gpu_name
+                                    resource.gpu_capacity = float(gpu_capacity)
+                                    resource.gpu_count = int(gpu_count)
+                                    resource.ram = float(ram)
+                                    resource.hard_disk = float(hard_disk)
+                                    resource.allocate_status = allocate_status
+                                    resource_list.append(resource)
+                        except (KeyError, IndexError, TypeError, ValueError) as e:
+                            bt.logging.error(f"API: Error occurred while filtering resources: {e}")
+                            continue
+
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder(resource_list),
+                        },
+                    )
+
+                else:
+                    bt.logging.info(f"API: There is no resource available")
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "There is no resource available",
+                            "err_detail": "No resources found.",
+                        },
+                    )
+            else:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={
+                        "success": False,
+                        "message": "Missing authorization",
+                        "err_detail": "Please provide the authorization token",
+                    },
+                )
+
+        @self.app.post("/list/all_runs",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while getting runs from wandb",
+                           },
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
+                           },
+                       }
+                       )
+        async def list_all_runs(hotkey: Optional[str] = None,
+                          page_size: Optional[int] = None,
+                          page_number: Optional[int] = None) -> JSONResponse:
+            """
+            This function gets all run resources.
+            """
+            db_list = []
+            db_specs_dict = {}
+            try:
+                #self.wandb.api.flush()
+                if hotkey:
+                    filter_rule = {
+                        "$and": [
+                            {"config.config.netuid": self.config.netuid},
+                            {"config.hotkey": hotkey},
+                            {"state": "running"},
+                        ]
+                    }
+                else:
+                    filter_rule = {
+                        "$and": [
+                            {"config.config.netuid": self.config.netuid},
+                            {"state": "running"},
+                        ]
+                    }
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+                append_entry = bool
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_id = run.id
+                        run_name = run.name
+                        run_description = run.description
+                        run_config = run.config
+                        run_state = run.state
+                        run_start_at = datetime.strptime(run.created_at, '%Y-%m-%dT%H:%M:%S')
+                        configs = run_config.get("config")
+                        append_entry = True
+
+                        # append the data to the db_list
+                        if configs and append_entry:
+                            db_specs_dict = {}
+                            db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
+                                            "configs": configs, "state": run_state, "start_at": run.created_at}
+                            db_list.append(db_specs_dict)
+
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
+
+                    bt.logging.info(f"API: List run resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List run resources successfully.",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+
+                else:
+                    bt.logging.info(f"API: no runs available")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No runs available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while getting runs from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post(
+            "/list/specs",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List spec resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "Error occurred while getting specs from wandb",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def list_specs(hotkey: Optional[str] = None,
+                             page_size: Optional[int] = None,
+                             page_number: Optional[int] = None) -> JSONResponse:
+            """
+            The list specs API endpoint. <br>
+            """
+            db_list = []
+            db_specs_dict = {}
+
+            try:
+                #self.wandb.api.flush()
+                if hotkey:
+                    filter_rule = {
+                        "$and": [
+                            {"config.role": "miner"},
+                            {"config.config.netuid": self.config.netuid},
+                            {"state": "running"},
+                            {"config.hotkey": hotkey},
+                            {"config.specs": {"$exists": True}},
+                        ]
+                    }
+                else:
+                    filter_rule = {
+                        "$and": [
+                            {"config.role": "miner"},
+                            {"config.config.netuid": self.config.netuid},
+                            {"config.specs": {"$exists": True}},
+                            {"state": "running"},
+                        ]
+                    }
+
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_config = run.config
+                        run_state = run.state
+                        hotkey = run_config.get("hotkey")
+                        specs = run_config.get("specs")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and specs:
+                            db_specs_dict = {}
+                            db_specs_dict[index] = {"hotkey": hotkey, "configs": configs,
+                                                    "specs": specs, "state": run_state}
+                            db_list.append(db_specs_dict)
+
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
+
+                    # Return the db_specs_dict for further use or inspection
+                    bt.logging.info(f"API: List specs successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List specs successfully",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+
+                else:
+                    bt.logging.info(f"API: no specs available")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No specs available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                bt.logging.error(
+                    f"API: An error occurred while getting specs from wandb: {e}"
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while getting specs from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/list/run_by_name",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List run resources successfully.",
+                           },
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while getting run from wandb",
+                           },
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
+                           },
+                       }
+                       )
+        async def list_run_name(run_name: str) -> JSONResponse:
+            """
+            This function gets runs by name.
+            """
+            db_specs_dict = {}
+            try:
+                #self.wandb.api.flush()
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"display_name": run_name},
+                        {"state": "running"},
+                    ]
+                }
+
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_id = run.id
+                        run_name = run.name
+                        run_description = run.description
+                        run_config = run.config
+                        hotkey = run_config.get("hotkey")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and configs:
+                            db_specs_dict[index] = {"id": run_id, "name": run_name, "description": run_description,
+                                                    "config": configs}
+
+                    bt.logging.info(f"API: list run by name is success")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List run by name",
+                            "data": jsonable_encoder(db_specs_dict),
+                        },
+                    )
+
+                else:
+                    bt.logging.info(f"API: no run available")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No run available",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                bt.logging.error(f"API: An error occurred while getting specs from wandb: {e}")
+
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while run from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/list/available",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while fetch available miner from wandb",
+                           },
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
+                           },
+                       }
+                       )
+        async def list_available_miner(rent_status: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
+            """
+            This function gets all available miners.
+            """
+            db_list = []
+            db_specs_dict = {}
+            try:
+                self.wandb.api.flush()
+                if rent_status:
+                    filter_rule = {
+                        "config.allocated": {"$regex": "\d.*"},
+                        "config.config.netuid": self.config.netuid,
+                        "config.role": "miner",
+                        "state": "running",
+                    }
+                else:
+                    filter_rule = {
+                        "$or": [
+                            {"config.allocated": {"$regex": "null"}},
+                            {"config.allocated": {"$exists": False}},
+                        ],
+                        "config.config.netuid": self.config.netuid,
+                        "config.role": "miner",
+                        "state": "running",
+                    }
+
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
+                if runs:
+                    # Iterate over all runs in the opencompute project
+                    for index, run in enumerate(runs, start=1):
+                        # Access the run's configuration
+                        run_config = run.config
+                        hotkey = run_config.get("hotkey")
+                        specs = run.config.get("specs")
+                        configs = run_config.get("config")
+
+                        # check the signature
+                        if hotkey and configs:
+                            db_specs_dict = {}
+                            db_specs_dict[index] = {"hotkey": hotkey, "details": specs}
+                            db_list.append(db_specs_dict)
+
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(db_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": db_list,
+                            "page_number": 1,
+                            "page_size": len(db_list),
+                            "next_page_number": None,
+                        }
+                else:
+                    bt.logging.info(f"API: No available miners")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No available miner",
+                            "data": {},
+                        },
+                    )
+
+                if rent_status:
+                    bt.logging.info(f"API: List rented miners is success")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List rented miners",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+                else:
+                    bt.logging.info(f"API: List available miners is success")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List available miners",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+
+            except Exception as e:
+                # Handle the exception by logging an error message
+                bt.logging.error(f"API: An error occurred while fetching available miner from wandb: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while fetching available miner from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/list/allocated_hotkeys",
+                       tags=["WandB"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "List available resources successfully.",
+                           },
+                           401: {"model": ErrorResponse, "description": "Missing authorization"},
+                           404: {
+                               "model": ErrorResponse,
+                               "description": "Error occurred while fetch allocated hotkey from wandb",
+                           },
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
+                           },
+                       }
+                       )
+        async def list_allocated_hotkeys() -> JSONResponse:
+            """
+            This function gets all allocated hotkeys from all validators.
+            Only relevant for validators.
+            """
+            try:
+                self.wandb.api.flush()
+                filter_rule = {
+                    "$and": [
+                        {"config.role": "validator"},
+                        {"config.config.netuid": self.config.netuid},
+                        {"config.allocated_hotkeys": {"$regex": "\d.*"}},
+                    ]
+                }
+
+                # Query all runs in the project and Filter runs where the role is 'validator'
+                validator_runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
+                # Check if the runs list is empty
+                if not validator_runs:
+                    bt.logging.info(f"API: No validator with allocated info in the project opencompute.")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "No validator with allocated info in the project opencompute.",
+                            "data": {},
+                        },
+                    )
+
+            except Exception as e:
+                bt.logging.error(f"API: list_allocated_hotkeys error with {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while fetching allocated hotkey from wandb",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+            # Initialize an empty list to store allocated keys from runs with a valid signature
+            allocated_keys_list = []
+
+            # Verify the signature for each validator run
+            for run in validator_runs:
+                try:
+                    # Access the run's configuration
+                    run_config = run.config
+                    hotkey = run_config.get("hotkey")
+                    allocated_keys = run_config.get("allocated_hotkeys")
+                    id = run_config.get("id")
+                    name = run_config.get("name")
+
+                    # valid_validator_hotkey = hotkey in valid_validator_hotkeys
+
+                    # Allow all validator hotkeys for data retrieval only
+
+                    # if verify_run(id,name, hotkey, allocated_keys) and allocated_keys and valid_validator_hotkey:
+                    allocated_keys_list.extend(allocated_keys)  # Add the keys to the list
+
+                    bt.logging.info(f"API: List allocated hotkeys is success")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List allocated hotkeys",
+                            "data": jsonable_encoder(allocated_keys_list),
+                        },
+                    )
+
+                except Exception as e:
+                    bt.logging.error(f"API: Run ID: {run.id}, Name: {run.name}, Error: {e}")
+
+    @staticmethod
+    def _init_config():
+        """
+        This function is responsible for setting up and parsing command-line arguments.
+        :return: config
+        """
+        parser = ComputeArgPaser(description="This script aims to help allocation with the compute subnet.")
+        config = parser.config
+
+        # Step 3: Set up logging directory
+        # Logging is crucial for monitoring and debugging purposes.
+        config.full_path = os.path.expanduser(
+            "{}/{}/{}/netuid{}/{}/{}/".format(
+                config.logging.logging_dir,
+                config.wallet.name,
+                config.wallet.hotkey,
+                config.netuid,
+                "validator",
+                "register"
+            )
+        )
+        # Ensure the logging directory exists.
+        if not os.path.exists(config.full_path):
+            os.makedirs(config.full_path, exist_ok=True)
+
+        # Return the parsed config.
+        return config
+
+    @staticmethod
+    def _get_config(user_config: UserConfig, requirements: Union[Requirement, None] = None):
+        """
+        Get the config from user config and spec requirement for the API. <br>
+        user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
+        requirements: The device requirements. <br>
+        """
+        parser = argparse.ArgumentParser()
+        # Adds bittensor specific arguments
+        parser.add_argument(
+            "--netuid", type=int, default=27, help="The chain subnet uid."
+        )
+        # parser.add_argument("--gpu_type", type=str, help="The GPU type.")
+        # parser.add_argument("--gpu_size", type=int, help="The GPU memory in MB.")
+        # parser.add_argument("--timeline", type=int, help="The allocation timeline.")
+        bt.subtensor.add_args(parser)
+        bt.logging.add_args(parser)
+        bt.wallet.add_args(parser)
+
+        if not user_config.subtensor_chain_endpoint:
+            if user_config.subtensor_network == "finney":
+                user_config.subtensor_chain_endpoint = (
+                    "wss://entrypoint-finney.opentensor.ai:443"
+                )
+            elif user_config.subtensor_network == "test":
+                user_config.subtensor_chain_endpoint = (
+                    "wss://test.finney.opentensor.ai:443"
+                )
+
+        # Add user configuration and requirement to list for the bt config parser
+        # args = [f"--{v.alias}";getattr(entry,k) for entry in [user_config, requirements] for k, v in entry.__fields__.items()]
+        args_list = []
+        for entry in [user_config, requirements]:
+            if entry:
+                for k, v in entry.__fields__.items():
+                    args_list.append(f"--{(v.alias)}")
+                    args_list.append(getattr(entry, k))
+
+        # Parse the initial config to check for provided arguments
+        config = bt.config(parser=parser, args=args_list)
+
+        # Set up logging directory
+        config.full_path = os.path.expanduser(
+            "{}/{}/{}/netuid{}/{}".format(
+                config.logging.logging_dir,
+                config.wallet.name,
+                config.wallet.hotkey,
+                config.netuid,
+                "validator",
+            )
+        )
+        if not os.path.exists(config.full_path):
+            os.makedirs(config.full_path, exist_ok=True)
+
+        return config
+
+    def _allocate_container(self, device_requirement, timeline, public_key):
+        """
+        Allocate the container with the given device requirement. <br>
+        """
+        # Generate ssh connection for given device requirements and timeline
+        # Instantiate the connection to the db
+        db = ComputeDb()
+
+        # Find out the candidates
+        candidates_hotkey = select_allocate_miners_hotkey(db, device_requirement)
+
+        axon_candidates = []
+        for axon in self.metagraph.axons:
+            if axon.hotkey in candidates_hotkey:
+                axon_candidates.append(axon)
+
+        responses = self.dendrite.query(
+            axon_candidates,
+            Allocate(
+                timeline=timeline, device_requirement=device_requirement, checking=True
+            ),
         )
 
+        final_candidates_hotkey = []
 
-@app.post(
-    "/service/deallocate",
-    response_model=dict,
-    responses={
-        400: {"description": "De-allocation not successfully, please try again."},
-        401: {"description": "Missing authorization"},
-        403: {"description": "An error occurred during de-allocation"},
-        404: {"description": "No allocation details found for the provided hotkey."},
-        200: {"description": "Resource de-allocated successfully."},
-    },
-)
-async def deallocate(
-    token: str,
-    hotkey: str,
-):
-    """
-    The GPU deallocate API endpoint. <br>
-    token: The user token for the authorization. <br>
-    user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
-    hotkey: The miner hotkey to deallocate the gpu resource. <br>
-    """
-    if token:
-        wallet = bt.wallet(config=config)
-        bt.logging.info(f"Wallet: {wallet}")
+        for index, response in enumerate(responses):
+            hotkey = axon_candidates[index].hotkey
+            if response and response["status"] is True:
+                final_candidates_hotkey.append(hotkey)
 
-        # The subtensor is our connection to the Bittensor blockchain.
-        subtensor = bt.subtensor(config=config)
-        bt.logging.info(f"Subtensor: {subtensor}")
+        # Check if there are candidates
+        if len(final_candidates_hotkey) <= 0:
+            return {"status": False, "msg": "Requested resource is not available."}
 
-        # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-        dendrite = bt.dendrite(wallet=wallet)
-        bt.logging.info(f"Dendrite: {dendrite}")
+        # Sort the candidates with their score
+        scores = torch.ones_like(self.metagraph.S, dtype=torch.float32)
 
-        # The metagraph holds the state of the network, letting us know about other miners.
-        metagraph = subtensor.metagraph(config.netuid)
-        bt.logging.info(f"Metagraph: {metagraph}")
+        score_dict = {
+            hotkey: score
+            for hotkey, score in zip(
+                [axon.hotkey for axon in self.metagraph.axons], scores
+            )
+        }
+        sorted_hotkeys = sorted(
+            final_candidates_hotkey,
+            key=lambda hotkey: score_dict.get(hotkey, 0),
+            reverse=True,
+        )
 
-        wallet = bt.wallet(config=config)
-        subtensor = bt.subtensor(config=config)
-        bt.logging.info(f"Subtensor: {subtensor}")
+        # Loop the sorted candidates and check if one can allocate the device
+        for hotkey in sorted_hotkeys:
+            index = self.metagraph.hotkeys.index(hotkey)
+            axon = self.metagraph.axons[index]
+            register_response = self.dendrite.query(
+                axon,
+                Allocate(
+                    timeline=timeline,
+                    device_requirement=device_requirement,
+                    checking=False,
+                    public_key=public_key,
+                ),
+                timeout=100,
+            )
+            if register_response and register_response["status"] is True:
+                register_response["ip"] = axon.ip
+                register_response["hotkey"] = axon.hotkey
+                return register_response
 
-        # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-        dendrite = bt.dendrite(wallet=wallet)
-        metagraph = subtensor.metagraph(config.netuid)
+        # Close the db connection
+        db.close()
+
+        return {"status": False, "msg": "Requested resource is not available."}
+
+    def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key):
+        """
+        Allocate the container with the given hotkey. <br>
+        Generate ssh connection for given device requirements and timeline. <br>
+        """
+        device_requirement = {
+            "cpu": {"count": 1},
+            "gpu": {},
+            "hard_disk": {"capacity": 1073741824},
+            "ram": {"capacity": 1073741824},
+        }
+        device_requirement["gpu"] = {
+            "count": 1,
+            "capacity": int(requirements.gpu_size) * 1000,
+            "type": requirements.gpu_type,
+        }
+
+        # Instantiate the connection to the db
+        axon_candidate = []
+        for axon in self.metagraph.axons:
+            if axon.hotkey == hotkey:
+                check_allocation = self.dendrite.query(
+                    axon,
+                    Allocate(
+                        timeline=timeline,
+                        device_requirement=device_requirement,
+                        checking=True,
+                    ),
+                    timeout=60,
+                )
+                if check_allocation and check_allocation["status"] is True:
+                    register_response = self.dendrite.query(
+                        axon,
+                        Allocate(
+                            timeline=timeline,
+                            device_requirement=device_requirement,
+                            checking=False,
+                            public_key=public_key,
+                        ),
+                        timeout=100,
+                    )
+                    if register_response and register_response["status"] is True:
+                        register_response["ip"] = axon.ip
+                        register_response["hotkey"] = axon.hotkey
+                        return register_response
+
+        return {"status": False, "msg": "Requested resource is not available."}
+
+    async def _update_allocation_wandb(self, ):
+        """
+        Update the allocated hotkeys in wandb. <br>
+        """
+        hotkey_list = []
 
         # Instantiate the connection to the db
         db = ComputeDb()
         cursor = db.get_cursor()
 
         try:
-            # Retrieve the allocation details for the given hotkey
-            cursor.execute("SELECT details, hotkey FROM allocation WHERE hotkey = ?", (hotkey,))
-            row = cursor.fetchone()
-
-            if row:
-                # Parse the JSON string in the 'details' column
-                info = json.loads(row[0])
-                result_hotkey = row[1]
-
-                username = info['username']
-                password = info['password']
-                port = info['port']
-                ip = info['ip']
-                regkey = info['regkey']
-
-                index = metagraph.hotkeys.index(hotkey)
-                axon = metagraph.axons[index]
-                deregister_response = dendrite.query(
-                    axon,
-                    Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey),
-                    timeout=60,
-                )
-                if deregister_response and deregister_response["status"] is True:
-                    update_allocation_db(result_hotkey, info, False)
-                    update_allocation_wandb(wandb)
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK, content={"msg": "Resource de-allocated successfully."})
-                else:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail={"msg": "De-allocation not successfully, please try again."},
-                    )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"msg": "No allocation details found for the provided hotkey."}
-                )
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail={"msg": "An error occurred during de-allocation", "error": e.__repr__()}
-            )
-        finally:
-            cursor.close()
-            db.close()
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"msg": "Missing authorization"},
-        )
-
-@app.post(
-    "/service/list_allocations",
-    response_model=List[Allocation],
-    responses={
-        401: {"description": "Missing authorization token"},
-        403: {"description": "An error occurred while retrieving allocation details"},
-        404: {"description": "There is no allocation available"},
-        200: {"description": "List allocations successfully."},
-    },
-)
-async def list_allocations(
-    token: str,
-) -> JSONResponse | Any:
-    """
-    The list allocation API endpoint. <br>
-    The API will return the current allocation on the validator. <br>
-    token: The user token for the authorization. <br>
-    """
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization token",
-        )
-
-    else:
-        db = ComputeDb()
-        cursor = db.get_cursor()
-        allocation_list = []
-
-        try:
             # Retrieve all records from the allocation table
             cursor.execute("SELECT id, hotkey, details FROM allocation")
             rows = cursor.fetchall()
 
-            bt.logging.info(f"LIST OF ALLOCATED RESOURCES")
-
-            if not rows:
-                bt.logging.info(
-                    "No resources allocated. Allocate a resource with validator"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"msg": "No resources allocated. Allocate a resource with validator."},
-)
-
             for row in rows:
                 id, hotkey, details = row
-                info = json.loads(details)
-                entry = Allocation()
-
-                entry.hotkey = hotkey
-                # entry.regkey = info["regkey"]
-                entry.resource = info["resource"]
-                entry.ssh_username = info["username"]
-                entry.ssh_password = info["password"]
-                entry.ssh_port = info["port"]
-                entry.ssh_ip = info["ip"]
-                entry.ssh_command = (
-                    f"ssh {info['username']}@{info['ip']} -p {info['port']}"
-                )
-                allocation_list.append(entry)
+                hotkey_list.append(hotkey)
 
         except Exception as e:
-            bt.logging.error(
-                f"An error occurred while retrieving allocation details: {e}"
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"msg": "An error occurred while retrieving allocation details.", "detail": e.__repr__()},
-            )
+            print(f"An error occurred while retrieving allocation details: {e}")
         finally:
             cursor.close()
             db.close()
+        try:
+            await run_in_threadpool(self.wandb.update_allocated_hotkeys, hotkey_list)
+        except Exception as e:
+            bt.logging.info(f"API: Error updating wandb : {e}")
+            return
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder(allocation_list))
+    async def _refresh_metagraph(self):
+        """
+        Refresh the metagraph by resync_period. <br>
+        """
+        while True:
+            if self.metagraph:
+                self.metagraph.sync(lite=True, subtensor=self.subtensor)
+                bt.logging.info(f"API: Metagraph refreshed")
+                await asyncio.sleep(DATA_SYNC_PERIOD)
 
+    async def _refresh_allocation(self):
+        """
+        Refresh the allocation by resync_period. <br>
+        """
+        while True:
+            self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
+            bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
+            await asyncio.sleep(DATA_SYNC_PERIOD)
 
-@app.post(
-    "/service/list_resources",
-    response_model=List[Resource],
-    responses={
-        401: {"description": "Missing authorization"},
-        404: {"description": "There is no resource available"},
-        200: {"description": "List resources successfully."},
-    },
-)
-async def list_resources(token: str):
-    """
-    The list resources API endpoint. <br>
-    The API will return the current miner resource and their detail specs on the validator. <br>
-    token: The user token for the authorization. <br>
-    """
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization"
-        )
-    else:
-        db = ComputeDb()
-        specs_details = get_miner_details(db)
+    @staticmethod
+    def _paginate_list(items, page_number, page_size):
+        # Calculate the start and end indices of the items on the current page
+        start_index = (page_number - 1) * page_size
+        end_index = start_index + page_size
 
-        bt.logging.info(f"LIST OF RESOURCES ON COMPUTE SUBNET")
+        # Get the items on the current page
+        page_items = items[start_index:end_index]
 
-        # Initialize a dictionary to keep track of GPU instances
-        resource_list = []
-        gpu_instances = {}
-        total_gpu_counts = {}
-        
-        # Iterate through the miner specs details and print the table
-        for hotkey, details in specs_details.items():
-            if details:  # Check if details are not empty
-                resource = Resource()
-                try:
-                    # Extract GPU details
-                    gpu_miner = details["gpu"]
-                    gpu_capacity = "{:.2f}".format((gpu_miner["capacity"] / 1024))
-                    gpu_name = str(gpu_miner["details"][0]["name"]).lower()
-                    gpu_count = gpu_miner["count"]
-        
-                    # Extract CPU details
-                    cpu_miner = details["cpu"]
-                    cpu_count = cpu_miner["count"]
-        
-                    # Extract RAM details
-                    ram_miner = details["ram"]
-                    ram = "{:.2f}".format(ram_miner["available"] / 1024.0**3)
-        
-                    # Extract Hard Disk details
-                    hard_disk_miner = details["hard_disk"]
-                    hard_disk = "{:.2f}".format(hard_disk_miner["free"] / 1024.0**3)
-        
-                    # Update the GPU instances count
-                    gpu_key = (gpu_name, gpu_count)
-                    gpu_instances[gpu_key] = gpu_instances.get(gpu_key, 0) + 1
-                    total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
-        
-                except (KeyError, IndexError, TypeError):
-                    gpu_name = "Invalid details"
-                    gpu_capacity = "N/A"
-                    gpu_count = "N/A"
-                    cpu_count = "N/A"
-                    ram = "N/A"
-                    hard_disk = "N/A"
+        # Determine if there are more pages
+        has_next_page = end_index < len(items)
+        next_page_number = page_number + 1 if has_next_page else None
+
+        return {
+            "page_items": page_items,
+            "page_number": page_number,
+            "page_size": page_size,
+            "next_page_number": next_page_number
+        }
+
+    def _authenticate_user(self, user_id: str, user_password: str) -> Union[str, bool]:
+        """
+        Authenticate the user with wallet hotkey and public_key info. <br>
+        """
+        if not user_id or not user_password:
+            return False
+        if user_id == self.wallet.hotkey.ss58_address:
+            if user_password == self.wallet.hotkey.public_key.hex():
+                return user_id
             else:
-                gpu_name = "No details available"
-                gpu_capacity = "N/A"
-                gpu_count = "N/A"
-                cpu_count = "N/A"
-                ram = "N/A"
-                hard_disk = "N/A"
-        
-            # Allocation status
-            allocate_status = "N/A"
-            allocated_hotkeys = wandb.get_allocated_hotkeys([], False)
-        
-            if hotkey in allocated_hotkeys:
-                allocate_status = "Res."
-            else:
-                allocate_status = "Avail."
-        
-            # Print the row with column separators
-            resource.hotkey = hotkey
-            resource.cpu_count = cpu_count
-            resource.gpu_name = gpu_name
-            resource.gpu_capacity = gpu_capacity
-            resource.gpu_count = gpu_count
-            resource.ram = ram
-            resource.hard_disk = hard_disk
-            resource.allocate_status = allocate_status
-            resource_list.append(resource)
+                return False
+        else:
+            return False
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder(resource_list))
+    def _create_access_token(self, data: dict, expires_delta: timedelta | None = None) -> str:
+        """
+        Create the access token for the user. <br>
+        """
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.now(timezone.utc) + expires_delta
+        else:
+            expire = datetime.now(timezone.utc) + timedelta(
+                minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+            )
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, self.access_api_key, algorithm=ALGORITHM)
+        return encoded_jwt
 
-def get_config_api(user_config: UserConfig, requirements: Union[Requirement, None] = None):
-    """
-    Get the config from user config and spec requirement for the API. <br>
-    user_config: The user configuration which contain the validator's hotkey and wallet information. <br>
-    requirements: The device requirements. <br>
-    """
-    parser = argparse.ArgumentParser()
-    # Adds bittensor specific arguments
-    parser.add_argument("--netuid", type=int, default=27, help="The chain subnet uid.")
-    parser.add_argument("--gpu_type", type=str, help="The GPU type.")
-    parser.add_argument("--gpu_size", type=int, help="The GPU memory in MB.")
-    parser.add_argument("--timeline", type=int, help="The allocation timeline.")
-    bt.subtensor.add_args(parser)
-    bt.logging.add_args(parser)
-    bt.wallet.add_args(parser)
-
-    if not user_config.subtensor_chain_endpoint:
-        if user_config.subtensor_network=="finney":
-            user_config.subtensor_chain_endpoint = "wss://entrypoint-finney.opentensor.ai:443"
-        elif user_config.subtensor_network=="test":
-            user_config.subtensor_chain_endpoint = "wss://test.finney.opentensor.ai:443"
-
-    # Add user configuration and requirement to list for the bt config parser
-    # args = [f"--{v.alias}";getattr(entry,k) for entry in [user_config, requirements] for k, v in entry.__fields__.items()]
-    args_list = []
-    for entry in [user_config, requirements]:
-        if entry:
-            for k, v in entry.__fields__.items():
-                args_list.append(f"--{(v.alias)}")
-                args_list.append(getattr(entry, k))
-
-    # Parse the initial config to check for provided arguments
-    config = bt.config(parser=parser, args=args_list)
-
-    # Set up logging directory
-    config.full_path = os.path.expanduser(
-        "{}/{}/{}/netuid{}/{}".format(
-            config.logging.logging_dir,
-            config.wallet.name,
-            config.wallet.hotkey,
-            config.netuid,
-            "validator",
+    def _verify_access_token(self, token: oauth2_token_scheme, ) -> Union[Any, None]:
+        """
+        Verify the access token for the user. <br>
+        """
+        credentials_exception = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    )
-    if not os.path.exists(config.full_path):
-        os.makedirs(config.full_path, exist_ok=True)
+        try:
+            payload = jwt.decode(token, self.access_api_key, algorithms=[ALGORITHM])
+            username: str = payload.get("sub")
+            if username is None:
+                return credentials_exception
+            token_data = TokenData(username=username)
+            return payload
 
-    return config
+        except ExpiredSignatureError:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content="Credential is Expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except JWTError:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content="Invalid Token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            # return {"error": "Invalid token"}
+        except Exception as e:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content=e.__repr__(),
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-def get_wandb_api(config: bt.config):
-    """
-    Get the wandb from the config. <br>
-    config: The config object. <br>
-    """
-    wallet = bt.wallet(config=config)
-    wandb = ComputeWandb(config, wallet, "validator.py")
-    return wandb
+    def run(self):
+        """
+        Run the FastAPI app. <br>
+        """
+        if os.path.exists("cert/ca.cer") and os.path.exists("cert/server.key") and os.path.exists("cert/server.cer"):
+            uvicorn.run(
+                self.app,
+                host=self.ip_addr,
+                port=self.port,
+                log_level="critical",
+                ssl_keyfile="cert/server.key",
+                ssl_certfile="cert/server.cer",
+                ssl_cert_reqs=DEFAULT_SSL_MODE,  # 1 for client CERT optional, 2 for client CERT_REQUIRED
+                ssl_ca_certs="cert/ca.cer",
+            )
+        else:
+            bt.logging.error(f"API: No SSL certificate found, please generate one with /cert/gen_ca.sh")
+            exit(1)
+
+    def start(self):
+        """
+        Start the FastAPI app in the process. <br>
+        """
+        self.process = multiprocessing.Process(
+            target=self.run, args=(), daemon=True
+        ).start()
+
+    def stop(self):
+        """
+        Stop the FastAPI app in the process. <br>
+        """
+        if self.process:
+            self.process.terminate()
+            self.process.join()
 
 
 # Run the FastAPI app
 if __name__ == "__main__":
     os.environ["WANDB_SILENT"] = "true"
-    uvicorn.run(app, host="0.0.0.0", port=9981)
+    register_app = RegisterAPI()
+    register_app.run()
