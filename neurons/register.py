@@ -531,7 +531,7 @@ def list_resources(wandb):
         
         # Allocation status
         status = "N/A"
-        allocated_hotkeys = wandb.get_allocated_hotkeys([], False)
+        allocated_hotkeys =  wandb.get_allocated_hotkeys([], False)
         
         if hotkey in allocated_hotkeys:
             status = "Res."
