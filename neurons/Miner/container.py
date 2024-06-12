@@ -77,7 +77,7 @@ def kill_container():
 
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, ssh_key: str = ""):
     try:
         client, containers = get_docker()
         # Configuration
@@ -96,9 +96,12 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key):
             RUN echo 'root:'{}'' | chpasswd
             RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
             RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
             RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            RUN echo '{}' > /root/.ssh/authorized_keys
+            RUN chmod 600 /root/.ssh/authorized_keys
             CMD ["/usr/sbin/sshd", "-D"]
-            """.format(password)
+            """.format(password, ssh_key)
         )
 
         # Ensure the tmp directory exists within the current directory
@@ -240,9 +243,12 @@ def build_sample_container():
             RUN echo 'root:'{}'' | chpasswd
             RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
             RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+            RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
             RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            RUN echo '{}' > /root/.ssh/authorized_keys
+            RUN chmod 600 /root/.ssh/authorized_keys
             CMD ["/usr/sbin/sshd", "-D"]
-            """.format(password)
+            """.format(password, "")
         )
 
         # Ensure the tmp directory exists within the current directory

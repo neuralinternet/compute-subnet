@@ -76,6 +76,7 @@ class Allocate(bt.Synapse):
     checking: bool = True
     output: dict = {}
     public_key: str = ""
+    ssh_key: str = ""
 
     def deserialize(self) -> dict:
         """

@@ -336,6 +336,7 @@ class Miner:
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
         checking = synapse.checking
+        ssh_key = synapse.ssh_key
 
         if checking is True:
             if timeline > 0:
@@ -348,7 +349,7 @@ class Miner:
         else:
             public_key = synapse.public_key
             if timeline > 0:
-                result = register_allocation(timeline, device_requirement, public_key)
+                result = register_allocation(timeline, device_requirement, public_key, ssh_key)
                 synapse.output = result
             else:
                 result = deregister_allocation(public_key)

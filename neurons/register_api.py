@@ -101,6 +101,7 @@ class Allocation(BaseModel):
     ssh_username: str = ""
     ssh_password: str = ""
     ssh_command: str = ""
+    ssh_key: str = ""
 
 
 class UserInfo(BaseModel):
@@ -351,7 +352,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_spec(requirements: Requirement, ) -> JSONResponse:
+        async def allocate_spec(requirements: Requirement, ssh_key: Optional[str] = "") -> JSONResponse:
             """
             The GPU resource allocate API endpoint. <br>
             requirements: The GPU resource requirements which contain the GPU type, GPU size, ram, hard_disk and booking timeline. <br>
@@ -377,7 +378,7 @@ class RegisterAPI:
                     #    device_requirement, timeline, public_key
                     #)
                     run_start = time.time()
-                    result = await run_in_threadpool(self._allocate_container, device_requirement, timeline, public_key)
+                    result = await run_in_threadpool(self._allocate_container, device_requirement, timeline, public_key, ssh_key)
                     run_end = time.time()
                     bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
@@ -415,6 +416,7 @@ class RegisterAPI:
                         info["ip"] = result["ip"]
                         info["resource"] = gpu_name
                         info["regkey"] = public_key
+                        info["ssh_key"] = ssh_key
 
                         await asyncio.sleep(1)
 
@@ -422,6 +424,7 @@ class RegisterAPI:
                         allocated.resource = info["resource"]
                         allocated.hotkey = result_hotkey
                         # allocated.regkey = info["regkey"]
+                        allocated.ssh_key = ssh_key
                         allocated.ssh_ip = info["ip"]
                         allocated.ssh_port = info["port"]
                         allocated.ssh_username = info["username"]
@@ -497,7 +500,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_hotkey(hotkey: str, ) -> JSONResponse | HTTPException:
+        async def allocate_hotkey(hotkey: str, ssh_key: Optional[str] = "") -> JSONResponse:
             """
             The GPU allocate by hotkey API endpoint. <br>
             User use this API to book a specific miner. <br>
@@ -515,7 +518,7 @@ class RegisterAPI:
                     #     requirements, hotkey, requirements.timeline, public_key
                     # )
                     run_start = time.time()
-                    result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey, requirements.timeline, public_key)
+                    result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey, requirements.timeline, public_key, ssh_key)
                     run_end = time.time()
                     bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
@@ -549,11 +552,13 @@ class RegisterAPI:
                         info["ip"] = result["ip"]
                         info["resource"] = gpu_name
                         info["regkey"] = public_key
+                        info["ssh_key"] = ssh_key
 
                         time.sleep(1)
                         allocated = Allocation()
                         allocated.resource = info["resource"]
                         allocated.hotkey = result_hotkey
+                        allocated.ssh_key = ssh_key
                         # allocated.regkey = info["regkey"]
                         allocated.ssh_ip = info["ip"]
                         allocated.ssh_port = info["port"]
@@ -631,7 +636,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def deallocate(hotkey: str, ) -> JSONResponse | HTTPException:
+        async def deallocate(hotkey: str, ) -> JSONResponse:
             """
             The GPU deallocate API endpoint. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
@@ -806,6 +811,7 @@ class RegisterAPI:
                         entry.ssh_command = (
                             f"ssh {info['username']}@{info['ip']} -p {info['port']}"
                         )
+                        entry.ssh_key = info["ssh_key"]
                         allocation_list.append(entry)
 
                 except Exception as e:
@@ -1626,7 +1632,7 @@ class RegisterAPI:
 
         return config
 
-    def _allocate_container(self, device_requirement, timeline, public_key):
+    def _allocate_container(self, device_requirement, timeline, public_key, ssh_key: str = ""):
         """
         Allocate the container with the given device requirement. <br>
         """
@@ -1686,6 +1692,7 @@ class RegisterAPI:
                     device_requirement=device_requirement,
                     checking=False,
                     public_key=public_key,
+                    ssh_key=ssh_key,
                 ),
                 timeout=100,
             )
@@ -1699,7 +1706,7 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key):
+    def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key, ssh_key: str = ""):
         """
         Allocate the container with the given hotkey. <br>
         Generate ssh connection for given device requirements and timeline. <br>
@@ -1737,6 +1744,7 @@ class RegisterAPI:
                             device_requirement=device_requirement,
                             checking=False,
                             public_key=public_key,
+                            ssh_key=ssh_key,
                         ),
                         timeout=100,
                     )
