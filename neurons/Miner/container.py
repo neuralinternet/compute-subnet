@@ -60,19 +60,20 @@ def kill_container():
                 break
         if running_container:
             # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
-            running_container.exec_run(cmd="kill -15 1")
-            running_container.wait()
-            # running_container.stop()
+            if running_container.status == "running":
+                running_container.exec_run(cmd="kill -15 1")
+                running_container.wait()
+                # running_container.stop()
             running_container.remove()
             # Remove all dangling images
             client.images.prune(filters={"dangling": True})
-            # bt.logging.info("Container was killed successfully")
+            bt.logging.info("Container was killed successfully")
             return True
         else:
-            # bt.logging.info("Unable to find container")
+            bt.logging.info("Unable to find container")
             return False
     except Exception as e:
-        # bt.logging.info(f"Error killing container {e}")
+        bt.logging.info(f"Error killing container {e}")
         return False
 
 
@@ -131,6 +132,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             environment=["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: ssh_port},
             init=True,
+            restart_policy={"Name": "on-failure", "MaximumRetryCount": 3},
         )
 
         # Check the status to determine if the container ran successfully
@@ -169,7 +171,7 @@ def check_container():
                 return True
         return False
     except Exception as e:
-        # bt.logging.info(f"Error checking container {e}")
+        bt.logging.info(f"Error checking container {e}")
         return False
 
 
