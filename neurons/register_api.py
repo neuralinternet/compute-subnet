@@ -667,24 +667,13 @@ class RegisterAPI:
 
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
-                        if axon.hotkey == "5C4wGPrkgTJJvqkqiy7Yh5QDwjV14exeyJKvDjX64fwbsft6":
-                            axon.ip = "125.229.93.125"
-                            axon.port = 10020
-                        elif axon.hotkey == "5FQseA4n4QsLz9Yw7LbodhM2p514bq3kKM9FiUZE8iGMXzSR":
-                            axon.ip = "104.155.196.16"
-                            axon.port = 8091
-
-
                         run_start = time.time()
                         allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey, )
                         deregister_response = await run_in_threadpool(self.dendrite.query, axon, allocate_class, timeout=60)
                         run_end = time.time()
                         bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
-                        if (
-                                deregister_response
-                                and deregister_response["status"] is True
-                        ):
+                        if ( deregister_response and deregister_response["status"] is True ):
                             update_allocation_db(result_hotkey, info, False)
                             await self._update_allocation_wandb()
 
