@@ -262,8 +262,8 @@ class ComputeWandb:
         self.api.flush()
         runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                             filters={"$and": [{"config.role": "miner"},
-                                               {"config.config.netuid": self.config.netuid},]
-#                                               {"state": "running"}]
+                                               {"config.config.netuid": self.config.netuid},
+                                               {"state": "running"}]
                                     })
         try:
             # Iterate over all runs in the opencompute project
