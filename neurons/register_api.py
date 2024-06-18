@@ -674,27 +674,20 @@ class RegisterAPI:
                         bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
                         if ( deregister_response and deregister_response["status"] is True ):
-                            update_allocation_db(result_hotkey, info, False)
-                            await self._update_allocation_wandb()
-
                             bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
-                            return JSONResponse(
-                                status_code=status.HTTP_200_OK,
-                                content={
-                                    "success": True,
-                                    "message": "Resource de-allocated successfully.",
-                                },
-                            )
                         else:
-                            bt.logging.error(f"API: Invalid {hotkey} de-allocation request")
-                            return JSONResponse(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                content={
-                                    "success": False,
-                                    "message": "Invalid de-allocation request",
-                                    "err_detail": "De-allocation not successfully, please try again",
-                                },
-                            )
+                            bt.logging.error(f"API: Resource {hotkey} de-allocated successfully without response.")
+
+                        update_allocation_db(result_hotkey, info, False)
+                        await self._update_allocation_wandb()
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource de-allocated successfully.",
+                            },
+                        )
+
                     else:
                         bt.logging.info(f"API: No allocation details found for the provided hotkey")
                         return JSONResponse(
@@ -870,6 +863,23 @@ class RegisterAPI:
 
                 bt.logging.info(f"API: List resources on compute subnet")
 
+                # check wandb for available hotkeys
+                #self.wandb.api.flush()
+                running_hotkey = []
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"config.role": "miner"},
+                        {"state": "running"},
+                    ]
+                }
+                runs = await run_in_threadpool(self.wandb.api.runs, f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+                for run in runs:
+                    run_config = run.config
+                    run_hotkey = run_config.get("hotkey")
+                    running_hotkey.append(run_hotkey)
+
+                specs_details = await run_in_threadpool(get_miner_details, db)
                 # Initialize a dictionary to keep track of GPU instances
                 resource_list = []
                 gpu_instances = {}
@@ -881,106 +891,107 @@ class RegisterAPI:
                 if specs_details:
                     # Iterate through the miner specs details and print the table
                     for hotkey, details in specs_details.items():
-                        if details:  # Check if details are not empty
-                            resource = Resource()
-                            try:
-                                # Extract GPU details
-                                gpu_miner = details["gpu"]
-                                gpu_capacity = "{:.2f}".format(
-                                    (gpu_miner["capacity"] / 1000)
-                                )
-                                gpu_name = str(gpu_miner["details"][0]["name"]).lower()
-                                gpu_count = gpu_miner["count"]
+                        if hotkey in running_hotkey:
+                            if details:  # Check if details are not empty
+                                resource = Resource()
+                                try:
+                                    # Extract GPU details
+                                    gpu_miner = details["gpu"]
+                                    gpu_capacity = "{:.2f}".format(
+                                        (gpu_miner["capacity"] / 1000)
+                                    )
+                                    gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                                    gpu_count = gpu_miner["count"]
 
-                                # Extract CPU details
-                                cpu_miner = details["cpu"]
-                                cpu_count = cpu_miner["count"]
+                                    # Extract CPU details
+                                    cpu_miner = details["cpu"]
+                                    cpu_count = cpu_miner["count"]
 
-                                # Extract RAM details
-                                ram_miner = details["ram"]
-                                ram = "{:.2f}".format(
-                                    ram_miner["available"] / 1024.0 ** 3
-                                )
+                                    # Extract RAM details
+                                    ram_miner = details["ram"]
+                                    ram = "{:.2f}".format(
+                                        ram_miner["available"] / 1024.0 ** 3
+                                    )
 
-                                # Extract Hard Disk details
-                                hard_disk_miner = details["hard_disk"]
-                                hard_disk = "{:.2f}".format(
-                                    hard_disk_miner["free"] / 1024.0 ** 3
-                                )
+                                    # Extract Hard Disk details
+                                    hard_disk_miner = details["hard_disk"]
+                                    hard_disk = "{:.2f}".format(
+                                        hard_disk_miner["free"] / 1024.0 ** 3
+                                    )
 
-                                # Update the GPU instances count
-                                gpu_key = (gpu_name, gpu_count)
-                                gpu_instances[gpu_key] = (
-                                        gpu_instances.get(gpu_key, 0) + 1
-                                )
-                                total_gpu_counts[gpu_name] = (
-                                        total_gpu_counts.get(gpu_name, 0) + gpu_count
-                                )
+                                    # Update the GPU instances count
+                                    gpu_key = (gpu_name, gpu_count)
+                                    gpu_instances[gpu_key] = (
+                                            gpu_instances.get(gpu_key, 0) + 1
+                                    )
+                                    total_gpu_counts[gpu_name] = (
+                                            total_gpu_counts.get(gpu_name, 0) + gpu_count
+                                    )
 
-                            except (KeyError, IndexError, TypeError):
-                                gpu_name = "Invalid details"
+                                except (KeyError, IndexError, TypeError):
+                                    gpu_name = "Invalid details"
+                                    gpu_capacity = "N/A"
+                                    gpu_count = "N/A"
+                                    cpu_count = "N/A"
+                                    ram = "N/A"
+                                    hard_disk = "N/A"
+                            else:
+                                gpu_name = "No details available"
                                 gpu_capacity = "N/A"
                                 gpu_count = "N/A"
                                 cpu_count = "N/A"
                                 ram = "N/A"
                                 hard_disk = "N/A"
-                        else:
-                            gpu_name = "No details available"
-                            gpu_capacity = "N/A"
-                            gpu_count = "N/A"
-                            cpu_count = "N/A"
-                            ram = "N/A"
-                            hard_disk = "N/A"
 
-                        # Allocation status
-                        allocate_status = "N/A"
+                            # Allocation status
+                            allocate_status = "N/A"
 
-                        if hotkey in allocated_hotkeys:
-                            allocate_status = "Res."
-                        else:
-                            allocate_status = "Avail."
+                            if hotkey in allocated_hotkeys:
+                                allocate_status = "Res."
+                            else:
+                                allocate_status = "Avail."
 
-                        add_resource = False
-                        # Print the row with column separators
-                        resource.hotkey = hotkey
+                            add_resource = False
+                            # Print the row with column separators
+                            resource.hotkey = hotkey
 
-                        try:
-                            if gpu_name != "Invalid details" and gpu_name != "No details available":
-                                if query is None or query == {}:
-                                    add_resource = True
-                                else:
-                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
-                                        continue
-                                    if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
-                                        continue
-                                    if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
-                                        continue
-                                    if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
-                                        continue
-                                    if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
-                                        continue
-                                    if query.ram_total_max is not None and float(ram) > query.ram_total_max:
-                                        continue
-                                    if query.ram_total_min is not None and float(ram) < query.ram_total_min:
-                                        continue
-                                    if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
-                                        continue
-                                    if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
-                                        continue
-                                    add_resource = True
+                            try:
+                                if gpu_name != "Invalid details" and gpu_name != "No details available":
+                                    if query is None or query == {}:
+                                        add_resource = True
+                                    else:
+                                        if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                            continue
+                                        if query.gpu_capacity_max is not None and float(gpu_capacity) > query.gpu_capacity_max:
+                                            continue
+                                        if query.gpu_capacity_min is not None and float(gpu_capacity) < query.gpu_capacity_min:
+                                            continue
+                                        if query.cpu_count_max is not None and int(cpu_count) > query.cpu_count_max:
+                                            continue
+                                        if query.cpu_count_min is not None and int(cpu_count) < query.cpu_count_min:
+                                            continue
+                                        if query.ram_total_max is not None and float(ram) > query.ram_total_max:
+                                            continue
+                                        if query.ram_total_min is not None and float(ram) < query.ram_total_min:
+                                            continue
+                                        if query.hard_disk_total_max is not None and float(hard_disk) > query.hard_disk_total_max:
+                                            continue
+                                        if query.hard_disk_total_min is not None and float(hard_disk) < query.hard_disk_total_min:
+                                            continue
+                                        add_resource = True
 
-                                if add_resource:
-                                    resource.cpu_count = int(cpu_count)
-                                    resource.gpu_name = gpu_name
-                                    resource.gpu_capacity = float(gpu_capacity)
-                                    resource.gpu_count = int(gpu_count)
-                                    resource.ram = float(ram)
-                                    resource.hard_disk = float(hard_disk)
-                                    resource.allocate_status = allocate_status
-                                    resource_list.append(resource)
-                        except (KeyError, IndexError, TypeError, ValueError) as e:
-                            bt.logging.error(f"API: Error occurred while filtering resources: {e}")
-                            continue
+                                    if add_resource:
+                                        resource.cpu_count = int(cpu_count)
+                                        resource.gpu_name = gpu_name
+                                        resource.gpu_capacity = float(gpu_capacity)
+                                        resource.gpu_count = int(gpu_count)
+                                        resource.ram = float(ram)
+                                        resource.hard_disk = float(hard_disk)
+                                        resource.allocate_status = allocate_status
+                                        resource_list.append(resource)
+                            except (KeyError, IndexError, TypeError, ValueError) as e:
+                                bt.logging.error(f"API: Error occurred while filtering resources: {e}")
+                                continue
 
                     bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(

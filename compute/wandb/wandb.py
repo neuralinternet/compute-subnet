@@ -328,3 +328,15 @@ class ComputeWandb:
                 bt.logging.info(f"Error verifying signature for Run ID: {run_id_str}, Name: {run.name}: {e}")
 
         return False
+
+    def sync_allocated(self, hotkey):
+        """
+        This function syncs the allocated status of the miner with the wandb run.
+        """
+        # Fetch allocated hotkeys
+        allocated_hotkeys = self.get_allocated_hotkeys([], True)
+
+        if hotkey in allocated_hotkeys:
+            return True
+        else:
+            return False

@@ -22,7 +22,7 @@ import time
 import traceback
 import typing
 import multiprocessing
-
+import base64
 import bittensor as bt
 
 from compute import (
@@ -141,6 +141,18 @@ class Miner:
             bt.logging.info(f"Docker is installed. Version: {msg}")
 
         check_cuda_availability()
+
+        file_path = 'allocation_key'
+        # Open the file in read mode ('r') and read the data
+        with open(file_path, 'r') as file:
+            allocation_key_encoded = file.read()
+
+        if not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address) and allocation_key_encoded:
+            # Decode the base64-encoded public key from the file
+            public_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+            deregister_allocation(public_key)
+            self.wandb.update_allocated(None)
+            bt.logging.info("Allocation is not exist in wandb. Resetting the allocation status.")
 
         # Step 3: Set up hashcat for challenges
         self.hashcat_path = self.config.miner_hashcat_path

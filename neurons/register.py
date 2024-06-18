@@ -400,11 +400,13 @@ def deallocate(wandb):
                 timeout=60,
             )
             if deregister_response and deregister_response["status"] is True:
-                update_allocation_db(result_hotkey, info, False)
-                update_allocation_wandb(wandb)
                 print("Resource de-allocated successfully.")
             else:
-                print("De-allocation not successfull, please try again.")
+                print("No Response from axon server, Resource de-allocated successfully .")
+
+            update_allocation_db(result_hotkey, info, False)
+            update_allocation_wandb(wandb)
+
         else:
             print("No allocation details found for the provided hotkey.")
 
