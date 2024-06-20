@@ -78,7 +78,7 @@ def kill_container():
 
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, ssh_key: str = ""):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict):
     try:
         client, containers = get_docker()
         # Configuration
@@ -88,21 +88,29 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         hard_disk_capacity = hard_disk_usage["capacity"]  # e.g : 100g
         gpu_capacity = gpu_usage["capacity"]  # e.g : all
 
+        docker_image = docker_requirement.get("base_image")
+        docker_volume = docker_requirement.get("volume_path")
+        docker_ssh_key = docker_requirement.get("ssh_key")
+        docker_ssh_port = docker_requirement.get("ssh_port")
+        docker_appendix = docker_requirement.get("dockerfile")
+
+        if docker_appendix is None or docker_appendix == "":
+            docker_appendix = "echo 'Hello World!'"
+
         # Step 1: Build the Docker image with an SSH server
         dockerfile_content = (
             """
-            FROM ubuntu
+            FROM {}
             RUN apt-get update && apt-get install -y openssh-server
-            RUN mkdir -p /run/sshd  # Create the /run/sshd directory
-            RUN echo 'root:'{}'' | chpasswd
-            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-            RUN echo '{}' > /root/.ssh/authorized_keys
-            RUN chmod 600 /root/.ssh/authorized_keys
+            RUN mkdir -p /run/sshd && echo 'root:'{}'' | chpasswd
+            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            RUN {} 
+            RUN mkdir -p /root/.ssh/ && echo '{}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
             CMD ["/usr/sbin/sshd", "-D"]
-            """.format(password, ssh_key)
+            """.format(docker_image, password, docker_appendix, docker_ssh_key)
         )
 
         # Ensure the tmp directory exists within the current directory
@@ -130,16 +138,16 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             detach=True,
             device_requests=device_requests,
             environment=["NVIDIA_VISIBLE_DEVICES=all"],
-            ports={22: ssh_port},
+            ports={22: docker_ssh_port},
             init=True,
             restart_policy={"Name": "on-failure", "MaximumRetryCount": 3},
+#            volumes={ docker_volume: {'bind': '/root/workspace/', 'mode': 'rw'}},
         )
 
         # Check the status to determine if the container ran successfully
-
         if container.status == "created":
-            #bt.logging.info("Container was created successfully.")
-            info = {"username": "root", "password": password, "port": ssh_port}
+            bt.logging.info("Container was created successfully.")
+            info = {"username": "root", "password": password, "port": docker_ssh_port}
             info_str = json.dumps(info)
             public_key = public_key.encode("utf-8")
             encrypted_info = rsa.encrypt_data(public_key, info_str)

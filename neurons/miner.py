@@ -49,7 +49,7 @@ from compute.utils.version import (
     get_remote_version,
 )
 from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
-from neurons.Miner.container import build_check_container, build_sample_container
+from neurons.Miner.container import build_check_container, build_sample_container, check_container, kill_container
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
@@ -142,6 +142,7 @@ class Miner:
 
         check_cuda_availability()
 
+        # check allocation status
         file_path = 'allocation_key'
         # Open the file in read mode ('r') and read the data
         with open(file_path, 'r') as file:
@@ -153,6 +154,12 @@ class Miner:
             deregister_allocation(public_key)
             self.wandb.update_allocated(None)
             bt.logging.info("Allocation is not exist in wandb. Resetting the allocation status.")
+
+        if check_container() and not allocation_key_encoded:
+            kill_container()
+            self.wandb.update_allocated(None)
+            bt.logging.info("Container is already running without allocated. Killing the container.")
+
 
         # Step 3: Set up hashcat for challenges
         self.hashcat_path = self.config.miner_hashcat_path
@@ -348,7 +355,8 @@ class Miner:
         timeline = synapse.timeline
         device_requirement = synapse.device_requirement
         checking = synapse.checking
-        ssh_key = synapse.ssh_key
+        docker_requirement = synapse.docker_requirement
+        docker_requirement['ssh_port'] = int(self.config.ssh.port)
 
         if checking is True:
             if timeline > 0:
@@ -361,7 +369,7 @@ class Miner:
         else:
             public_key = synapse.public_key
             if timeline > 0:
-                result = register_allocation(timeline, device_requirement, public_key, ssh_key)
+                result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
                 synapse.output = result
             else:
                 result = deregister_allocation(public_key)
