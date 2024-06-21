@@ -68,10 +68,9 @@ def kill_container():
             # Remove all dangling images
             client.images.prune(filters={"dangling": True})
             bt.logging.info("Container was killed successfully")
-            return True
         else:
-            bt.logging.info("Unable to find container")
-            return False
+           bt.logging.info("Unable to find container")
+        return True
     except Exception as e:
         bt.logging.info(f"Error killing container {e}")
         return False
@@ -175,7 +174,7 @@ def check_container():
     try:
         client, containers = get_docker()
         for container in containers:
-            if container_name in container.name:
+            if container_name in container.name and container.status == "running":
                 return True
         return False
     except Exception as e:
@@ -249,14 +248,12 @@ def build_sample_container():
             """
             FROM ubuntu
             RUN apt-get update && apt-get install -y openssh-server
-            RUN mkdir -p /run/sshd  # Create the /run/sshd directory
-            RUN echo 'root:'{}'' | chpasswd
-            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-            RUN sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-            RUN echo '{}' > /root/.ssh/authorized_keys
-            RUN chmod 600 /root/.ssh/authorized_keys
+            RUN mkdir -p /run/sshd && echo 'root:'{}'' | chpasswd
+            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+                sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            RUN mkdir -p /root/.ssh/ && echo '{}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
             CMD ["/usr/sbin/sshd", "-D"]
             """.format(password, "")
         )

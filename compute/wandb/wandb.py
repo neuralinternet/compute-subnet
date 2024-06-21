@@ -334,7 +334,7 @@ class ComputeWandb:
         This function syncs the allocated status of the miner with the wandb run.
         """
         # Fetch allocated hotkeys
-        allocated_hotkeys = self.get_allocated_hotkeys([], True)
+        allocated_hotkeys = self.get_allocated_hotkeys([], False)
 
         if hotkey in allocated_hotkeys:
             return True

@@ -259,6 +259,7 @@ class RegisterAPI:
                 self.port = self.config.axon.port
 
         self.allocation_table = []
+        self.checking_table = []
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -284,6 +285,7 @@ class RegisterAPI:
             """
             # Setup the repeated task
             self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
+            self.allocate_check_task = asyncio.create_task(self._check_allocation())
             bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
 
         @self.app.on_event("shutdown")
@@ -1731,6 +1733,49 @@ class RegisterAPI:
             self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
+
+
+    async def _check_allocation(self):
+        """
+        Check the allocation by resync_period. <br>
+        """
+        while True:
+            db = ComputeDb()
+            cursor = db.get_cursor()
+            try:
+                # Retrieve all records from the allocation table
+                cursor.execute("SELECT id, hotkey, details FROM allocation")
+                rows = cursor.fetchall()
+                for row in rows:
+                    id, hotkey, details = row
+                    info = json.loads(details)
+
+                    index = self.metagraph.hotkeys.index(hotkey)
+                    axon = self.metagraph.axons[index]
+                    register_response = self.dendrite.query(axon,Allocate(timeline=1, checking=True,), timeout=60, )
+                    if register_response and register_response["status"] is False:
+                        self.checking_table = [x for x in self.checking_table if x != hotkey]
+                        bt.logging.info(f"API: Allocation is still running for hotkey: {hotkey}")
+                    else:
+                        # handle the case when no response is received or the docker is not running
+                        self.checking_table.append(hotkey)
+                        bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
+                        if self.checking_table.count(hotkey) >= 3:
+                            # update the allocation table
+                            update_allocation_db(hotkey, info, False)
+                            await self._update_allocation_wandb()
+
+                            # remove the hotkey from checking table
+                            self.checking_table = [x for x in self.checking_table if x != hotkey]
+                            bt.logging.info(f"API: No response timeout for three times on hotkey, trigger de-allocation process: {hotkey}")
+
+            except Exception as e:
+                bt.logging.error(f"API: Error occurred while checking allocation: {e}")
+            finally:
+                bt.logging.info(f"API: Allocation checking triggered")
+                await asyncio.sleep(DATA_SYNC_PERIOD)
+
+
 
     @staticmethod
     def _paginate_list(items, page_number, page_size):
