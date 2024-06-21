@@ -28,6 +28,7 @@ import time
 from datetime import datetime
 import asyncio
 import multiprocessing
+import uuid
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -94,6 +95,7 @@ class Allocation(BaseModel):
     ssh_password: str = ""
     ssh_command: str = ""
     ssh_key: str = ""
+    uuid_key: str = ""
 
 
 class DockerRequirement(BaseModel):
@@ -349,6 +351,9 @@ class RegisterAPI:
                         "type": requirements.gpu_type,
                     }
 
+                # Generate UUID
+                uuid_key = str(uuid.uuid1())
+
                 timeline = int(requirements.timeline)
                 private_key, public_key = rsa.generate_key_pair()
                 run_start = time.time()
@@ -391,6 +396,7 @@ class RegisterAPI:
                     info["resource"] = gpu_name
                     info["regkey"] = public_key
                     info["ssh_key"] = docker_requirement.ssh_key
+                    info["uuid"] = uuid_key
 
                     await asyncio.sleep(1)
 
@@ -403,6 +409,7 @@ class RegisterAPI:
                     allocated.ssh_port = info["port"]
                     allocated.ssh_username = info["username"]
                     allocated.ssh_password = info["password"]
+                    allocated.uuid_key = info["uuid"]
                     allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
 
                     update_allocation_db(result_hotkey, info, True)
@@ -478,6 +485,9 @@ class RegisterAPI:
                 requirements.gpu_size = 0
                 requirements.timeline = 30
 
+                # Generate UUID
+                uuid_key = str(uuid.uuid1())
+
                 private_key, public_key = rsa.generate_key_pair()
                 # result = self._allocate_container_hotkey(
                 #     requirements, hotkey, requirements.timeline, public_key
@@ -521,6 +531,7 @@ class RegisterAPI:
                     info["resource"] = gpu_name
                     info["regkey"] = public_key
                     info["ssh_key"] = docker_requirement.ssh_key
+                    info["uuid"] = uuid_key
 
                     time.sleep(1)
                     allocated = Allocation()
@@ -532,6 +543,7 @@ class RegisterAPI:
                     allocated.ssh_port = info["port"]
                     allocated.ssh_username = info["username"]
                     allocated.ssh_password = info["password"]
+                    allocated.uuid_key = info["uuid"]
                     allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
 
                     update_allocation_db(result_hotkey, info, True)
@@ -595,7 +607,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def deallocate(hotkey: str, ) -> JSONResponse:
+        async def deallocate(hotkey: str, uuid_key: str) -> JSONResponse:
             """
             The GPU deallocate API endpoint. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
@@ -622,29 +634,41 @@ class RegisterAPI:
                     port = info["port"]
                     ip = info["ip"]
                     regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
 
-                    index = self.metagraph.hotkeys.index(hotkey)
-                    axon = self.metagraph.axons[index]
-                    run_start = time.time()
-                    allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey, )
-                    deregister_response = await run_in_threadpool(self.dendrite.query, axon, allocate_class, timeout=60)
-                    run_end = time.time()
-                    bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey, )
+                        deregister_response = await run_in_threadpool(self.dendrite.query, axon, allocate_class, timeout=60)
+                        run_end = time.time()
+                        bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
-                    if deregister_response and deregister_response["status"] is True:
-                        bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
+                        if deregister_response and deregister_response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} de-allocated successfully without response.")
+
+                        update_allocation_db(result_hotkey, info, False)
+                        await self._update_allocation_wandb()
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource de-allocated successfully.",
+                            },
+                        )
                     else:
-                        bt.logging.error(f"API: Resource {hotkey} de-allocated successfully without response.")
-
-                    update_allocation_db(result_hotkey, info, False)
-                    await self._update_allocation_wandb()
-                    return JSONResponse(
-                        status_code=status.HTTP_200_OK,
-                        content={
-                            "success": True,
-                            "message": "Resource de-allocated successfully.",
-                        },
-                    )
+                        bt.logging.error(f"API: Invalid UUID key")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "De-allocation not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
 
                 else:
                     bt.logging.info(f"API: No allocation details found for the provided hotkey")
@@ -741,6 +765,7 @@ class RegisterAPI:
                     entry.ssh_command = (
                         f"ssh {info['username']}@{info['ip']} -p {info['port']}"
                     )
+                    entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
                     allocation_list.append(entry)
 
