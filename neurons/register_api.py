@@ -400,7 +400,7 @@ class RegisterAPI:
                         private_key, base64.b64decode(result_info)
                     )
                     bt.logging.info(
-                        f"API: Registered successfully : {decrypted_info_str}, 'ip':{result['ip']}"
+                        f"API: Registered successfully : {result_hotkey}"
                     )
 
                     # Iterate through the miner specs details to get gpu_name
@@ -446,7 +446,9 @@ class RegisterAPI:
                     await self._update_allocation_wandb()
                     if client_host == "127.0.0.1":
                         await self._notify_allocation_status(result_hotkey, "allocation", f"allocate trigger via API interface")
-                        bt.logging.info(f"API: Notify allocation status for {result_hotkey} to websocket")
+                    else:
+                        await self._notify_allocation_status(result_hotkey, "allocation", f"allocate trigger via Frontend interface")
+                    bt.logging.info(f"API: Notify allocation status for {result_hotkey} to websocket")
 
                     bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
                     return JSONResponse(
@@ -529,7 +531,11 @@ class RegisterAPI:
                 #     requirements, hotkey, requirements.timeline, public_key
                 # )
                 if ssh_key:
-                    docker_requirement.ssh_key = ssh_key
+                    if docker_requirement is None:
+                        docker_requirement = DockerRequirement()
+                        docker_requirement.ssh_key = ssh_key
+                    else:
+                        docker_requirement.ssh_key = ssh_key
 
                 run_start = time.time()
                 result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey,
@@ -559,7 +565,7 @@ class RegisterAPI:
                         private_key, base64.b64decode(result_info)
                     )
                     bt.logging.info(
-                        f"API: Allocation successfully : {decrypted_info_str}, 'ip':{result['ip']}"
+                        f"API: Allocation successfully : {hotkey}"
                     )
 
                     info = json.loads(decrypted_info_str)
@@ -569,7 +575,7 @@ class RegisterAPI:
                     info["ssh_key"] = docker_requirement.ssh_key
                     info["uuid"] = uuid_key
 
-                    time.sleep(1)
+                    await asyncio.sleep(1)
                     allocated = Allocation()
                     allocated.resource = info["resource"]
                     allocated.hotkey = result_hotkey
@@ -586,8 +592,10 @@ class RegisterAPI:
                     await self._update_allocation_wandb()
                     if client_host == "127.0.0.1":
                         await self._notify_allocation_status(hotkey, "allocation", f"allocate trigger via API interface")
-                        bt.logging.info(f"API: Notify allocation status for {hotkey} to websocket")
+                    else:
+                        await self._notify_allocation_status(hotkey, "allocation", f"allocate trigger via Frontend interface")
 
+                    bt.logging.info(f"API: Notify allocation status for {hotkey} to websocket")
                     bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
@@ -629,7 +637,7 @@ class RegisterAPI:
                 },
                 400: {
                     "model": ErrorResponse,
-                    "description": "De-allocation not successfully, please try again.",
+                    "description": "Deallocation not successfully, please try again.",
                 },
                 401: {"model": ErrorResponse, "description": "Missing authorization"},
                 403: {
@@ -694,7 +702,9 @@ class RegisterAPI:
                         await self._update_allocation_wandb()
                         if client_host == "127.0.0.1":
                             await self._notify_allocation_status(hotkey, "deallocation", f"deallocate trigger via API interface")
-                            bt.logging.info(f"API: Notify de-allocation status for {hotkey} to websocket")
+                        else:
+                            await self._notify_allocation_status(hotkey, "deallocation", f"deallocate trigger via Frontend interface")
+                        bt.logging.info(f"API: Notify de-allocation status for {hotkey} to websocket")
 
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
@@ -709,7 +719,7 @@ class RegisterAPI:
                             status_code=status.HTTP_400_BAD_REQUEST,
                             content={
                                 "success": False,
-                                "message": "De-allocation not successfully, please try again.",
+                                "message": "Deallocation not successfully, please try again.",
                                 "err_detail": "Invalid UUID key",
                             },
                         )
@@ -725,12 +735,12 @@ class RegisterAPI:
                         },
                     )
             except Exception as e:
-                bt.logging.error(f"API: An error occurred during de-allocation {e.__repr__()}")
+                bt.logging.error(f"API: An error occurred during deallocation {e.__repr__()}")
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
                     content={
                         "success": False,
-                        "message": "An error occurred during de-allocation.",
+                        "message": "An error occurred during deallocation.",
                         "err_detail": e.__repr__(),
                     },
                 )
@@ -1815,13 +1825,13 @@ class RegisterAPI:
                            "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                            "hotkey": hotkey,
                            "event": event,
-                           "reason": detail,
+                           "detail": detail,
                        }
                 }
 
-                for count in range(MAX_NOTIFY_COUNT+1):
-                    await self.websocket_connection.send_text(payload=json.dumps(msg))
-                    await asyncio.sleep(3)
+                for count in range(MAX_NOTIFY_COUNT):
+                    await self.websocket_connection.send_text(json.dumps(msg))
+                    await asyncio.sleep(0.1)
                 return True
             else:
                 return False
