@@ -49,6 +49,9 @@ from fastapi import (
     FastAPI,
     status,
     Request,
+    WebSocket,
+    WebSocketDisconnect,
+    WebSocketException,
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -61,6 +64,9 @@ from typing import Optional, Union
 DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903  # default port for the API
 DATA_SYNC_PERIOD = 600  # metagraph resync time
+TIMEOUT_CHECK_PERIOD = 60  # timeout check period
+MAX_TIMEOUT_COUNT = 6  # maximum timeout count
+MAX_NOTIFY_COUNT = 3  # maximum notify count
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -190,6 +196,7 @@ class RegisterAPI:
         self.app = FastAPI(debug=False)
         self._setup_routes()
         self.process = None
+        self.websocket_connection = None
 
         # Compose User Config Data with bittensor config
         # Get the config from the user config
@@ -304,6 +311,27 @@ class RegisterAPI:
                 "message": "Welcome to Compute Subnet Allocation API, Please access the API via endpoint."
             }
 
+        @self.app.websocket(path="/connect", name="websocket")
+        async def websocket_endpoint(websocket: WebSocket):
+            await websocket.accept()
+            self.websocket_connection = websocket
+            bt.logging.info("API: Websocket connection established")
+            while True:
+                try:
+                    # data = await websocket.receive_text()
+                    msg = {"type": "keepalive",
+                           "payload": {
+                               "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                           }
+                    }
+                    await websocket.send_text(json.dumps(msg))
+                    await asyncio.sleep(30)
+                except WebSocketDisconnect:
+                    bt.logging.info(f"API: Websocket connection closed")
+                    await self.websocket_connection.close()
+                    self.websocket_connection = None
+                    break
+
         @self.app.post(
             "/service/allocate_spec",
             tags=["Allocation"],
@@ -331,12 +359,14 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_spec(requirements: DeviceRequirement, docker_requirement: DockerRequirement) -> JSONResponse:
+        async def allocate_spec(requirements: DeviceRequirement, docker_requirement: DockerRequirement,
+                                request: Request) -> JSONResponse:
             """
             The GPU resource allocate API endpoint. <br>
             requirements: The GPU resource requirements which contain the GPU type, GPU size, ram, hard_disk
             and booking timeline. <br>
             """
+            client_host = request.client.host
             if requirements:
                 device_requirement = {
                     "cpu": {"count": requirements.cpu_count},
@@ -414,6 +444,9 @@ class RegisterAPI:
 
                     update_allocation_db(result_hotkey, info, True)
                     await self._update_allocation_wandb()
+                    if client_host == "127.0.0.1":
+                        await self._notify_allocation_status(result_hotkey, "allocation", f"allocate trigger via API interface")
+                        bt.logging.info(f"API: Notify allocation status for {result_hotkey} to websocket")
 
                     bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
                     return JSONResponse(
@@ -472,14 +505,17 @@ class RegisterAPI:
                 },
             },
         )
-        async def allocate_hotkey(hotkey: str, ssh_key: Optional[str] = None,
-                                  docker_requirement: Optional[DockerRequirement] = None) -> JSONResponse:
+        async def allocate_hotkey(hotkey: str, request: Request,
+                                  ssh_key: Optional[str] = None,
+                                  docker_requirement: Optional[DockerRequirement] = None,
+                                  ) -> JSONResponse:
             """
             The GPU allocate by hotkey API endpoint. <br>
             User use this API to book a specific miner. <br>
             hotkey: The miner hotkey to allocate the gpu resource. <br>
             """
             if hotkey:
+                client_host = request.client.host
                 requirements = DeviceRequirement()
                 requirements.gpu_type = ""
                 requirements.gpu_size = 0
@@ -548,6 +584,9 @@ class RegisterAPI:
 
                     update_allocation_db(result_hotkey, info, True)
                     await self._update_allocation_wandb()
+                    if client_host == "127.0.0.1":
+                        await self._notify_allocation_status(hotkey, "allocation", f"allocate trigger via API interface")
+                        bt.logging.info(f"API: Notify allocation status for {hotkey} to websocket")
 
                     bt.logging.info(f"API: Resource {allocated.hotkey} was successfully allocated")
                     return JSONResponse(
@@ -586,7 +625,7 @@ class RegisterAPI:
             responses={
                 200: {
                     "model": SuccessResponse,
-                    "description": "Resource de-allocated successfully.",
+                    "description": "Resource deallocated successfully.",
                 },
                 400: {
                     "model": ErrorResponse,
@@ -607,11 +646,12 @@ class RegisterAPI:
                 },
             },
         )
-        async def deallocate(hotkey: str, uuid_key: str) -> JSONResponse:
+        async def deallocate(hotkey: str, uuid_key: str, request: Request) -> JSONResponse:
             """
             The GPU deallocate API endpoint. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
             """
+            client_host = request.client.host
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -646,17 +686,21 @@ class RegisterAPI:
                         bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
                         if deregister_response and deregister_response["status"] is True:
-                            bt.logging.info(f"API: Resource {hotkey} de-allocated successfully")
+                            bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
                         else:
-                            bt.logging.error(f"API: Resource {hotkey} de-allocated successfully without response.")
+                            bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
 
                         update_allocation_db(result_hotkey, info, False)
                         await self._update_allocation_wandb()
+                        if client_host == "127.0.0.1":
+                            await self._notify_allocation_status(hotkey, "deallocation", f"deallocate trigger via API interface")
+                            bt.logging.info(f"API: Notify de-allocation status for {hotkey} to websocket")
+
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
                             content={
                                 "success": True,
-                                "message": "Resource de-allocated successfully.",
+                                "message": "Resource deallocated successfully.",
                             },
                         )
                     else:
@@ -1759,6 +1803,31 @@ class RegisterAPI:
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
+    async def _notify_allocation_status(self, hotkey: str, event: str, detail: str):
+        """
+        Notify the allocation by hotkey and status. <br>
+        """
+        try:
+            if self.websocket_connection is not None:
+
+                msg = {"type": "notify",
+                       "payload": {
+                           "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                           "hotkey": hotkey,
+                           "event": event,
+                           "reason": detail,
+                       }
+                }
+
+                for count in range(MAX_NOTIFY_COUNT+1):
+                    await self.websocket_connection.send_text(payload=json.dumps(msg))
+                    await asyncio.sleep(3)
+                return True
+            else:
+                return False
+        except WebSocketException as e:
+            bt.logging.info(f"API: Error notifying: {e}")
+            return False
 
     async def _check_allocation(self):
         """
@@ -1785,10 +1854,12 @@ class RegisterAPI:
                         # handle the case when no response is received or the docker is not running
                         self.checking_table.append(hotkey)
                         bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
-                        if self.checking_table.count(hotkey) >= 3:
+                        if self.checking_table.count(hotkey) >= MAX_TIMEOUT_COUNT:
                             # update the allocation table
                             update_allocation_db(hotkey, info, False)
                             await self._update_allocation_wandb()
+                            await self._notify_allocation_status(hotkey, "deallocation", f"No response timeout for {MAX_TIMEOUT_COUNT} times")
+                            bt.logging.info(f"API: deallocate event triggered due to {hotkey} is timeout for {MAX_TIMEOUT_COUNT} times")
 
                             # remove the hotkey from checking table
                             self.checking_table = [x for x in self.checking_table if x != hotkey]
@@ -1798,7 +1869,7 @@ class RegisterAPI:
                 bt.logging.error(f"API: Error occurred while checking allocation: {e}")
             finally:
                 bt.logging.info(f"API: Allocation checking triggered")
-                await asyncio.sleep(DATA_SYNC_PERIOD)
+                await asyncio.sleep(TIMEOUT_CHECK_PERIOD)
 
 
 
