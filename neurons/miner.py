@@ -479,11 +479,11 @@ class Miner:
                     # Log chain data to wandb
                     chain_data = {
                         "Block": self.current_block,
-                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
-                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
-                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid].numpy()),
-                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid].numpy()),
-                        "Emission": float(self.metagraph.E[self.miner_subnet_uid].numpy()),
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid]),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid]),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid]),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid]),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid]),
                     }
                     self.wandb.log_chain_data(chain_data)
 
