@@ -30,6 +30,7 @@ import asyncio
 import multiprocessing
 import uuid
 import requests
+import socket
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -70,7 +71,7 @@ MAX_NOTIFY_RETRY = 3          # maximum notify count
 NOTIFY_RETRY_PERIOD = 10      # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
-NOTIFY_URL = "http://10.0.0.16:3000/gpus/webhook/deallocation"
+NOTIFY_URL = "http://127.0.0.1:3000/gpus/webhook/deallocation"
 
 
 class UserConfig(BaseModel):
@@ -1539,7 +1540,6 @@ class RegisterAPI:
                 },
             )
 
-
     @staticmethod
     def _init_config():
         """
@@ -1916,6 +1916,25 @@ class RegisterAPI:
             "page_size": page_size,
             "next_page_number": next_page_number
         }
+
+    @staticmethod
+    def check_port_open(host, port, hotkey):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)  # Set a timeout for the connection attempt
+                result = sock.connect_ex((host, port))
+                if result == 0:
+                    bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
+                    return True
+                else:
+                    bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
+                    return False
+        except socket.gaierror:
+            bt.logging.warning(f"API: Hostname {host} could not be resolved")
+            return False
+        except socket.error:
+            bt.logging.error(f"API: Couldn't connect to server {host}")
+            return False
 
     def run(self):
         """
