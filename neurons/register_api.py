@@ -673,7 +673,7 @@ class RegisterAPI:
                         # Notify the deallocation event when the client is localhost
                         if client_host == "127.0.0.1":
                             response = await self._notify_allocation_status(
-                                hotkey, event="deallocation", detail=f"deallocate trigger via API interface"
+                                hotkey=hotkey, uuid=uuid_key, event="deallocation", detail=f"deallocate trigger via API interface"
                             )
 
                             if response:
@@ -1789,7 +1789,7 @@ class RegisterAPI:
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
     @staticmethod
-    async def _notify_allocation_status(hotkey: str, event: str, detail: str):
+    async def _notify_allocation_status(hotkey: str, uuid: str, event: str, detail: str):
         """
         Notify the allocation by hotkey and status. <br>
         """
@@ -1800,10 +1800,11 @@ class RegisterAPI:
         msg = {
             "type": "notify",
             "payload": {
-                   "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                   "hotkey": hotkey,
-                   "event": event,
-                   "detail": detail,
+                "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "hotkey": hotkey,
+                "uuid": uuid,
+                "event": event,
+                "detail": detail,
             }
         }
 
@@ -1856,6 +1857,8 @@ class RegisterAPI:
 
                     index = self.metagraph.hotkeys.index(hotkey)
                     axon = self.metagraph.axons[index]
+                    uuid_key = info.get("uuid")
+
                     register_response = self.dendrite.query(axon, Allocate(timeline=1, checking=True,), timeout=60)
                     if register_response and register_response["status"] is False:
                         self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
@@ -1869,7 +1872,8 @@ class RegisterAPI:
                             update_allocation_db(hotkey, info, False)
                             await self._update_allocation_wandb()
                             response = await self._notify_allocation_status(
-                                hotkey,
+                                hotkey=hotkey,
+                                uuid=uuid_key,
                                 event="deallocation",
                                 detail=f"No response timeout for {ALLOCATE_CHECK_COUNT} times"
                             )
@@ -1883,7 +1887,9 @@ class RegisterAPI:
                                 self.notify_retry_table.append(hotkey)
 
                 for hotkey in self.notify_retry_table:
-                    response = await self._notify_allocation_status(hotkey, event="deallocation",
+                    response = await self._notify_allocation_status(hotkey=hotkey,
+                                                                    uuid=uuid_key,
+                                                                    event="deallocation",
                                                                     detail="Retry deallocation notify event triggered")
                     if response:
                         self.notify_retry_table = [x for x in self.notify_retry_table if x != hotkey]
