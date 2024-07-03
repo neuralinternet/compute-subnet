@@ -25,7 +25,7 @@ import json
 import bittensor as bt
 import torch
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 import asyncio
 import multiprocessing
 import uuid
@@ -311,7 +311,7 @@ class RegisterAPI:
                     msg = {
                         "type": "keepalive",
                         "payload": {
-                            "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            "time": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                         }
                     }
                     await websocket.send_text(json.dumps(msg))
@@ -673,7 +673,7 @@ class RegisterAPI:
                         else:
                             bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
 
-                        deallocated_at = datetime.now()
+                        deallocated_at = datetime.now(timezone.utc)
                         update_allocation_db(result_hotkey, info, False)
                         await self._update_allocation_wandb()
 
@@ -1812,8 +1812,8 @@ class RegisterAPI:
         msg = {
             "type": "notify",
             "payload": {
-                "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "deallocated_at": deallocated_at.strftime('%Y-%m-%d %H:%M:%S'),
+                "time": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
+                "deallocated_at": deallocated_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                 "hotkey": hotkey,
                 "uuid": uuid,
                 "event": event,
@@ -1828,7 +1828,7 @@ class RegisterAPI:
                 data = json.dumps(msg)
                 response = await run_in_threadpool(
                     requests.post, NOTIFY_URL, headers=headers, data=data, timeout=3, json=True, verify=False,
-                    cert=("cert/server.crt", "cert/server.key"),
+#                    cert=("cert/server.crt", "cert/server.key"),
                 )
                 # Check for the expected ACK in the response
                 if response.status_code == 200 or response.status_code == 201:
@@ -1882,7 +1882,7 @@ class RegisterAPI:
                         self.checking_allocated.append(hotkey)
                         # bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
                         if self.checking_allocated.count(hotkey) >= ALLOCATE_CHECK_COUNT:
-                            deallocated_at = datetime.now()
+                            deallocated_at = datetime.now(timezone.utc)
                             # update the allocation table
                             update_allocation_db(hotkey, info, False)
                             await self._update_allocation_wandb()
