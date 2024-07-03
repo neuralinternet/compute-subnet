@@ -1914,9 +1914,9 @@ class RegisterAPI:
                                                                     details=entry["details"])
                     if response:
                         self.notify_retry_table.remove(entry)
-                        bt.logging.info(f"API: Notify {entry["event"]} retry event is success on {entry["hotkey"]} ")
+                        bt.logging.info(f"API: Notify {entry['event']} retry event is success on {entry['hotkey']} ")
                     else:
-                        bt.logging.info(f"API: Notify {entry["event"]} retry event is failed on {entry["hotkey"]} ")
+                        bt.logging.info(f"API: Notify {entry['event']} retry event is failed on {entry['hotkey']} ")
 
             except Exception as e:
                 bt.logging.error(f"API: Error occurred while checking allocation: {e}")
