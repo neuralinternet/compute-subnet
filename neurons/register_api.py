@@ -60,19 +60,22 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import Optional, Union
+from urllib3.exceptions import InsecureRequestWarning
+import urllib3
+urllib3.disable_warnings(InsecureRequestWarning)
 
 # Constants
 DEFAULT_SSL_MODE = 1          # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903       # default port for the API
 DATA_SYNC_PERIOD = 600        # metagraph resync time
-ALLOCATE_CHECK_PERIOD = 600   # timeout check period
+ALLOCATE_CHECK_PERIOD = 600    # timeout check period
 ALLOCATE_CHECK_COUNT = 6      # maximum timeout count
 MAX_NOTIFY_RETRY = 3          # maximum notify count
 NOTIFY_RETRY_PERIOD = 10      # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
-NOTIFY_URL = "http://127.0.0.1:3000/gpus/webhook/deallocation"
-
+NOTIFY_URL = "https://dev.neuralinternet.ai/api/gpus/webhook/deallocation"
+# NOTIFY_URL = "https://127.0.0.1:3000/api/gpus/webhook/deallocation"
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -388,7 +391,8 @@ class RegisterAPI:
                     )
 
                 run_end = time.time()
-                bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
+                time_eval = run_end - run_start
+                # bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
                 result_hotkey = result["hotkey"]
                 result_info = result["info"]
@@ -438,7 +442,7 @@ class RegisterAPI:
 
                 update_allocation_db(result_hotkey, info, True)
                 await self._update_allocation_wandb()
-                bt.logging.info(f"Resource {result_hotkey} was successfully allocated")
+                bt.logging.info(f"API: Resource {result_hotkey} was successfully allocated")
 
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
@@ -527,7 +531,8 @@ class RegisterAPI:
                     )
 
                 run_end = time.time()
-                bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
+                time_eval = run_end - run_start
+                # bt.logging.info(f"API: Create docker container in: {run_end - run_start:.2f} seconds")
 
                 # Iterate through the miner specs details to get gpu_name
                 db = ComputeDb()
@@ -660,27 +665,34 @@ class RegisterAPI:
                             self.dendrite.query, axon, allocate_class, timeout=60
                         )
                         run_end = time.time()
-                        bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
                         if deregister_response and deregister_response["status"] is True:
                             bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
                         else:
                             bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
 
+                        deallocated_at = datetime.now()
                         update_allocation_db(result_hotkey, info, False)
                         await self._update_allocation_wandb()
 
                         # Notify the deallocation event when the client is localhost
                         if client_host == "127.0.0.1":
                             response = await self._notify_allocation_status(
-                                hotkey=hotkey, uuid=uuid_key, event="deallocation", detail=f"deallocate trigger via API interface"
+                                deallocated_at=deallocated_at, hotkey=hotkey, uuid=uuid_key,
+                                event="deallocation", details=f"deallocate trigger via API interface"
                             )
 
                             if response:
                                 bt.logging.info(f"API: Notify deallocation event is success on {hotkey} ")
                             else:
                                 bt.logging.info(f"API: Notify deallocation event is failed on {hotkey} ")
-                                self.notify_retry_table.append(hotkey)
+                                self.notify_retry_table.append({"deallocated_at": deallocated_at,
+                                                                "hotkey": hotkey,
+                                                                "uuid": uuid_key,
+                                                                "event": "deallocation",
+                                                                "details": "deallocate trigger via API interface"})
 
                         return JSONResponse(
                             status_code=status.HTTP_200_OK,
@@ -1789,7 +1801,7 @@ class RegisterAPI:
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
     @staticmethod
-    async def _notify_allocation_status(hotkey: str, uuid: str, event: str, detail: str):
+    async def _notify_allocation_status(deallocated_at: datetime, hotkey: str, uuid: str, event: str, details: str):
         """
         Notify the allocation by hotkey and status. <br>
         """
@@ -1801,10 +1813,11 @@ class RegisterAPI:
             "type": "notify",
             "payload": {
                 "time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "deallocated_at": deallocated_at.strftime('%Y-%m-%d %H:%M:%S'),
                 "hotkey": hotkey,
                 "uuid": uuid,
                 "event": event,
-                "detail": detail,
+                "details": details,
             }
         }
 
@@ -1814,10 +1827,11 @@ class RegisterAPI:
                 # Send the POST request
                 data = json.dumps(msg)
                 response = await run_in_threadpool(
-                    requests.post, NOTIFY_URL, headers=headers, data=data, timeout=5, json=True
+                    requests.post, NOTIFY_URL, headers=headers, data=data, timeout=3, json=True, verify=False,
+                    cert=("cert/server.crt", "cert/server.key"),
                 )
                 # Check for the expected ACK in the response
-                if response.status_code == 200:
+                if response.status_code == 200 or response.status_code == 201:
                     response_data = response.json()
                     # if response_data.get("status") == "success":  # ACK response
                     #     return response
@@ -1868,14 +1882,16 @@ class RegisterAPI:
                         self.checking_allocated.append(hotkey)
                         # bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
                         if self.checking_allocated.count(hotkey) >= ALLOCATE_CHECK_COUNT:
+                            deallocated_at = datetime.now()
                             # update the allocation table
                             update_allocation_db(hotkey, info, False)
                             await self._update_allocation_wandb()
                             response = await self._notify_allocation_status(
+                                deallocated_at=deallocated_at,
                                 hotkey=hotkey,
                                 uuid=uuid_key,
                                 event="deallocation",
-                                detail=f"No response timeout for {ALLOCATE_CHECK_COUNT} times"
+                                details=f"No response timeout for {ALLOCATE_CHECK_COUNT} times"
                             )
                             bt.logging.info(f"API: deallocate event triggered due to {hotkey} "
                                             f"is timeout for {ALLOCATE_CHECK_COUNT} times")
@@ -1884,18 +1900,23 @@ class RegisterAPI:
                             if response:
                                 self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
                             else:
-                                self.notify_retry_table.append(hotkey)
+                                self.notify_retry_table.append({"deallocated_at": deallocated_at,
+                                                                "hotkey": hotkey,
+                                                                "uuid": uuid_key,
+                                                                "event": "deallocation",
+                                                                "details": "Retry deallocation notify event triggered"})
 
-                for hotkey in self.notify_retry_table:
-                    response = await self._notify_allocation_status(hotkey=hotkey,
-                                                                    uuid=uuid_key,
-                                                                    event="deallocation",
-                                                                    detail="Retry deallocation notify event triggered")
+                for entry in self.notify_retry_table:
+                    response = await self._notify_allocation_status(deallocated_at=entry["deallocated_at"],
+                                                                    hotkey=entry["hotkey"],
+                                                                    uuid=entry["uuid"],
+                                                                    event=entry["event"],
+                                                                    details=entry["details"])
                     if response:
-                        self.notify_retry_table = [x for x in self.notify_retry_table if x != hotkey]
-                        bt.logging.info(f"API: Notify deallocation retry event is success on {hotkey} ")
+                        self.notify_retry_table.remove(entry)
+                        bt.logging.info(f"API: Notify {entry["event"]} retry event is success on {entry["hotkey"]} ")
                     else:
-                        bt.logging.info(f"API: Notify deallocation retry event is failed on {hotkey} ")
+                        bt.logging.info(f"API: Notify {entry["event"]} retry event is failed on {entry["hotkey"]} ")
 
             except Exception as e:
                 bt.logging.error(f"API: Error occurred while checking allocation: {e}")
