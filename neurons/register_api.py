@@ -31,6 +31,9 @@ import multiprocessing
 import uuid
 import requests
 import socket
+from urllib3.exceptions import InsecureRequestWarning
+import urllib3
+urllib3.disable_warnings(InsecureRequestWarning)
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -60,15 +63,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import Optional, Union
-from urllib3.exceptions import InsecureRequestWarning
-import urllib3
-urllib3.disable_warnings(InsecureRequestWarning)
 
 # Constants
 DEFAULT_SSL_MODE = 1          # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903       # default port for the API
 DATA_SYNC_PERIOD = 600        # metagraph resync time
-ALLOCATE_CHECK_PERIOD = 600    # timeout check period
+ALLOCATE_CHECK_PERIOD = 600   # timeout check period
 ALLOCATE_CHECK_COUNT = 6      # maximum timeout count
 MAX_NOTIFY_RETRY = 3          # maximum notify count
 NOTIFY_RETRY_PERIOD = 10      # notify retry interval
@@ -626,7 +626,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def deallocate(hotkey: str, uuid_key: str, request: Request) -> JSONResponse:
+        async def deallocate(hotkey: str, uuid_key: str, request: Request, notify_flag: bool = False) -> JSONResponse:
             """
             The GPU deallocate API endpoint. <br>
             hotkey: The miner hotkey to deallocate the gpu resource. <br>
@@ -678,7 +678,7 @@ class RegisterAPI:
                         await self._update_allocation_wandb()
 
                         # Notify the deallocation event when the client is localhost
-                        if client_host == "127.0.0.1":
+                        if notify_flag:
                             response = await self._notify_allocation_status(
                                 deallocated_at=deallocated_at, hotkey=hotkey, uuid=uuid_key,
                                 event="deallocation", details=f"deallocate trigger via API interface"
@@ -1491,6 +1491,7 @@ class RegisterAPI:
                         {"config.role": "validator"},
                         {"config.config.netuid": self.config.netuid},
                         {"config.allocated_hotkeys": {"$regex": "\\d.*"}},
+                        {"state": "running"},
                     ]
                 }
 
@@ -1551,6 +1552,74 @@ class RegisterAPI:
                     "data": jsonable_encoder(allocated_keys_list),
                 },
             )
+
+        @self.app.post("/test/notify",
+                       tags=["Testing"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "Notify allocation event testing is success",
+                           },
+                           400: {
+                                 "model": ErrorResponse,
+                                 "description": "Notify allocation event testing is failed",
+                            },
+                           422: {
+                               "model": ErrorResponse,
+                               "description": "Validation Error, Please check the request body.",
+                           },
+                       }
+                       )
+        async def test_notify(hotkey: str = None, uuid_key: str = None, event: str = None) -> JSONResponse:
+            """
+            This function is used to test the notification system.
+            """
+            try:
+                if not hotkey:
+                    hotkey = "test_hotkey"
+                if not uuid_key:
+                    uuid_key = str(uuid.uuid1())
+                if not event:
+                    event = "deallocation"
+                # Notify the allocation event
+                response = await self._notify_allocation_status(
+                    deallocated_at=datetime.now(timezone.utc),
+                    hotkey=hotkey,
+                    uuid=uuid_key,
+                    event=event,
+                    details="test notify event message",
+                )
+
+                if response:
+                    bt.logging.info(f"API: Notify allocation event testing is success")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "Notify allocation event testing is success",
+                        },
+                    )
+                else:
+                    bt.logging.error(f"API: Notify allocation event testing is failed")
+                    return JSONResponse(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        content={
+                            "success": False,
+                            "message": "Notify allocation event testing is failed",
+                        },
+                    )
+
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while testing notify: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while testing notify",
+                        "err_detail": e.__repr__(),
+                    },
+                )
 
     @staticmethod
     def _init_config():
@@ -1828,7 +1897,7 @@ class RegisterAPI:
                 data = json.dumps(msg)
                 response = await run_in_threadpool(
                     requests.post, NOTIFY_URL, headers=headers, data=data, timeout=3, json=True, verify=False,
-#                    cert=("cert/server.crt", "cert/server.key"),
+                    cert=("cert/server.crt", "cert/server.key"),
                 )
                 # Check for the expected ACK in the response
                 if response.status_code == 200 or response.status_code == 201:
