@@ -291,8 +291,12 @@ class Validator:
                 else:
                     self.stats[uid]["has_docker"] = False
 
-                # Find the maximum score of all uids
-                max_score_uids = max(self.stats[uid]["score"] for uid in self.stats if "score" in self.stats[uid])
+                # Find the maximum score of all uids excluding allocated uids
+                max_score_uids = max(
+                    self.stats[uid]["score"]
+                    for uid in self.stats
+                    if "score" in self.stats[uid] and self.stats[uid].get("ss58_address") not in self.allocated_hotkeys
+                )
 
                 score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=self.allocated_hotkeys, max_score_uid=max_score_uids)
                 self.stats[uid]["score"] = score
