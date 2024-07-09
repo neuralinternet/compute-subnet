@@ -115,9 +115,6 @@ class Miner:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-        self.wandb.update_specs()
-
         # Subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
@@ -148,6 +145,10 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        # Step 4: Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        self.wandb.update_specs()
 
         self.request_specs_processor = RequestSpecsProcessor()
 
