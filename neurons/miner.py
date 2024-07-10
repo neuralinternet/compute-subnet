@@ -116,9 +116,6 @@ class Miner:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-        self.wandb.update_specs()
-
         # Subtensor manages the blockchain connection, facilitating interaction with the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
@@ -172,6 +169,10 @@ class Miner:
 
         self.sync_status()
         self.init_axon()
+
+        # Step 4: Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        self.wandb.update_specs()
 
         self.request_specs_processor = RequestSpecsProcessor()
 
@@ -505,11 +506,11 @@ class Miner:
                     # Log chain data to wandb
                     chain_data = {
                         "Block": self.current_block,
-                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
-                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
-                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid].numpy()),
-                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid].numpy()),
-                        "Emission": float(self.metagraph.E[self.miner_subnet_uid].numpy()),
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid]),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid]),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid]),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid]),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid]),
                     }
                     self.wandb.log_chain_data(chain_data)
 

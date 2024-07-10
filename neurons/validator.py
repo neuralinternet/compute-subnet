@@ -158,8 +158,6 @@ class Validator:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
@@ -176,6 +174,9 @@ class Validator:
         self.db = ComputeDb()
         self.miners: dict = select_miners(self.db)
 
+        # Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+
         # Step 3: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.uids: list = self.metagraph.uids.tolist()
@@ -184,6 +185,9 @@ class Validator:
         self.sync_status()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
+
+        # Initialize allocated_hotkeys as an empty list
+        self.allocated_hotkeys = []
 
         # Init the thread.
         self.lock = threading.Lock()
@@ -269,7 +273,7 @@ class Validator:
         self.stats = select_challenge_stats(self.db)
 
         # Fetch allocated hotkeys
-        allocated_hotkeys = self.wandb.get_allocated_hotkeys(self.get_valid_validator_hotkeys(), True)
+        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(self.get_valid_validator_hotkeys(), True)
 
         # Fetch docker requirement
         has_docker_hotkeys = select_has_docker_miners_hotkey(self.db)
@@ -288,7 +292,14 @@ class Validator:
                 else:
                     self.stats[uid]["has_docker"] = False
 
-                score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=allocated_hotkeys)
+                # Find the maximum score of all uids excluding allocated uids
+                max_score_uids = max(
+                    self.stats[uid]["score"]
+                    for uid in self.stats
+                    if "score" in self.stats[uid] and self.stats[uid].get("ss58_address") not in self.allocated_hotkeys
+                )
+
+                score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=self.allocated_hotkeys, max_score_uid=max_score_uids)
                 self.stats[uid]["score"] = score
             except (ValueError, KeyError):
                 score = 0
@@ -678,6 +689,8 @@ class Validator:
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                                 try:
                                     axon = self._queryable_uids[_uid]
+                                    if axon.hotkey in self.allocated_hotkeys:
+                                        continue
                                     difficulty = self.calc_difficulty(_uid)
                                     password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
                                     self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
@@ -733,10 +746,10 @@ class Validator:
                         # Log chain data to wandb
                         chain_data = {
                             "Block": self.current_block,
-                            "Stake": float(self.metagraph.S[self.validator_subnet_uid].numpy()),
-                            "Rank": float(self.metagraph.R[self.validator_subnet_uid].numpy()),
-                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid].numpy()),
-                            "Emission": float(self.metagraph.E[self.validator_subnet_uid].numpy()),
+                            "Stake": float(self.metagraph.S[self.validator_subnet_uid]),
+                            "Rank": float(self.metagraph.R[self.validator_subnet_uid]),
+                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid]),
+                            "Emission": float(self.metagraph.E[self.validator_subnet_uid]),
                         }
                         self.wandb.log_chain_data(chain_data)
 
