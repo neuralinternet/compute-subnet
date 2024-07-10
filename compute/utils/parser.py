@@ -55,7 +55,6 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="List of coldkeys to whitelist. Default: [].",
             default=[],
         )
-
         self.add_validator_argument()
         self.add_miner_argument()
 
@@ -156,6 +155,13 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="Total quorum before starting the whitelist. Default: 50.",
             type=int,
             default=60,
+        )
+        # add ssh port argument
+        self.add_argument(
+            "--ssh.port",
+            type=int,
+            default=4444,
+            help="The ssh port for the allocation service.",
         )
 
     @staticmethod
