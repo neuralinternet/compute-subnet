@@ -139,6 +139,22 @@ class Miner:
 
         check_cuda_availability()
 
+        # Step 3: Set up hashcat for challenges
+        self.hashcat_path = self.config.miner_hashcat_path
+        self.hashcat_workload_profile = self.config.miner_hashcat_workload_profile
+        self.hashcat_extended_options = self.config.miner_hashcat_extended_options
+
+        check_hashcat_version(hashcat_path=self.hashcat_path)
+
+        self.uids: list = self.metagraph.uids.tolist()
+
+        self.sync_status()
+        self.init_axon()
+
+        # Step 4: Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+        self.wandb.update_specs()
+
         # check allocation status
         file_path = 'allocation_key'
         # Open the file in read mode ('r') and read the data
@@ -156,23 +172,6 @@ class Miner:
             kill_container()
             self.wandb.update_allocated(None)
             bt.logging.info("Container is already running without allocated. Killing the container.")
-
-
-        # Step 3: Set up hashcat for challenges
-        self.hashcat_path = self.config.miner_hashcat_path
-        self.hashcat_workload_profile = self.config.miner_hashcat_workload_profile
-        self.hashcat_extended_options = self.config.miner_hashcat_extended_options
-
-        check_hashcat_version(hashcat_path=self.hashcat_path)
-
-        self.uids: list = self.metagraph.uids.tolist()
-
-        self.sync_status()
-        self.init_axon()
-
-        # Step 4: Initialize wandb
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-        self.wandb.update_specs()
 
         self.request_specs_processor = RequestSpecsProcessor()
 
