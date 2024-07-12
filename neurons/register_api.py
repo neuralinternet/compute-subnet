@@ -62,7 +62,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 # Constants
 DEFAULT_SSL_MODE = 1          # 1 for client CERT optional, 2 for client CERT_REQUIRED
@@ -737,6 +737,57 @@ class RegisterAPI:
                 db.close()
 
         @self.app.post(
+            path="/service/check_miner_status",
+            tags=["Allocation"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "Resource deallocated successfully.",
+                },
+                403: {
+                    "model": ErrorResponse,
+                    "description": "An error occurred while retrieving hotkey status.",
+                },
+            }
+        )
+        async def check_miner_status(hotkey_list: List[str]) -> JSONResponse:
+            checking_list = []
+            for hotkey in hotkey_list:
+                checking_result = {
+                    "hotkey": hotkey,
+                    "status": "Not Found"
+                }
+                for axon in self.metagraph.axons:
+                    if axon.hotkey == hotkey:
+                        try:
+                            register_response = await run_in_threadpool(self.dendrite.query,
+                                            axon, Allocate(timeline=1, checking=True, ), timeout=60)
+                            if register_response:
+                                if register_response["status"] is True:
+                                    checking_result = {"hotkey": hotkey, "status": "Docker OFFLINE"}
+                                else:
+                                    checking_result = {"hotkey": hotkey, "status": "Docker ONLINE"}
+                            else:
+                                checking_result = {"hotkey": hotkey, "status": "Miner NO_RESPONSE"}
+                        except Exception as e:
+                            bt.logging.error(
+                                f"API: An error occur during the : {e}"
+                            )
+                            checking_result = {"hotkey": hotkey, "status": "Unknown"}
+                checking_list.append(checking_result)
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "success": True,
+                    "message": "List hotkey status successfully.",
+                    "data": jsonable_encoder(checking_list),
+                },
+            )
+
+
+        @self.app.post(
             "/list/allocations_sql",
             tags=["SQLite"],
             response_model=SuccessResponse | ErrorResponse,
@@ -1005,6 +1056,17 @@ class RegisterAPI:
                             bt.logging.error(f"API: Error occurred while filtering resources: {e}")
                             continue
 
+                status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
+                try:
+                    for item in resource_list:
+                        status_code = item.dict()["allocate_status"]
+                        if status_code in status_counts:
+                            status_counts[status_code] += 1
+                            status_counts["Total"] += 1
+                except Exception as e:
+                    bt.logging.error(f"API: Error occurred while counting status: {e}")
+                    status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
+
                 bt.logging.info(f"API: List resources successfully")
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
@@ -1012,6 +1074,7 @@ class RegisterAPI:
                         "success": True,
                         "message": "List resources successfully",
                         "data": jsonable_encoder(resource_list),
+                        "stats": status_counts,
                     },
                 )
 
