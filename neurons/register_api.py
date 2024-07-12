@@ -908,7 +908,7 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_resources(query: ResourceQuery = None, ) -> JSONResponse:
+        async def list_resources(query: ResourceQuery = None, stats: bool = False) -> JSONResponse:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
@@ -1056,27 +1056,37 @@ class RegisterAPI:
                             bt.logging.error(f"API: Error occurred while filtering resources: {e}")
                             continue
 
-                status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
-                try:
-                    for item in resource_list:
-                        status_code = item.dict()["allocate_status"]
-                        if status_code in status_counts:
-                            status_counts[status_code] += 1
-                            status_counts["Total"] += 1
-                except Exception as e:
-                    bt.logging.error(f"API: Error occurred while counting status: {e}")
+                if stats:
                     status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
+                    try:
+                        for item in resource_list:
+                            status_code = item.dict()["allocate_status"]
+                            if status_code in status_counts:
+                                status_counts[status_code] += 1
+                                status_counts["Total"] += 1
+                    except Exception as e:
+                        bt.logging.error(f"API: Error occurred while counting status: {e}")
+                        status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
 
-                bt.logging.info(f"API: List resources successfully")
-                return JSONResponse(
-                    status_code=status.HTTP_200_OK,
-                    content={
-                        "success": True,
-                        "message": "List resources successfully",
-                        "data": jsonable_encoder(resource_list),
-                        "stats": status_counts,
-                    },
-                )
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder({"stats": status_counts}),
+                        },
+                    )
+                else:
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder(resource_list),
+                        },
+                    )
 
             else:
                 bt.logging.info(f"API: There is no resource available")
