@@ -520,7 +520,7 @@ class RegisterAPI:
                 result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey,
                                                  requirements.timeline, public_key, docker_requirement.dict())
                 if result["status"] is False:
-                    bt.logging.error(f"API: Allocation Failed : {result['msg']}")
+                    bt.logging.error(f"API: Allocation {hotkey} Failed : {result['msg']}")
                     return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={
