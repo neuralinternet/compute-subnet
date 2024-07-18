@@ -68,7 +68,7 @@ from typing import Optional, Union, List
 DEFAULT_SSL_MODE = 1          # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903       # default port for the API
 DATA_SYNC_PERIOD = 600        # metagraph resync time
-ALLOCATE_CHECK_PERIOD = 600   # timeout check period
+ALLOCATE_CHECK_PERIOD = 300   # timeout check period
 ALLOCATE_CHECK_COUNT = 6      # maximum timeout count
 MAX_NOTIFY_RETRY = 3          # maximum notify count
 NOTIFY_RETRY_PERIOD = 10      # notify retry interval
@@ -1002,9 +1002,9 @@ class RegisterAPI:
                         # allocate_status = "N/A"
 
                         if hotkey in allocated_hotkeys:
-                            allocate_status = "Res."
+                            allocate_status = "reserved"
                         else:
-                            allocate_status = "Avail."
+                            allocate_status = "available"
 
                         add_resource = False
                         # Print the row with column separators
@@ -1057,16 +1057,16 @@ class RegisterAPI:
                             continue
 
                 if stats:
-                    status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
+                    status_counts = {"available": 0, "reserved": 0, "total": 0}
                     try:
                         for item in resource_list:
                             status_code = item.dict()["allocate_status"]
                             if status_code in status_counts:
                                 status_counts[status_code] += 1
-                                status_counts["Total"] += 1
+                                status_counts["total"] += 1
                     except Exception as e:
                         bt.logging.error(f"API: Error occurred while counting status: {e}")
-                        status_counts = {"Avail.": 0, "Res.": 0, "Total": 0}
+                        status_counts = {"available": 0, "reserved": 0, "total": 0}
 
                     bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(
@@ -2023,6 +2023,17 @@ class RegisterAPI:
                         # handle the case when no response is received or the docker is not running
                         self.checking_allocated.append(hotkey)
                         # bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
+                        deallocated_at = datetime.now(timezone.utc)
+                        response = await self._notify_allocation_status(
+                            deallocated_at=deallocated_at,
+                            hotkey=hotkey,
+                            uuid=uuid_key,
+                            event="offline_warning",
+                            details=f"No response timeout for {ALLOCATE_CHECK_PERIOD} seconds"
+                        )
+                        if not response:
+                            pass
+
                         if self.checking_allocated.count(hotkey) >= ALLOCATE_CHECK_COUNT:
                             deallocated_at = datetime.now(timezone.utc)
                             # update the allocation table
@@ -2039,9 +2050,7 @@ class RegisterAPI:
                                             f"is timeout for {ALLOCATE_CHECK_COUNT} times")
 
                             # remove the hotkey from checking table
-                            if response:
-                                self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
-                            else:
+                            if not response:
                                 self.notify_retry_table.append({"deallocated_at": deallocated_at,
                                                                 "hotkey": hotkey,
                                                                 "uuid": uuid_key,
