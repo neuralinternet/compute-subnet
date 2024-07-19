@@ -157,21 +157,22 @@ class Miner:
 
         # check allocation status
         file_path = 'allocation_key'
-        # Open the file in read mode ('r') and read the data
-        with open(file_path, 'r') as file:
-            allocation_key_encoded = file.read()
+        if os.path.exists(file_path):
+            # Open the file in read mode ('r') and read the data
+            with open(file_path, 'r') as file:
+                allocation_key_encoded = file.read()
 
-        if not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address) and allocation_key_encoded:
-            # Decode the base64-encoded public key from the file
-            public_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
-            deregister_allocation(public_key)
-            self.wandb.update_allocated(None)
-            bt.logging.info("Allocation is not exist in wandb. Resetting the allocation status.")
+            if not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address) and allocation_key_encoded:
+                # Decode the base64-encoded public key from the file
+                public_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+                deregister_allocation(public_key)
+                self.wandb.update_allocated(None)
+                bt.logging.info("Allocation is not exist in wandb. Resetting the allocation status.")
 
-        if check_container() and not allocation_key_encoded:
-            kill_container()
-            self.wandb.update_allocated(None)
-            bt.logging.info("Container is already running without allocated. Killing the container.")
+            if check_container() and not allocation_key_encoded:
+                kill_container()
+                self.wandb.update_allocated(None)
+                bt.logging.info("Container is already running without allocated. Killing the container.")
 
         self.request_specs_processor = RequestSpecsProcessor()
 
