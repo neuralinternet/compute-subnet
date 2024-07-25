@@ -65,13 +65,13 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 
 # Constants
-DEFAULT_SSL_MODE = 1  # 1 for client CERT optional, 2 for client CERT_REQUIRED
-DEFAULT_API_PORT = 8903  # default port for the API
-DATA_SYNC_PERIOD = 600  # metagraph resync time
+DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_API_PORT = 8903      # default port for the API
+DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
-ALLOCATE_CHECK_COUNT = 6  # maximum timeout count
-MAX_NOTIFY_RETRY = 3  # maximum notify count
-NOTIFY_RETRY_PERIOD = 10  # notify retry interval
+ALLOCATE_CHECK_COUNT = 6     # maximum timeout count
+MAX_NOTIFY_RETRY = 3         # maximum notify count
+NOTIFY_RETRY_PERIOD = 10     # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 DEALLOCATION_NOTIFY_URL = "https://dev.neuralinternet.ai/api/gpus/webhook/deallocation"
@@ -182,11 +182,6 @@ class RegisterAPI:
             wandb: Optional[ComputeWandb] = None,
     ):
 
-        self.app = FastAPI(debug=False)
-        self._setup_routes()
-        self.process = None
-        self.websocket_connection = None
-
         # Compose User Config Data with bittensor config
         # Get the config from the user config
         if config is None:
@@ -257,6 +252,13 @@ class RegisterAPI:
             else:
                 self.port = self.config.axon.port
 
+        if self.config.logging.trace:
+            self.app = FastAPI(debug=False)
+        else:
+            self.app = FastAPI(debug=False, docs_url=None, redoc_url=None)
+        self._setup_routes()
+        self.process = None
+        self.websocket_connection = None
         self.allocation_table = []
         self.checking_allocated = []
         self.notify_retry_table = []
