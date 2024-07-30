@@ -919,7 +919,10 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_resources(query: ResourceQuery = None, stats: bool = False) -> JSONResponse:
+        async def list_resources(query: ResourceQuery = None,
+                                 stats: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
@@ -1089,13 +1092,24 @@ class RegisterAPI:
                         },
                     )
                 else:
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(resource_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": resource_list,
+                            "page_number": 1,
+                            "page_size": len(resource_list),
+                            "next_page_number": None,
+                        }
+
                     bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
                             "success": True,
                             "message": "List resources successfully",
-                            "data": jsonable_encoder(resource_list),
+                            "data": jsonable_encoder(result),
                         },
                     )
 
@@ -1989,7 +2003,7 @@ class RegisterAPI:
                 data = json.dumps(msg)
                 response = await run_in_threadpool(
                     requests.post, notify_url, headers=headers, data=data, timeout=3, json=True, verify=False,
-                    cert=("cert/server.crt", "cert/server.key"),
+                    cert=("cert/server.cer", "cert/server.key"),
                 )
                 # Check for the expected ACK in the response
                 if response.status_code == 200 or response.status_code == 201:
