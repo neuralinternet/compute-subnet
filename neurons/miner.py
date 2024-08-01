@@ -49,7 +49,14 @@ from compute.utils.version import (
     get_remote_version,
 )
 from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
-from neurons.Miner.container import build_check_container, build_sample_container, check_container, kill_container
+from neurons.Miner.container import (
+    build_check_container,
+    build_sample_container,
+    check_container,
+    kill_container,
+    restart_container,
+    exchange_key_container,
+)
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
@@ -358,6 +365,8 @@ class Miner:
         checking = synapse.checking
         docker_requirement = synapse.docker_requirement
         docker_requirement['ssh_port'] = int(self.config.ssh.port)
+        docker_change = synapse.docker_change
+        docker_action = synapse.docker_action
 
         if checking is True:
             if timeline > 0:
@@ -368,12 +377,25 @@ class Miner:
                 result = check_if_allocated(public_key=public_key)
                 synapse.output = result
         else:
-            public_key = synapse.public_key
-            if timeline > 0:
-                result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
-                synapse.output = result
+            if docker_change is True:
+                if docker_action['action'] == 'exchange_key':
+                    public_key = synapse.public_key
+                    new_ssh_key = docker_action['ssh_key']
+                    result = exchange_key_container(new_ssh_key)
+                    synapse.output = result
+                elif docker_action['action'] == 'restart':
+                    public_key = synapse.public_key
+                    result = restart_container()
+                    synapse.output = result
+                else:
+                    bt.logging.info(f"Unknown action: {docker_action['action']}")
             else:
-                result = deregister_allocation(public_key)
+                public_key = synapse.public_key
+                if timeline > 0:
+                    result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
+                    synapse.output = result
+                else:
+                    result = deregister_allocation(public_key)
                 synapse.output = result
         self.update_allocation(synapse)
         return synapse

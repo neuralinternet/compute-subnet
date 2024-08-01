@@ -278,3 +278,50 @@ def build_sample_container():
     except Exception as e:
         bt.logging.info(f"Error build sample container {e}")
         return {"status": False}
+
+
+def restart_container():
+    try:
+        client, containers = get_docker()
+        running_container = None
+        for container in containers:
+            if container_name in container.name:
+                running_container = container
+                break
+        if running_container:
+            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+            if running_container.status == "running":
+                running_container.exec_run(cmd="kill -15 1")
+                running_container.wait()
+                running_container.restart()
+            return {"status": True}
+        else:
+            bt.logging.info("Unable to find container")
+            return {"status": False}
+    except Exception as e:
+        bt.logging.info(f"Error restart container {e}")
+        return {"status": False}
+
+
+def exchange_key_container(new_ssh_key: str):
+    try:
+        client, containers = get_docker()
+        running_container = None
+        for container in containers:
+            if container_name in container.name:
+                running_container = container
+                break
+        if running_container:
+            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+            if running_container.status == "running":
+                running_container.exec_run(cmd=f"bash -c \"echo '{new_ssh_key}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
+                running_container.exec_run(cmd="kill -15 1")
+                running_container.wait()
+                running_container.restart()
+            return {"status": True}
+        else:
+            bt.logging.info("Unable to find container")
+            return {"status": False}
+    except Exception as e:
+        bt.logging.info(f"Error changing SSH key on container {e}")
+        return {"status": False}

@@ -83,6 +83,11 @@ class Allocate(bt.Synapse):
         "volume_path": "/tmp",
         "dockerfile": ""
     }
+    docker_change: bool = False
+    docker_action: dict = {
+        "action": "",
+        "ssh_key": "",
+    }
 
     def deserialize(self) -> dict:
         """

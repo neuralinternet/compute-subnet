@@ -713,7 +713,7 @@ class RegisterAPI:
                             },
                         )
                     else:
-                        bt.logging.error(f"API: Invalid UUID key")
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
                         return JSONResponse(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             content={
@@ -797,6 +797,213 @@ class RegisterAPI:
                     "data": jsonable_encoder(checking_list),
                 },
             )
+
+        @self.app.post(path="/service/restart_docker",
+                       tags=["Allocation"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "Resource restart successfully.",
+                           },
+                           403: {
+                               "model": ErrorResponse,
+                               "description": "An error occurred while restarting docker.",
+                           },
+                       })
+        async def restart_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "restart",
+                        "ssh_key": "",
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker restart successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker restart without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource restarted successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Restart not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during restart operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during restart operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
+
+
+        @self.app.post("/service/exchange_docker_key",
+                       tags=["Allocation"],
+                       response_model=SuccessResponse | ErrorResponse,
+                       responses={
+                           200: {
+                               "model": SuccessResponse,
+                               "description": "Resource ssh_key was changed successfully.",
+                           },
+                           403: {
+                               "model": ErrorResponse,
+                               "description": "An error occurred while exchanging docker key.",
+                           },
+                       })
+        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "exchange_key",
+                        "ssh_key": ssh_key,
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker ssh_key exchange successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker ssh_key exchange without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource ssh_key is exchanged successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Exchange ssh_key not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSONResponse(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during exchange ssh_key operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during exchange ssh_key operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
 
         @self.app.post(
             "/list/allocations_sql",
@@ -919,7 +1126,10 @@ class RegisterAPI:
                 },
             },
         )
-        async def list_resources(query: ResourceQuery = None, stats: bool = False) -> JSONResponse:
+        async def list_resources(query: ResourceQuery = None,
+                                 stats: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
             """
             The list resources API endpoint. <br>
             The API will return the current miner resource and their detail specs on the validator. <br>
@@ -1089,13 +1299,24 @@ class RegisterAPI:
                         },
                     )
                 else:
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(resource_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": resource_list,
+                            "page_number": 1,
+                            "page_size": len(resource_list),
+                            "next_page_number": None,
+                        }
+
                     bt.logging.info(f"API: List resources successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
                             "success": True,
                             "message": "List resources successfully",
-                            "data": jsonable_encoder(resource_list),
+                            "data": jsonable_encoder(result),
                         },
                     )
 
@@ -1705,6 +1926,7 @@ class RegisterAPI:
                     },
                 )
 
+
     @staticmethod
     def _init_config():
         """
@@ -1989,7 +2211,7 @@ class RegisterAPI:
                 data = json.dumps(msg)
                 response = await run_in_threadpool(
                     requests.post, notify_url, headers=headers, data=data, timeout=3, json=True, verify=False,
-                    cert=("cert/server.crt", "cert/server.key"),
+                    cert=("cert/server.cer", "cert/server.key"),
                 )
                 # Check for the expected ACK in the response
                 if response.status_code == 200 or response.status_code == 201:
