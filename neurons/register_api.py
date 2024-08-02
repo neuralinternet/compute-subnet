@@ -34,6 +34,7 @@ import socket
 from urllib3.exceptions import InsecureRequestWarning
 import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
+from dotenv import load_dotenv
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -74,10 +75,7 @@ MAX_NOTIFY_RETRY = 3         # maximum notify count
 NOTIFY_RETRY_PERIOD = 10     # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
-DEALLOCATION_NOTIFY_URL = "https://dev.neuralinternet.ai/api/gpus/webhook/deallocation"
-STATUS_NOTIFY_URL = "https://dev.neuralinternet.ai/api/gpus/webhook/status-change-warning"
-# DEALLOCATION_NOTIFY_URL = "https://127.0.0.1:3000/api/gpus/webhook/deallocation"
-# STATUS_NOTIFY_URL = "https://127.0.0.1:3000/api/gpus/webhook/status-change-warning"
+
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -256,12 +254,16 @@ class RegisterAPI:
             self.app = FastAPI(debug=False)
         else:
             self.app = FastAPI(debug=False, docs_url=None, redoc_url=None)
+
+        load_dotenv()
         self._setup_routes()
         self.process = None
         self.websocket_connection = None
         self.allocation_table = []
         self.checking_allocated = []
         self.notify_retry_table = []
+        self.deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
+        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -664,17 +666,26 @@ class RegisterAPI:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
                         run_start = time.time()
-                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
-                        deregister_response = await run_in_threadpool(
-                            self.dendrite.query, axon, allocate_class, timeout=60
-                        )
-                        run_end = time.time()
-                        time_eval = run_end - run_start
-                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+                        retry_count = 0
 
-                        if deregister_response and deregister_response["status"] is True:
-                            bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
-                        else:
+                        while retry_count < MAX_NOTIFY_RETRY:
+                            allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
+                            deregister_response = await run_in_threadpool(
+                                self.dendrite.query, axon, allocate_class, timeout=60
+                            )
+                            run_end = time.time()
+                            time_eval = run_end - run_start
+                            # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                            if deregister_response and deregister_response["status"] is True:
+                                bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
+                                break
+                            else:
+                                retry_count += 1
+                                bt.logging.info(f"API: Resource {hotkey} no response to deallocated signal - retry {retry_count}")
+                                await asyncio.sleep(1)
+
+                        if retry_count == MAX_NOTIFY_RETRY:
                             bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
 
                         deallocated_at = datetime.now(timezone.utc)
@@ -1174,7 +1185,7 @@ class RegisterAPI:
                                 # Extract GPU details
                                 gpu_miner = details["gpu"]
                                 gpu_capacity = "{:.2f}".format(
-                                    (gpu_miner["capacity"] / 1000)
+                                    (gpu_miner["capacity"] / 1024)
                                 )
                                 gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                                 gpu_count = gpu_miner["count"]
@@ -2175,8 +2186,8 @@ class RegisterAPI:
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
-    @staticmethod
-    async def _notify_allocation_status(event_time: datetime, hotkey: str,
+
+    async def _notify_allocation_status(self, event_time: datetime, hotkey: str,
                                         uuid: str, event: str, details: str | None = ""):
         """
         Notify the allocation by hotkey and status. <br>
@@ -2193,7 +2204,7 @@ class RegisterAPI:
                 "status": event,
                 "uuid": uuid,
             }
-            notify_url = DEALLOCATION_NOTIFY_URL
+            notify_url = self.deallocation_notify_url
         elif event == "OFFLINE" or event == "ONLINE":
             msg = {
                 "time": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
@@ -2202,7 +2213,7 @@ class RegisterAPI:
                 "status": event,
                 "uuid": uuid,
             }
-            notify_url = STATUS_NOTIFY_URL
+            notify_url = self.status_notify_url
 
         retries = 0
         while retries < MAX_NOTIFY_RETRY:
