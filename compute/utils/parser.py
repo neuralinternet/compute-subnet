@@ -55,7 +55,6 @@ class ComputeArgPaser(argparse.ArgumentParser):
             help="List of coldkeys to whitelist. Default: [].",
             default=[],
         )
-
         self.add_validator_argument()
         self.add_miner_argument()
 
@@ -109,9 +108,9 @@ class ComputeArgPaser(argparse.ArgumentParser):
         self.add_argument(
             "--validator.whitelist.updated.threshold",
             dest="validator_whitelist_updated_threshold",
-            help="Total quorum before starting the whitelist. Default: 70.",
+            help="Total quorum before starting the whitelist. Default: 90.",
             type=int,
-            default=60,
+            default=90,
         )
 
     def add_miner_argument(self):
@@ -147,15 +146,22 @@ class ComputeArgPaser(argparse.ArgumentParser):
             "--miner.whitelist.not.updated",
             action="store_true",
             dest="miner_whitelist_not_updated",
-            help="Whitelist validators not using the last version of the code. Default: False.",
-            default=False,
+            help="Whitelist validators not using the last version of the code. Default: True.",
+            default=True,
         )
         self.add_argument(
             "--miner.whitelist.updated.threshold",
             dest="miner_whitelist_updated_threshold",
-            help="Total quorum before starting the whitelist. Default: 50.",
+            help="Total quorum before starting the whitelist. Default: 90.",
             type=int,
-            default=60,
+            default=90,
+        )
+        # add ssh port argument
+        self.add_argument(
+            "--ssh.port",
+            type=int,
+            default=4444,
+            help="The ssh port for the allocation service.",
         )
 
     @staticmethod

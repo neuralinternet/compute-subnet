@@ -76,6 +76,18 @@ class Allocate(bt.Synapse):
     checking: bool = True
     output: dict = {}
     public_key: str = ""
+    docker_requirement: dict = {
+        "base_image": "ubuntu",
+        "ssh_key": "",
+        "ssh_port": 4444,
+        "volume_path": "/tmp",
+        "dockerfile": ""
+    }
+    docker_change: bool = False
+    docker_action: dict = {
+        "action": "",
+        "ssh_key": "",
+    }
 
     def deserialize(self) -> dict:
         """

@@ -26,7 +26,7 @@ from neurons.Miner.schedule import start
 
 
 # Register for given timeline and device_requirement
-def register_allocation(timeline, device_requirement, public_key):
+def register_allocation(timeline, device_requirement, public_key, docker_requirement: dict):
     try:
         kill_status = kill_container()
 
@@ -47,7 +47,7 @@ def register_allocation(timeline, device_requirement, public_key):
         ram_usage = {"capacity": str(int(ram_capacity / 1073741824)) + "g"}
         hard_disk_usage = {"capacity": str(int(hard_disk_capacity / 1073741824)) + "g"}
 
-        run_status = run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key)
+        run_status = run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement)
 
         if run_status["status"]:
             bt.logging.info("Successfully allocated container.")

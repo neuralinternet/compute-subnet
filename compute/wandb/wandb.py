@@ -47,15 +47,36 @@ class ComputeWandb:
 
         # Try to get an existing run_id for the hotkey
         self.run_id = self.get_run_id(self.hotkey)
-
         try:
             if self.run_id is None:
-                # No existing run_id, so initialize a new run
-                run = wandb.init(project=PUBLIC_WANDB_NAME, entity=PUBLIC_WANDB_ENTITY, name=self.run_name )
-                self.run_id = run.id
-                # Store the new run_id in the database
-                self.save_run_id(self.hotkey, self.run_id)
-                wandb.finish()
+                filter_rule = {
+                    "$and": [
+                        {"config.config.netuid": self.config.netuid},
+                        {"display_name": self.run_name},
+                    ]
+                }
+                # Get all runs with the run_name
+                runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filters=filter_rule)
+                # Get the latest run and init from the found run on wandb
+                if len(runs)>=1:
+                    latest_run = runs[0]
+                    self.run_id = latest_run.id
+                    # Store the new run_id in the database
+                    self.save_run_id(self.hotkey, self.run_id)
+                    # Remove the unused run_id from the database
+                    if len(runs) > 1:
+                        for run in runs:
+                            if run.id != self.run_id and run.state != "running":
+                                run.delete(delete_artifacts=(True))
+                    wandb.finish()
+                # run can't be found on wandb either, so initialize a new run
+                elif len(runs)==0:
+                    # No existing run_id, so initialize a new run
+                    run = wandb.init(project=self.project.name, entity=self.entity, name=self.run_name)
+                    self.run_id = run.id
+                    # Store the new run_id in the database
+                    self.save_run_id(self.hotkey, self.run_id)
+                    wandb.finish()
 
             self.run = wandb.init(project=self.project.name, entity=self.entity, id=self.run_id, resume="allow")
         except Exception as e:
@@ -192,17 +213,18 @@ class ComputeWandb:
         This function gets all allocated hotkeys from all validators.
         Only relevant for validators.
         """
-        # Query all runs in the project
+        # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
-        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}")
+        validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                                       filters={"$and": [{"config.role": "validator"},
+                                                         {"config.config.netuid": self.config.netuid},
+                                                         {"config.allocated_hotkeys": {"$exists": True}},]
+                                                })
 
          # Check if the runs list is empty
-        if not runs:
+        if not validator_runs:
             bt.logging.info("No validator info found in the project opencompute.")
             return []
-
-        # Filter runs where the role is 'validator'
-        validator_runs = [run for run in runs if run.config.get('role') == 'validator']
 
         # Initialize an empty list to store allocated keys from runs with a valid signature
         allocated_keys_list = []
@@ -238,8 +260,11 @@ class ComputeWandb:
         db_specs_dict = {}
 
         self.api.flush()
-        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}")
-
+        runs = self.api.runs(f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                            filters={"$and": [{"config.role": "miner"},
+                                               {"config.config.netuid": self.config.netuid},
+                                               {"state": "running"}]
+                                    })
         try:
             # Iterate over all runs in the opencompute project
             for index, run in enumerate(runs, start=1):
@@ -303,3 +328,15 @@ class ComputeWandb:
                 bt.logging.info(f"Error verifying signature for Run ID: {run_id_str}, Name: {run.name}: {e}")
 
         return False
+
+    def sync_allocated(self, hotkey):
+        """
+        This function syncs the allocated status of the miner with the wandb run.
+        """
+        # Fetch allocated hotkeys
+        allocated_hotkeys = self.get_allocated_hotkeys([], False)
+
+        if hotkey in allocated_hotkeys:
+            return True
+        else:
+            return False
