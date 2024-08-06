@@ -60,7 +60,7 @@ from neurons.Miner.container import (
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
-from neurons.Miner.specs import RequestSpecsProcessor
+# from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
 
 
@@ -181,7 +181,8 @@ class Miner:
                 self.wandb.update_allocated(None)
                 bt.logging.info("Container is already running without allocated. Killing the container.")
 
-        self.request_specs_processor = RequestSpecsProcessor()
+        # Disable the Spec request and replaced with WanDB
+        # self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
 
@@ -198,10 +199,11 @@ class Miner:
             forward_fn=self.challenge,
             blacklist_fn=self.blacklist_challenge,
             priority_fn=self.priority_challenge,
-        ).attach(
-            forward_fn=self.specs,
-            blacklist_fn=self.blacklist_specs,
-            priority_fn=self.priority_specs,
+        # Disable the spec query and replaced with WanDB
+        # ).attach(
+        #      forward_fn=self.specs,
+        #      blacklist_fn=self.blacklist_specs,
+        #      priority_fn=self.priority_specs,
         )
 
         # Serve passes the axon information to the network + netuid we are hosting on.
@@ -326,19 +328,19 @@ class Miner:
         return priority
 
     # The blacklist function decides if a request should be ignored.
-    def blacklist_specs(self, synapse: Specs) -> typing.Tuple[bool, str]:
-        return self.base_blacklist(synapse)
+    # def blacklist_specs(self, synapse: Specs) -> typing.Tuple[bool, str]:
+    #    return self.base_blacklist(synapse)
 
     # The priority function determines the order in which requests are handled.
     # More valuable or higher-priority requests are processed before others.
-    def priority_specs(self, synapse: Specs) -> float:
-        return self.base_priority(synapse) + miner_priority_specs
+    # def priority_specs(self, synapse: Specs) -> float:
+    #    return self.base_priority(synapse) + miner_priority_specs
 
     # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    def specs(self, synapse: Specs) -> Specs:
-        app_data = synapse.specs_input
-        synapse.specs_output = self.request_specs_processor.get_respond(app_data)
-        return synapse
+    # def specs(self, synapse: Specs) -> Specs:
+    #    app_data = synapse.specs_input
+    #    synapse.specs_output = self.request_specs_processor.get_respond(app_data)
+    #    return synapse
 
     # The blacklist function decides if a request should be ignored.
     def blacklist_allocate(self, synapse: Allocate) -> typing.Tuple[bool, str]:
