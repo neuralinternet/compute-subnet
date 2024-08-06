@@ -198,10 +198,11 @@ class Miner:
             forward_fn=self.challenge,
             blacklist_fn=self.blacklist_challenge,
             priority_fn=self.priority_challenge,
-        ).attach(
-            forward_fn=self.specs,
-            blacklist_fn=self.blacklist_specs,
-            priority_fn=self.priority_specs,
+        # Disable the spec query and replaced with WanDB
+        # ).attach(
+        #      forward_fn=self.specs,
+        #      blacklist_fn=self.blacklist_specs,
+        #      priority_fn=self.priority_specs,
         )
 
         # Serve passes the axon information to the network + netuid we are hosting on.
