@@ -1247,7 +1247,7 @@ class RegisterAPI:
                                 if query is None or query == {}:
                                     add_resource = True
                                 else:
-                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                    if query.gpu_name is not None and query.gpu_name.lower() not in gpu_name:
                                         continue
                                     if (query.gpu_capacity_max is not None and
                                             float(gpu_capacity) > query.gpu_capacity_max):
