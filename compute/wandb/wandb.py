@@ -224,6 +224,27 @@ class ComputeWandb:
 
         # Sign the run
         self.sign_run()
+        
+    def update_miner_port_open(self, is_port_open):
+        """
+        This function updates the port on miner side.
+        It's useless to alter this information as it needs to be signed by a valid miner hotkey.
+        """
+        if self.run:
+            update_dict = {
+                "is_port_open": is_port_open,
+            }
+            self.run.config.update(update_dict, allow_val_change=True)
+
+            # Track is_port_open
+            self.run.log({"is_port_open": self.run.config["is_port_open"]})
+            
+            # Sign the run
+            self.sign_run()
+
+            bt.logging.info(f"✅ Miner's server port uploaded to Wandb.")
+        else:
+            bt.logging.warning(f"wandb init failed, update port not possible.")
 
     def get_allocated_hotkeys(self, valid_validator_hotkeys, flag):
         """

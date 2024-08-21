@@ -23,6 +23,7 @@ import base64
 import os
 import json
 import bittensor as bt
+from compute.utils.socket import check_port
 import torch
 import time
 from datetime import datetime, timezone
@@ -2360,21 +2361,15 @@ class RegisterAPI:
 
     @staticmethod
     def check_port_open(host, port, hotkey):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1)  # Set a timeout for the connection attempt
-                result = sock.connect_ex((host, port))
-                if result == 0:
-                    bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
-                    return True
-                else:
-                    bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
-                    return False
-        except socket.gaierror:
-            bt.logging.warning(f"API: Hostname {host} could not be resolved")
+        result = check_port(host, port)
+        if result is True:
+            bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
+            return True
+        elif result is False:
+            bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
             return False
-        except socket.error:
-            bt.logging.error(f"API: Couldn't connect to server {host}")
+        else:
+            bt.logging.warning(f"API: Could not determine status of port {port} on {host} for {hotkey}")
             return False
 
     def run(self):
