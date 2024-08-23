@@ -36,6 +36,7 @@ class ComputeDb:
                 )
             """
             )
+            cursor.execute("CREATE TABLE IF NOT EXISTS blacklist (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT)")
             cursor.execute("CREATE TABLE IF NOT EXISTS allocation (id INTEGER PRIMARY KEY, hotkey TEXT UNIQUE, details TEXT)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")

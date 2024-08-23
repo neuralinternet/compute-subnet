@@ -306,11 +306,11 @@ class Miner:
             return True, "Blacklisted hotkey"
 
         # Blacklist entities that are not up-to-date
-        if hotkey not in self.whitelist_hotkeys_version and len(self.whitelist_hotkeys_version) > 0:
-            return (
-                True,
-                f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
-            )
+        # if hotkey not in self.whitelist_hotkeys_version and len(self.whitelist_hotkeys_version) > 0:
+        #     return (
+        #         True,
+        #         f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
+        #     )
 
         if hotkey in self.exploiters_hotkeys_set:
             return (
@@ -530,11 +530,11 @@ class Miner:
                     # Log chain data to wandb
                     chain_data = {
                         "Block": self.current_block,
-                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
-                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
-                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid].numpy()),
-                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid].numpy()),
-                        "Emission": float(self.metagraph.E[self.miner_subnet_uid].numpy()),
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid]),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid]),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid]),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid]),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid]),
                     }
                     self.wandb.log_chain_data(chain_data)
 
