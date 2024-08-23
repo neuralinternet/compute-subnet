@@ -186,6 +186,7 @@ class Miner:
         # self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
+        self.allocate_action = False
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
@@ -395,8 +396,14 @@ class Miner:
             else:
                 public_key = synapse.public_key
                 if timeline > 0:
-                    result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
-                    synapse.output = result
+                    if self.allocate_action == False:
+                        self.allocate_action = True
+                        result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
+                        self.allocate_action = False
+                        synapse.output = result
+                    else:
+                        bt.logging.info(f"Allocation is already in progress. Please wait for the previous one to finish")
+                        synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
                 synapse.output = result
