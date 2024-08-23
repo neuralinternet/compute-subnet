@@ -208,6 +208,23 @@ class ComputeWandb:
         # Sign the run
         self.sign_run()
 
+    def update_penalized_hotkeys(self, hotkey_list):
+        """
+        This function updates the allocated hotkeys on validator side.
+        It's useless to alter this information as it needs to be signed by a valid validator hotkey.
+        """
+        # Update the configuration with the new keys
+        update_dict = {
+                "penalized_hotkeys": hotkey_list
+            }
+        self.run.config.update(update_dict, allow_val_change=True)
+
+        # Track allocated hotkeys over time
+        self.run.log({"penalized_hotkeys": self.run.config["penalized_hotkeys"]})
+
+        # Sign the run
+        self.sign_run()
+
     def get_allocated_hotkeys(self, valid_validator_hotkeys, flag):
         """
         This function gets all allocated hotkeys from all validators.
@@ -239,7 +256,7 @@ class ComputeWandb:
 
                 valid_validator_hotkey = hotkey in valid_validator_hotkeys
                 
-                # Allow all validator hotkeys for data retrieval only 
+                # Allow all validator hotkeys for data retrieval only if flag == false
                 if not flag:
                     valid_validator_hotkey = True
 
@@ -251,6 +268,49 @@ class ComputeWandb:
 
         return allocated_keys_list
     
+    def get_penalized_hotkeys(self, valid_validator_hotkeys, flag):
+        """
+        This function gets all allocated hotkeys from all validators.
+        Only relevant for validators.
+        """
+        # Query all runs in the project and Filter runs where the role is 'validator'
+        self.api.flush()
+        validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                                       filters={"$and": [{"config.role": "validator"},
+                                                         {"config.config.netuid": self.config.netuid},
+                                                         {"config.penalized_hotkeys": {"$exists": True}},]
+                                                })
+
+         # Check if the runs list is empty
+        if not validator_runs:
+            bt.logging.info("No validator info found in the project opencompute.")
+            return []
+
+        # Initialize an empty list to store allocated keys from runs with a valid signature
+        penalized_keys_list = []
+
+        # Verify the signature for each validator run
+        for run in validator_runs:
+            try:
+                # Access the run's configuration
+                run_config = run.config
+                hotkey = run_config.get('hotkey')
+                penalized_keys = run_config.get('penalized_hotkeys')
+
+                valid_validator_hotkey = hotkey in valid_validator_hotkeys
+
+                # Allow all validator hotkeys for data retrieval only
+                if not flag:
+                    valid_validator_hotkey = True
+
+                if self.verify_run(run) and penalized_keys and valid_validator_hotkey:
+                            penalized_keys_list.extend(penalized_keys)  # Add the keys to the list
+
+            except Exception as e:
+                bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
+
+        return penalized_keys_list
+
     def get_miner_specs(self, queryable_uids):
         """
         This function gets all specs from miners.

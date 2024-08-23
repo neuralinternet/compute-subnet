@@ -32,7 +32,7 @@ import RSAEncryption as rsa
 from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
 from compute.wandb.wandb import ComputeWandb
-from neurons.Validator.database.allocate import select_allocate_miners_hotkey, update_allocation_db, get_miner_details
+from neurons.Validator.database.allocate import select_allocate_miners_hotkey, update_allocation_db, update_blacklist_db, get_miner_details
 from compute.utils.version import get_local_version
 
 from compute.utils.db import ComputeDb
@@ -599,7 +599,111 @@ def update_allocation_wandb(wandb):
     except Exception as e:
         bt.logging.info(f"Error updating wandb : {e}")
         return
+
+def penalize_hotkey(wandb):
+    # Get hotkey(s):
+    hotkeys_input = input("Enter the hotkey(s) to penalize (comma-separated for multiple): ")
+
+    # Split the input by commas and strip any extra whitespace to create a list of hotkeys
+    hotkey_list = [hotkey.strip() for hotkey in hotkeys_input.split(',')]
     
+    # Instantiate the connection to the db
+    db = ComputeDb()
+    cursor = db.get_cursor()
+
+    # Get all existing miner details
+    specs_details = get_miner_details(db)
+
+    # Validate the hotkeys against the miner details
+    valid_hotkeys = []
+    for hotkey in hotkey_list:
+        if str(hotkey) in specs_details:
+            valid_hotkeys.append(hotkey)
+        else:
+            print(f"Hotkey {hotkey} does not exist on the network and will be ignored.")
+
+    if not valid_hotkeys:
+        print("No valid hotkeys were entered.")
+        return
+
+    try:
+        # Retrieve all records from the blacklist table
+        cursor.execute("SELECT id, hotkey, details FROM blacklist")
+        rows = cursor.fetchall()
+
+        # Add the hotkeys from the blacklist to the list to penalize
+        for row in rows:
+            _, hotkey, _ = row
+            if hotkey not in valid_hotkeys:
+                valid_hotkeys.append(hotkey)
+
+    except Exception as e:
+        print(f"An error occurred while retrieving penalized hotkey details: {e}")
+    finally:
+        cursor.close()
+        db.close()
+
+    try:
+        # Update the blacklist database with the valid hotkeys
+        update_blacklist_db(valid_hotkeys, True)
+        # Update the hotkeys in wandb
+        wandb.update_penalized_hotkeys(valid_hotkeys)
+        print(f"Successfully penalized the following hotkeys: {valid_hotkeys}")
+    except Exception as e:
+        print(f"Error updating blacklist: {e}")
+    return
+
+
+def depenalize_hotkey(wandb):
+    # Get hotkey(s):
+    hotkeys_input = input("Enter the hotkey(s) to de-penalize (comma-separated for multiple): ")
+
+    # Split the input by commas and strip any extra whitespace to create a list of hotkeys
+    hotkey_list_depenalize = [hotkey.strip() for hotkey in hotkeys_input.split(',')]
+    hotkey_list = []
+
+    # Instantiate the connection to the db
+    db = ComputeDb()
+    cursor = db.get_cursor()
+
+    try:
+        # Retrieve all records from the blacklist table
+        cursor.execute("SELECT id, hotkey, details FROM blacklist")
+        rows = cursor.fetchall()
+
+        for row in rows:
+            id, hotkey, details = row
+            hotkey_list.append(hotkey)
+
+        # Remove all hotkeys from the de-penalized list from the hotkey_list
+        hotkey_list = [hotkey for hotkey in hotkey_list if hotkey not in hotkey_list_depenalize]
+
+    except Exception as e:
+        print(f"An error occurred while retrieving penalized hotkey details: {e}")
+    finally:
+        cursor.close()
+        db.close()
+    try:
+        update_blacklist_db(hotkey_list_depenalize, False)
+        # Update the hotkeys in wandb
+        wandb.update_penalized_hotkeys(hotkey_list)
+        print(f"Successfully depenalized the following hotkeys: {hotkey_list_depenalize}")
+    except Exception as e:
+        bt.logging.info(f"Error updating blacklist: {e}")
+    return
+
+def list_penalizations(wandb):
+
+    # Retrieve the penalized hotkeys from wandb
+    penalized_hotkeys_list = wandb.get_penalized_hotkeys(valid_validator_hotkeys=[], flag=False)
+
+    if penalized_hotkeys_list:
+        print("Currently penalized hotkeys:")
+        for hotkey in penalized_hotkeys_list:
+            print(hotkey)
+    else:
+        print("No hotkeys are currently penalized.")
+
 
 def print_welcome_message():
     welcome_text = pyfiglet.figlet_format("Compute Subnet 27", width=120)
@@ -638,6 +742,18 @@ def main():
     # Subparser for the 'list_resources'
     parser_list = subparsers.add_parser('list_r', help='List resources')
     parser_list.set_defaults(func=list_resources)
+
+    # Subparser for the 'penalize_hotkey' command
+    parser_penalize_hotkey = subparsers.add_parser('p_hotkey', help='Penalize resource via hotkey')
+    parser_penalize_hotkey.set_defaults(func=penalize_hotkey)
+
+    # Subparser for the 'depenalize_hotkey' command
+    parser_depenalize_hotkey = subparsers.add_parser('dp_hotkey', help='De-penalize resource via hotkey')
+    parser_depenalize_hotkey.set_defaults(func=depenalize_hotkey)
+
+    # Subparser for the 'list_p' command
+    parser_list_penalizations = subparsers.add_parser('list_p', help='List penalized hotkeys')
+    parser_list_penalizations.set_defaults(func=list_penalizations)
 
     # Print help before entering the command loop
     parser.print_help()
