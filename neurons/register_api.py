@@ -263,7 +263,7 @@ class RegisterAPI:
         self.checking_allocated = []
         self.notify_retry_table = []
         self.deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
-        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")
+        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")        
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -911,6 +911,215 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
+        
+        @self.app.post(path="/service/pause_docker",
+                          tags=["Allocation"],
+                          response_model=SuccessResponse | ErrorResponse,
+                          responses={
+                            200: {
+                                 "model": SuccessResponse,
+                                 "description": "Resource pause successfully.",
+                            },
+                            403: {
+                                 "model": ErrorResponse,
+                                 "description": "An error occurred while pausing docker.",
+                            },
+                          })
+        async def pause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "pause",
+                        "ssh_key": "",
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker pause successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker pause without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource paused successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Pause not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSONResponse(
+                        status_code
+                        =status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during pause operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during pause operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
+                
+        @self.app.post(path="/service/unpause_docker",
+                            tags=["Allocation"],
+                            response_model=SuccessResponse | ErrorResponse,
+                            responses={
+                                200: {
+                                    "model": SuccessResponse,
+                                    "description": "Resource unpause successfully.",
+                                },
+                                403: {
+                                    "model": ErrorResponse,
+                                    "description": "An error occurred while unpausing docker.",
+                                },
+                            })
+        async def unpause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "unpause",
+                        "ssh_key": "",
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker unpause successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker unpause without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource unpaused successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Unpause not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSON
+                    Response(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during unpause operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during unpause operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
+
 
 
         @self.app.post("/service/exchange_docker_key",
