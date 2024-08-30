@@ -24,6 +24,8 @@ import typing
 import multiprocessing
 import base64
 import bittensor as bt
+from datetime import datetime, timezone
+import requests
 
 from compute import (
     SUSPECTED_EXPLOITERS_HOTKEYS,
@@ -162,6 +164,9 @@ class Miner:
         self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
         self.wandb.update_specs()
 
+        self.deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
+        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")
+        
         # check allocation status
         file_path = 'allocation_key'
         if os.path.exists(file_path):
@@ -398,10 +403,63 @@ class Miner:
                     synapse.output = result
                 else:
                     result = deregister_allocation(public_key)
+                    self.__send_status_notification(status="DEALLOCATION")
                 synapse.output = result
         self.update_allocation(synapse)
         return synapse
 
+    def __build_status_msg(self, status: str = "ONLINE"):
+        """
+        Build the status message body
+        """
+        msg = {
+                "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+                "hotkey": self.config.wallet.hotkey,
+                "status": status,
+                "uuid": self.miner_subnet_uid,
+            }
+        notify_url = self.status_notify_url
+        if status == "DEALLOCATION":
+            msg["deallocated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            notify_url = self.deallocation_notify_url
+        return msg, notify_url
+
+    def __send_status_notification(self, status: str = "ONLINE"):
+        """
+        Send the status notification to the platform
+        """
+        headers = {
+            "accept": "*/*",
+            "Content-Type": "application/json",
+        }
+        msg, notify_url = self.__build_status_msg(status)
+        while True:
+            try:
+                data = json.dumps(msg)
+                response = requests.post(
+                    notify_url,
+                    headers=headers,
+                    data=data,
+                    timeout=3,
+                    json=True,
+                    verify=False,
+                    cert=("cert/server.cer", "cert/server.key"),
+                )
+                # check if response code is 200 or 201
+                if response.status_code in [200, 201]:
+                    bt.logging.info(f"Status notification sent successfully.")
+                    break
+                else:
+                    bt.logging.error(
+                        f"Status notification failed with response code: {response.status_code}"
+                    )
+                    if status == "ONLINE":
+                        break
+            except requests.exceptions.RequestException as e:
+                bt.logging.error(f"Status notification failed with exception: {e}")
+                time.sleep(1)
+                if status == "ONLINE":
+                    break
     # The blacklist function decides if a request should be ignored.
     def blacklist_challenge(self, synapse: Challenge) -> typing.Tuple[bool, str]:
         return self.base_blacklist(synapse)
@@ -554,7 +612,9 @@ class Miner:
                     f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status}"
                 )
                 time.sleep(5)
-
+                
+                # Send status update
+                self.__send_status_notification(status="ONLINE")
             except (RuntimeError, Exception) as e:
                 bt.logging.error(e)
                 traceback.print_exc()
