@@ -1599,6 +1599,9 @@ class RegisterAPI:
             }
             runs = await run_in_threadpool(self.wandb.api.runs,
                                            f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+            # Get the penalized hotkeys from wandb
+            penalized_hotkeys = await run_in_threadpool(self.wandb.get_penalized_hotkeys, [], False)
+
             for run in runs:
                 run_config = run.config
                 run_hotkey = run_config.get("hotkey")
@@ -1606,7 +1609,7 @@ class RegisterAPI:
                 specs = run_config.get("specs")
                 configs = run_config.get("config")
                 # check the signature
-                if run_hotkey and configs:
+                if run_hotkey and configs and run_hotkey not in penalized_hotkeys:
                     if specs:
                         specs_details[run_hotkey] = specs
                     else:
