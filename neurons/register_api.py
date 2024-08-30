@@ -23,6 +23,7 @@ import base64
 import os
 import json
 import bittensor as bt
+from compute.utils.socket import check_port
 import torch
 import time
 from datetime import datetime, timezone
@@ -1456,7 +1457,241 @@ class RegisterAPI:
                                 if query is None or query == {}:
                                     add_resource = True
                                 else:
-                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                    if query.gpu_name is not None and query.gpu_name.lower() not in gpu_name:
+                                        continue
+                                    if (query.gpu_capacity_max is not None and
+                                            float(gpu_capacity) > query.gpu_capacity_max):
+                                        continue
+                                    if (query.gpu_capacity_min is not None and
+                                            float(gpu_capacity) < query.gpu_capacity_min):
+                                        continue
+                                    if (query.cpu_count_max is not None and
+                                            int(cpu_count) > query.cpu_count_max):
+                                        continue
+                                    if (query.cpu_count_min is not None and
+                                            int(cpu_count) < query.cpu_count_min):
+                                        continue
+                                    if (query.ram_total_max is not None and
+                                            float(ram) > query.ram_total_max):
+                                        continue
+                                    if (query.ram_total_min is not None and
+                                            float(ram) < query.ram_total_min):
+                                        continue
+                                    if (query.hard_disk_total_max is not None and
+                                            float(hard_disk) > query.hard_disk_total_max):
+                                        continue
+                                    if (query.hard_disk_total_min is not None and
+                                            float(hard_disk) < query.hard_disk_total_min):
+                                        continue
+                                    add_resource = True
+
+                                if add_resource:
+                                    resource.cpu_count = int(cpu_count)
+                                    resource.gpu_name = gpu_name
+                                    resource.gpu_capacity = float(gpu_capacity)
+                                    resource.gpu_count = int(gpu_count)
+                                    resource.ram = float(ram)
+                                    resource.hard_disk = float(hard_disk)
+                                    resource.allocate_status = allocate_status
+                                    resource_list.append(resource)
+                        except (KeyError, IndexError, TypeError, ValueError) as e:
+                            bt.logging.error(f"API: Error occurred while filtering resources: {e}")
+                            continue
+
+                if stats:
+                    status_counts = {"available": 0, "reserved": 0, "total": 0}
+                    try:
+                        for item in resource_list:
+                            status_code = item.dict()["allocate_status"]
+                            if status_code in status_counts:
+                                status_counts[status_code] += 1
+                                status_counts["total"] += 1
+                    except Exception as e:
+                        bt.logging.error(f"API: Error occurred while counting status: {e}")
+                        status_counts = {"available": 0, "reserved": 0, "total": 0}
+
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder({"stats": status_counts}),
+                        },
+                    )
+                else:
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(resource_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": resource_list,
+                            "page_number": 1,
+                            "page_size": len(resource_list),
+                            "next_page_number": None,
+                        }
+
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+
+            else:
+                bt.logging.info(f"API: There is no resource available")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "There is no resource available",
+                        "err_detail": "No resources found.",
+                    },
+                )
+            
+        @self.app.post(
+            "/list/resources_wandb",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def list_resources_wandb(query: ResourceQuery = None,
+                                 stats: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
+            """
+            The list resources API endpoint. <br>
+            The API will return the current miner resource and their detail specs on the validator. <br>
+            query: The query parameter to filter the resources. <br>
+            """
+            
+            specs_details = {}
+            bt.logging.info(f"API: List resources(wandb) on compute subnet")            
+            self.wandb.api.flush()
+
+            # check wandb for available hotkeys
+            # self.wandb.api.flush()
+            running_hotkey = []
+            filter_rule = {
+                "$and": [
+                    {"config.config.netuid": self.config.netuid},
+                    {"config.role": "miner"},
+                    {"state": "running"},
+                ]
+            }
+            runs = await run_in_threadpool(self.wandb.api.runs,
+                                           f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+            for run in runs:
+                run_config = run.config
+                run_hotkey = run_config.get("hotkey")
+                running_hotkey.append(run_hotkey)
+                specs = run_config.get("specs")
+                configs = run_config.get("config")
+                # check the signature
+                if run_hotkey and configs:
+                    if specs:
+                        specs_details[run_hotkey] = specs
+                    else:
+                        specs_details[run_hotkey] = {}
+
+            # Initialize a dictionary to keep track of GPU instances
+            resource_list = []
+            gpu_instances = {}
+            total_gpu_counts = {}
+
+            # Get the allocated hotkeys from wandb
+            allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, [], False)
+
+            if specs_details:
+                # Iterate through the miner specs details and print the table
+                for hotkey, details in specs_details.items():
+                    if hotkey in running_hotkey:
+                        if details:  # Check if details are not empty
+                            resource = Resource()
+                            try:
+                                # Extract GPU details
+                                gpu_miner = details["gpu"]
+                                gpu_capacity = "{:.2f}".format(
+                                    (gpu_miner["capacity"] / 1024)
+                                )
+                                gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                                gpu_count = gpu_miner["count"]
+
+                                # Extract CPU details
+                                cpu_miner = details["cpu"]
+                                cpu_count = cpu_miner["count"]
+
+                                # Extract RAM details
+                                ram_miner = details["ram"]
+                                ram = "{:.2f}".format(
+                                    ram_miner["available"] / 1024.0 ** 3
+                                )
+
+                                # Extract Hard Disk details
+                                hard_disk_miner = details["hard_disk"]
+                                hard_disk = "{:.2f}".format(
+                                    hard_disk_miner["free"] / 1024.0 ** 3
+                                )
+
+                                # Update the GPU instances count
+                                gpu_key = (gpu_name, gpu_count)
+                                gpu_instances[gpu_key] = (
+                                        gpu_instances.get(gpu_key, 0) + 1
+                                )
+                                total_gpu_counts[gpu_name] = (
+                                        total_gpu_counts.get(gpu_name, 0) + gpu_count
+                                )
+
+                            except (KeyError, IndexError, TypeError):
+                                gpu_name = "Invalid details"
+                                gpu_capacity = "N/A"
+                                gpu_count = "N/A"
+                                cpu_count = "N/A"
+                                ram = "N/A"
+                                hard_disk = "N/A"
+                        else:
+                            gpu_name = "No details available"
+                            gpu_capacity = "N/A"
+                            gpu_count = "N/A"
+                            cpu_count = "N/A"
+                            ram = "N/A"
+                            hard_disk = "N/A"
+
+                        # Allocation status
+                        # allocate_status = "N/A"
+
+                        if hotkey in allocated_hotkeys:
+                            allocate_status = "reserved"
+                        else:
+                            allocate_status = "available"
+
+                        add_resource = False
+                        # Print the row with column separators
+                        resource.hotkey = hotkey
+
+                        try:
+                            if gpu_name != "Invalid details" and gpu_name != "No details available":
+                                if query is None or query == {}:
+                                    add_resource = True
+                                else:
+                                    if query.gpu_name is not None and query.gpu_name.lower() not in gpu_name:
                                         continue
                                     if (query.gpu_capacity_max is not None and
                                             float(gpu_capacity) > query.gpu_capacity_max):
@@ -2569,21 +2804,15 @@ class RegisterAPI:
 
     @staticmethod
     def check_port_open(host, port, hotkey):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1)  # Set a timeout for the connection attempt
-                result = sock.connect_ex((host, port))
-                if result == 0:
-                    bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
-                    return True
-                else:
-                    bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
-                    return False
-        except socket.gaierror:
-            bt.logging.warning(f"API: Hostname {host} could not be resolved")
+        result = check_port(host, port)
+        if result is True:
+            bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
+            return True
+        elif result is False:
+            bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
             return False
-        except socket.error:
-            bt.logging.error(f"API: Couldn't connect to server {host}")
+        else:
+            bt.logging.warning(f"API: Could not determine status of port {port} on {host} for {hotkey}")
             return False
 
     def run(self):

@@ -38,6 +38,7 @@ from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
 from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
+from compute.utils.socket import check_port
 from compute.utils.subtensor import (
     is_registered,
     get_current_block,
@@ -207,6 +208,7 @@ class Miner:
         # self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
+        self.allocate_action = False
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
@@ -344,14 +346,11 @@ class Miner:
             return True, "Blacklisted hotkey"
 
         # Blacklist entities that are not up-to-date
-        if (
-            hotkey not in self.whitelist_hotkeys_version
-            and len(self.whitelist_hotkeys_version) > 0
-        ):
-            return (
-                True,
-                f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
-            )
+        # if hotkey not in self.whitelist_hotkeys_version and len(self.whitelist_hotkeys_version) > 0:
+        #     return (
+        #         True,
+        #         f"Blacklisted a {synapse_type} request from a non-updated hotkey: {hotkey}",
+        #     )
 
         if hotkey in self.exploiters_hotkeys_set:
             return (
@@ -458,10 +457,14 @@ class Miner:
             else:
                 public_key = synapse.public_key
                 if timeline > 0:
-                    result = register_allocation(
-                        timeline, device_requirement, public_key, docker_requirement
-                    )
-                    synapse.output = result
+                    if self.allocate_action == False:
+                        self.allocate_action = True
+                        result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
+                        self.allocate_action = False
+                        synapse.output = result
+                    else:
+                        bt.logging.info(f"Allocation is already in progress. Please wait for the previous one to finish")
+                        synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
                 synapse.output = result
@@ -637,20 +640,28 @@ class Miner:
                     )  # 25 ~ every 5 minutes
                     self.sync_status()
 
+                    # Check port open
+                    port = int(self.config.ssh.port)
+                    if port:
+                        result = check_port('localhost', port)
+                        if result is True:
+                            bt.logging.info(f"API: Port {port} on the server is open")
+                        elif result is False:
+                            bt.logging.info(f"API: Port {port} on the server is closed")
+                        else:
+                            bt.logging.warning(f"API: Could not determine status of port {port} on the server")
+                    else:
+                        bt.logging.warning(f"API: Could not find the server port that was provided to validator")
+                    self.wandb.update_miner_port_open(result)
+
                     # Log chain data to wandb
                     chain_data = {
                         "Block": self.current_block,
-                        "Stake": float(self.metagraph.S[self.miner_subnet_uid].numpy()),
-                        "Trust": float(self.metagraph.T[self.miner_subnet_uid].numpy()),
-                        "Consensus": float(
-                            self.metagraph.C[self.miner_subnet_uid].numpy()
-                        ),
-                        "Incentive": float(
-                            self.metagraph.I[self.miner_subnet_uid].numpy()
-                        ),
-                        "Emission": float(
-                            self.metagraph.E[self.miner_subnet_uid].numpy()
-                        ),
+                        "Stake": float(self.metagraph.S[self.miner_subnet_uid]),
+                        "Trust": float(self.metagraph.T[self.miner_subnet_uid]),
+                        "Consensus": float(self.metagraph.C[self.miner_subnet_uid]),
+                        "Incentive": float(self.metagraph.I[self.miner_subnet_uid]),
+                        "Emission": float(self.metagraph.E[self.miner_subnet_uid]),
                     }
                     self.wandb.log_chain_data(chain_data)
 
