@@ -31,7 +31,8 @@ from compute import (
     validator_permit_stake,
     miner_priority_specs,
     miner_priority_allocate,
-    miner_priority_challenge, TRUSTED_VALIDATORS_HOTKEYS,
+    miner_priority_challenge,
+    TRUSTED_VALIDATORS_HOTKEYS,
 )
 from compute.axon import ComputeSubnetAxon, ComputeSubnetSubtensor
 from compute.protocol import Specs, Allocate, Challenge
@@ -49,7 +50,12 @@ from compute.utils.version import (
     version2number,
     get_remote_version,
 )
-from neurons.Miner.allocate import check_allocation, register_allocation, deregister_allocation, check_if_allocated
+from neurons.Miner.allocate import (
+    check_allocation,
+    register_allocation,
+    deregister_allocation,
+    check_if_allocated,
+)
 from neurons.Miner.container import (
     build_check_container,
     build_sample_container,
@@ -57,10 +63,13 @@ from neurons.Miner.container import (
     kill_container,
     restart_container,
     exchange_key_container,
+    pause_container,
+    unpause_container,
 )
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
+
 # from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
 
@@ -106,13 +115,19 @@ class Miner:
         self.config = self.init_config()
 
         # Setup extra args
-        self.miner_whitelist_updated_threshold = self.config.miner_whitelist_updated_threshold
-        self.miner_whitelist_not_enough_stake = self.config.miner_whitelist_not_enough_stake
+        self.miner_whitelist_updated_threshold = (
+            self.config.miner_whitelist_updated_threshold
+        )
+        self.miner_whitelist_not_enough_stake = (
+            self.config.miner_whitelist_not_enough_stake
+        )
         self.init_black_and_white_list()
 
         # Set up logging with the provided configuration and directory.
         bt.logging(config=self.config, logging_dir=self.config.full_path)
-        bt.logging.info(f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+        bt.logging.info(
+            f"Running miner for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:"
+        )
         # Log the configuration for reference.
         bt.logging.info(self.config)
 
@@ -132,7 +147,7 @@ class Miner:
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
 
-        build_check_container('my-compute-subnet','sn27-check-container')
+        build_check_container("my-compute-subnet", "sn27-check-container")
         has_docker, msg = check_docker_availability()
 
         # Build sample container image to speed up the allocation process
@@ -164,23 +179,30 @@ class Miner:
         self.wandb.update_specs()
 
         # check allocation status
-        file_path = 'allocation_key'
+        file_path = "allocation_key"
         if os.path.exists(file_path):
             # Open the file in read mode ('r') and read the data
-            with open(file_path, 'r') as file:
+            with open(file_path, "r") as file:
                 allocation_key_encoded = file.read()
 
-            if not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address) and allocation_key_encoded:
+            if (
+                not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+                and allocation_key_encoded
+            ):
                 # Decode the base64-encoded public key from the file
-                public_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+                public_key = base64.b64decode(allocation_key_encoded).decode("utf-8")
                 deregister_allocation(public_key)
                 self.wandb.update_allocated(None)
-                bt.logging.info("Allocation is not exist in wandb. Resetting the allocation status.")
+                bt.logging.info(
+                    "Allocation is not exist in wandb. Resetting the allocation status."
+                )
 
             if check_container() and not allocation_key_encoded:
                 kill_container()
                 self.wandb.update_allocated(None)
-                bt.logging.info("Container is already running without allocated. Killing the container.")
+                bt.logging.info(
+                    "Container is already running without allocated. Killing the container."
+                )
 
         # Disable the Spec request and replaced with WanDB
         # self.request_specs_processor = RequestSpecsProcessor()
@@ -201,16 +223,18 @@ class Miner:
             forward_fn=self.challenge,
             blacklist_fn=self.blacklist_challenge,
             priority_fn=self.priority_challenge,
-        # Disable the spec query and replaced with WanDB
-        # ).attach(
-        #      forward_fn=self.specs,
-        #      blacklist_fn=self.blacklist_specs,
-        #      priority_fn=self.priority_specs,
+            # Disable the spec query and replaced with WanDB
+            # ).attach(
+            #      forward_fn=self.specs,
+            #      blacklist_fn=self.blacklist_specs,
+            #      priority_fn=self.priority_specs,
         )
 
         # Serve passes the axon information to the network + netuid we are hosting on.
         # This will auto-update if the axon port of external ip have changed.
-        bt.logging.info(f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}")
+        bt.logging.info(
+            f"Serving axon {self.axon} on network: {self.config.subtensor.chain_endpoint} with netuid: {self.config.netuid}"
+        )
 
         self.axon.serve(netuid=self.config.netuid, subtensor=self.subtensor)
 
@@ -224,7 +248,9 @@ class Miner:
         This function is responsible for setting up and parsing command-line arguments.
         :return: config
         """
-        parser = ComputeArgPaser(description="This script aims to help miners with the compute subnet.")
+        parser = ComputeArgPaser(
+            description="This script aims to help miners with the compute subnet."
+        )
         config = bt.config(parser)
 
         # Step 3: Set up logging directory
@@ -249,9 +275,13 @@ class Miner:
 
         # Set blacklist and whitelist arrays
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
-        self.blacklist_coldkeys = {coldkey for coldkey in self.config.blacklist_coldkeys}
+        self.blacklist_coldkeys = {
+            coldkey for coldkey in self.config.blacklist_coldkeys
+        }
         self.whitelist_hotkeys = {hotkey for hotkey in default_whitelist}
-        self.whitelist_coldkeys = {coldkey for coldkey in self.config.whitelist_coldkeys}
+        self.whitelist_coldkeys = {
+            coldkey for coldkey in self.config.whitelist_coldkeys
+        }
 
         if self.config.blacklist_exploiters:
             self.exploiters_hotkeys_set = {key for key in SUSPECTED_EXPLOITERS_HOTKEYS}
@@ -277,19 +307,27 @@ class Miner:
         if hasattr(self, "axon"):
             if self.axon:
                 # Check if the miner has the axon version info updated
-                subnet_axon_version: bt.AxonInfo = self.metagraph.neurons[self.miner_subnet_uid].axon_info
+                subnet_axon_version: bt.AxonInfo = self.metagraph.neurons[
+                    self.miner_subnet_uid
+                ].axon_info
                 current_version = __version_as_int__
                 if subnet_axon_version.version != current_version:
-                    bt.logging.info("Axon info version has been changed. Needs to restart axon...")
+                    bt.logging.info(
+                        "Axon info version has been changed. Needs to restart axon..."
+                    )
                     self.axon.stop()
                     self.init_axon()
 
-    def base_blacklist(self, synapse: typing.Union[Specs, Allocate, Challenge]) -> typing.Tuple[bool, str]:
+    def base_blacklist(
+        self, synapse: typing.Union[Specs, Allocate, Challenge]
+    ) -> typing.Tuple[bool, str]:
         hotkey = synapse.dendrite.hotkey
         synapse_type = type(synapse).__name__
 
         if len(self.whitelist_hotkeys) > 0 and hotkey not in self.whitelist_hotkeys:
-            bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
+            bt.logging.trace(
+                f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+            )
             return False, "Whitelisted hotkey"
 
         if hotkey not in self.metagraph.hotkeys:
@@ -320,13 +358,21 @@ class Miner:
                 f"Blacklisted a {synapse_type} request from an exploiter hotkey: {hotkey}",
             )
 
-        bt.logging.trace(f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}")
+        bt.logging.trace(
+            f"Not Blacklisting recognized hotkey {synapse.dendrite.hotkey}"
+        )
         return False, "Hotkey recognized!"
 
     def base_priority(self, synapse: typing.Union[Specs, Allocate, Challenge]) -> float:
-        caller_uid = self._metagraph.hotkeys.index(synapse.dendrite.hotkey)  # Get the caller index.
-        priority = float(self._metagraph.S[caller_uid])  # Return the stake as the priority.
-        bt.logging.trace(f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority)
+        caller_uid = self._metagraph.hotkeys.index(
+            synapse.dendrite.hotkey
+        )  # Get the caller index.
+        priority = float(
+            self._metagraph.S[caller_uid]
+        )  # Return the stake as the priority.
+        bt.logging.trace(
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", priority
+        )
         return priority
 
     # The blacklist function decides if a request should be ignored.
@@ -354,7 +400,11 @@ class Miner:
         return self.base_priority(synapse) + miner_priority_allocate
 
     def update_allocation(self, synapse: Allocate):
-        if not synapse.checking and isinstance(synapse.output, dict) and synapse.output.get("status") is True:
+        if (
+            not synapse.checking
+            and isinstance(synapse.output, dict)
+            and synapse.output.get("status") is True
+        ):
             if synapse.timeline > 0:
                 self.wandb.update_allocated(synapse.dendrite.hotkey)
                 bt.logging.success(f"Allocation made by {synapse.dendrite.hotkey}.")
@@ -368,7 +418,7 @@ class Miner:
         device_requirement = synapse.device_requirement
         checking = synapse.checking
         docker_requirement = synapse.docker_requirement
-        docker_requirement['ssh_port'] = int(self.config.ssh.port)
+        docker_requirement["ssh_port"] = int(self.config.ssh.port)
         docker_change = synapse.docker_change
         docker_action = synapse.docker_action
 
@@ -382,14 +432,25 @@ class Miner:
                 synapse.output = result
         else:
             if docker_change is True:
-                if docker_action['action'] == 'exchange_key':
+                if docker_action["action"] == "exchange_key":
                     public_key = synapse.public_key
-                    new_ssh_key = docker_action['ssh_key']
+                    new_ssh_key = docker_action["ssh_key"]
                     result = exchange_key_container(new_ssh_key)
                     synapse.output = result
-                elif docker_action['action'] == 'restart':
+                elif docker_action["action"] == "restart":
                     public_key = synapse.public_key
                     result = restart_container()
+                    synapse.output = result
+                elif docker_action["action"] == "pause":
+                    public_key = synapse.public_key
+                    result = pause_container()
+                    synapse.output = result
+                elif (
+                    docker_action["action"] == "unpause"
+                    or docker_action["action"] == "resume"
+                ):
+                    public_key = synapse.public_key
+                    result = unpause_container()
                     synapse.output = result
                 else:
                     bt.logging.info(f"Unknown action: {docker_action['action']}")
@@ -422,11 +483,15 @@ class Miner:
     # This is the Challenge function, which decides the miner's response to a valid, high-priority request.
     def challenge(self, synapse: Challenge) -> Challenge:
         if synapse.challenge_difficulty <= 0:
-            bt.logging.warning(f"{synapse.dendrite.hotkey}: Challenge received with a difficulty <= 0 - it can not be solved.")
+            bt.logging.warning(
+                f"{synapse.dendrite.hotkey}: Challenge received with a difficulty <= 0 - it can not be solved."
+            )
             return synapse
 
         v_id = synapse.dendrite.hotkey[:8]
-        run_id = f"{v_id}/{synapse.challenge_difficulty}/{synapse.challenge_hash[10:20]}"
+        run_id = (
+            f"{v_id}/{synapse.challenge_difficulty}/{synapse.challenge_hash[10:20]}"
+        )
 
         result = run_miner_pow(
             run_id=run_id,
@@ -446,32 +511,55 @@ class Miner:
         try:
             self.whitelist_hotkeys_version.clear()
             try:
-                latest_version = version2number(get_remote_version(pattern="__minimal_validator_version__"))
+                latest_version = version2number(
+                    get_remote_version(pattern="__minimal_validator_version__")
+                )
 
                 if latest_version is None:
-                    bt.logging.error(f"Github API call failed or version string is incorrect!")
+                    bt.logging.error(
+                        f"Github API call failed or version string is incorrect!"
+                    )
                     return
 
                 valid_validators = self.get_valid_validator()
 
-                valid_validators_version = [uid for uid, hotkey, version in valid_validators if version >= latest_version]
-                if percent(len(valid_validators_version), len(valid_validators)) <= self.miner_whitelist_updated_threshold:
-                    bt.logging.info(f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all.")
+                valid_validators_version = [
+                    uid
+                    for uid, hotkey, version in valid_validators
+                    if version >= latest_version
+                ]
+                if (
+                    percent(len(valid_validators_version), len(valid_validators))
+                    <= self.miner_whitelist_updated_threshold
+                ):
+                    bt.logging.info(
+                        f"Less than {self.miner_whitelist_updated_threshold}% validators are currently using the last version. Allowing all."
+                    )
                 else:
                     for uid, hotkey, version in valid_validators:
                         try:
                             if version >= latest_version:
-                                bt.logging.debug(f"Version signature match for hotkey : {hotkey}")
+                                bt.logging.debug(
+                                    f"Version signature match for hotkey : {hotkey}"
+                                )
                                 self.whitelist_hotkeys_version.add(hotkey)
                                 continue
 
-                            bt.logging.debug(f"Version signature mismatch for hotkey : {hotkey}")
+                            bt.logging.debug(
+                                f"Version signature mismatch for hotkey : {hotkey}"
+                            )
                         except Exception:
-                            bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+                            bt.logging.error(
+                                f"exception in get_valid_hotkeys: {traceback.format_exc()}"
+                            )
 
-                    bt.logging.info(f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}")
+                    bt.logging.info(
+                        f"Total valid validator hotkeys = {self.whitelist_hotkeys_version}"
+                    )
             except json.JSONDecodeError:
-                bt.logging.error(f"exception in get_valid_hotkeys: {traceback.format_exc()}")
+                bt.logging.error(
+                    f"exception in get_valid_hotkeys: {traceback.format_exc()}"
+                )
         except Exception as _:
             bt.logging.error(traceback.format_exc())
 
@@ -521,18 +609,35 @@ class Miner:
                         not block_next_updated_validator == 1,
                         block_next_updated_validator,
                     )
-                    time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
+                    time_next_sync_status = self.next_info(
+                        not block_next_sync_status == 1, block_next_sync_status
+                    )
 
-                if self.current_block % block_next_updated_validator == 0 or block_next_updated_validator < self.current_block:
-                    block_next_updated_validator = self.current_block + 30  # 30 ~ every 6 minutes
+                if (
+                    self.current_block % block_next_updated_validator == 0
+                    or block_next_updated_validator < self.current_block
+                ):
+                    block_next_updated_validator = (
+                        self.current_block + 30
+                    )  # 30 ~ every 6 minutes
                     self.get_updated_validator()
-                
-                if self.current_block % block_next_updated_specs == 0 or block_next_updated_specs < self.current_block:
-                    block_next_updated_specs = self.current_block + 150  # 150 ~ every 30 minutes
-                    self.wandb.update_specs()               
 
-                if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
-                    block_next_sync_status = self.current_block + 25  # 25 ~ every 5 minutes
+                if (
+                    self.current_block % block_next_updated_specs == 0
+                    or block_next_updated_specs < self.current_block
+                ):
+                    block_next_updated_specs = (
+                        self.current_block + 150
+                    )  # 150 ~ every 30 minutes
+                    self.wandb.update_specs()
+
+                if (
+                    self.current_block % block_next_sync_status == 0
+                    or block_next_sync_status < self.current_block
+                ):
+                    block_next_sync_status = (
+                        self.current_block + 25
+                    )  # 25 ~ every 5 minutes
                     self.sync_status()
 
                     # Check port open
