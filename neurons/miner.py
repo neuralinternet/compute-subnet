@@ -408,6 +408,7 @@ class Miner:
                     result = deregister_allocation(public_key)
                 synapse.output = result
         self.update_allocation(synapse)
+        synapse.output["port"] = int(self.config.ssh.port)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
