@@ -1,0 +1,9 @@
+
+            FROM ubuntu
+            RUN apt-get update && apt-get install -y openssh-server
+            RUN mkdir -p /run/sshd && echo 'root:'HreBAebOvz'' | chpasswd
+            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config &&                 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config &&                 sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config &&                 sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            RUN echo 'Hello World!' 
+            RUN mkdir -p /root/.ssh/ && echo '' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+            CMD ["/usr/sbin/sshd", "-D"]
+            
