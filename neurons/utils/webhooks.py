@@ -39,7 +39,7 @@ async def notify_allocation_status( event_time: datetime, hotkey: str,
             notify_url = status_notify_url
 
         retries = 0
-        while retries < MAX_NOTIFY_RETRY or event == "DEALLOCATION":
+        while retries < MAX_NOTIFY_RETRY or event == "DEALLOCATION" or event =="OFFLINE":
             try:
                 # Send the POST request
                 data = json.dumps(msg)
