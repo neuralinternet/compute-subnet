@@ -65,7 +65,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import Optional, Union, List
-
+from utils.webhooks import notify_allocation_status
 # Constants
 DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
@@ -695,7 +695,7 @@ class RegisterAPI:
 
                         # Notify the deallocation event when the client is localhost
                         if notify_flag:
-                            response = await self._notify_allocation_status(
+                            response = await notify_allocation_status(
                                 event_time=deallocated_at,
                                 hotkey=hotkey,
                                 uuid=uuid_key,
@@ -2343,7 +2343,7 @@ class RegisterAPI:
                 if not event:
                     event = "DEALLOCATION"
                 # Notify the allocation event
-                response = await self._notify_allocation_status(
+                response = await notify_allocation_status(
                     event_time=datetime.now(timezone.utc),
                     hotkey=hotkey,
                     uuid=uuid_key,
@@ -2630,66 +2630,6 @@ class RegisterAPI:
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
-
-    async def _notify_allocation_status(self, event_time: datetime, hotkey: str,
-                                        uuid: str, event: str, details: str | None = ""):
-        """
-        Notify the allocation by hotkey and status. <br>
-        """
-        headers = {
-            'accept': '*/*',
-            'Content-Type': 'application/json',
-        }
-        if event == "DEALLOCATION":
-            msg = {
-                "time": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                "deallocated_at": event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                "hotkey": hotkey,
-                "status": event,
-                "uuid": uuid,
-            }
-            notify_url = self.deallocation_notify_url
-        elif event == "OFFLINE" or event == "ONLINE":
-            msg = {
-                "time": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                "status_change_at": event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                "hotkey": hotkey,
-                "status": event,
-                "uuid": uuid,
-            }
-            notify_url = self.status_notify_url
-
-        retries = 0
-        while retries < MAX_NOTIFY_RETRY or event == "DEALLOCATION":
-            try:
-                # Send the POST request
-                data = json.dumps(msg)
-                response = await run_in_threadpool(
-                    requests.post, notify_url, headers=headers, data=data, timeout=3, json=True, verify=False,
-                    cert=("cert/server.cer", "cert/server.key"),
-                )
-                # Check for the expected ACK in the response
-                if response.status_code == 200 or response.status_code == 201:
-                    response_data = response.json()
-                    # if response_data.get("status") == "success":  # ACK response
-                    #     return response
-                    # else:
-                    #     print(f"ACK not received, response: {response_data}")
-                    # bt.logging.info(f"API: Notify success with {hotkey} status code: "
-                    #                 {response.status_code}, response: {response.text}")
-                    return response_data
-                else:
-                    bt.logging.info(f"API: Notify failed with {hotkey} status code: "
-                                    f"{response.status_code}, response: {response.text}")
-                    # return None
-            except requests.exceptions.RequestException as e:
-                bt.logging.info(f"API: Notify {hotkey} failed: {e}")
-
-            # Increment the retry counter and wait before retrying
-            retries += 1
-            await asyncio.sleep(NOTIFY_RETRY_PERIOD)
-        return None
-
     async def _check_allocation(self):
         """
         Check the allocation by resync_period. <br>
@@ -2714,7 +2654,7 @@ class RegisterAPI:
                     if register_response and register_response["status"] is False:
 
                         if hotkey in self.checking_allocated:
-                            response = await self._notify_allocation_status(
+                            response = await notify_allocation_status(
                                 event_time=deallocated_at,
                                 hotkey=hotkey,
                                 uuid=uuid_key,
@@ -2729,7 +2669,7 @@ class RegisterAPI:
                         self.checking_allocated.append(hotkey)
                         # bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
                         deallocated_at = datetime.now(timezone.utc)
-                        response = await self._notify_allocation_status(
+                        response = await notify_allocation_status(
                             event_time=deallocated_at,
                             hotkey=hotkey,
                             uuid=uuid_key,
@@ -2744,7 +2684,7 @@ class RegisterAPI:
                             # update the allocation table
                             update_allocation_db(hotkey, info, False)
                             await self._update_allocation_wandb()
-                            response = await self._notify_allocation_status(
+                            response = await notify_allocation_status(
                                 event_time=deallocated_at,
                                 hotkey=hotkey,
                                 uuid=uuid_key,
@@ -2763,7 +2703,7 @@ class RegisterAPI:
                                                                 "details": "Retry deallocation notify event triggered"})
 
                 for entry in self.notify_retry_table:
-                    response = await self._notify_allocation_status(event_time=entry["event_time"],
+                    response = await notify_allocation_status(event_time=entry["event_time"],
                                                                     hotkey=entry["hotkey"],
                                                                     uuid=entry["uuid"],
                                                                     event=entry["event"],
