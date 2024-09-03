@@ -61,8 +61,7 @@ from neurons.Validator.calculate_pow_score import calc_score
 from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
-
-
+from utils.webhooks import notify_allocation_status
 class Validator:
     blocks_done: set = set()
 
@@ -360,6 +359,13 @@ class Validator:
                     try:
                         bt.logging.info(f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
                         purge_miner_entries(self.db, uid, self.miners[uid])
+                        asyncio.run(notify_allocation_status(
+                                event_time=datetime.now(),
+                                hotkey=axon.hotkey,
+                                uuid=uid,
+                                event="DEALLOCATION",
+                                details=f"Miner {uid}-{self.miners[uid]} has been deregistered.",
+                            ))
                     except KeyError:
                         pass
                     bt.logging.info(f"✅ Setting up new miner {uid}-{axon.hotkey}.")
