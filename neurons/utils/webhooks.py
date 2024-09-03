@@ -15,7 +15,7 @@ deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
 status_notify_url = os.getenv("STATUS_NOTIFY_URL")
 
 
-async def notify_allocation_status(self, event_time: datetime, hotkey: str,
+async def notify_allocation_status( event_time: datetime, hotkey: str,
                                         uuid: str, event: str, details: str | None = ""):
         """
         Notify the allocation by hotkey and status. <br>
@@ -32,11 +32,11 @@ async def notify_allocation_status(self, event_time: datetime, hotkey: str,
             "uuid": uuid,
         }
         if event == "DEALLOCATION":
-            mgs['deallocated_at'] = event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-            notify_url = self.deallocation_notify_url
+            msg['deallocated_at'] = event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            notify_url = deallocation_notify_url
         elif event == "OFFLINE" or event == "ONLINE":
-            mgs['status_change_at'] = event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-            notify_url = self.status_notify_url
+            msg['status_change_at'] = event_time.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            notify_url = status_notify_url
 
         retries = 0
         while retries < MAX_NOTIFY_RETRY or event == "DEALLOCATION":
@@ -48,6 +48,7 @@ async def notify_allocation_status(self, event_time: datetime, hotkey: str,
                 # Check for the expected ACK in the response
                 if response.status_code == 200 or response.status_code == 201:
                     response_data = response.json()
+                    bt.logging.info(f"API: Notify {hotkey} succeeded with {response.status_code} status code: ")
                     return response_data
                 else:
                     bt.logging.info(f"API: Notify failed with {hotkey} status code: "
