@@ -1,0 +1,114 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    python_version: 3.10.14
+    cli_version: 0.16.6
+    framework: torch
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1725019445.0
+    t:
+      1:
+      - 1
+      - 55
+      2:
+      - 1
+      - 55
+      3:
+      - 5
+      - 14
+      - 17
+      - 23
+      - 62
+      4: 3.10.14
+      5: 0.16.6
+      8:
+      - 5
+      13: linux-x86_64
+role:
+  desc: null
+  value: miner
+specs:
+  desc: null
+  value:
+    cpu:
+      count: 4
+      frequency: 3480.786
+    gpu:
+      count: 1
+      capacity: 2048.0
+      details:
+      - name: NVIDIA GeForce MX130
+        capacity: 2048.0
+      graphics_speed: 135
+      memory_speed: 405
+    hard_disk:
+      total: 982240026624
+      free: 836086206464
+      used: 96183304192
+      write_speed: 2863.533893618619
+      read_speed: 2541.6173307074687
+    ram:
+      total: 8057044992
+      available: 2081374208
+      used: 4951982080
+      free: 509763584
+      swap_total: 4294963200
+      swap_used: 2226401280
+      swap_free: 2068561920
+      read_speed: 2853.578620802264
+      write_speed: 28455.25101763908
+    has_docker: true
+config:
+  desc: null
+  value:
+    __is_set:
+      netuid: true
+      subtensor.network: true
+      wallet.name: true
+      wallet.hotkey: true
+      axon.port: true
+      logging.debug: true
+      auto_update: true
+    netuid: 15
+    auto_update: true
+    blacklist_exploiters: true
+    blacklist_hotkeys: []
+    blacklist_coldkeys: []
+    whitelist_hotkeys: []
+    whitelist_coldkeys: []
+    whitelist_unrecognized: false
+    validator_perform_hardware_query: true
+    validator_challenge_batch_size: 256
+    validator_specs_batch_size: 64
+    force_update_prometheus: false
+    validator_whitelist_updated_threshold: 60
+    miner_hashcat_path: hashcat
+    miner_hashcat_workload_profile: '3'
+    miner_hashcat_extended_options: ''
+    miner_whitelist_not_enough_stake: false
+    miner_whitelist_not_updated: false
+    miner_whitelist_updated_threshold: 60
+    ssh:
+      __is_set: {}
+      port: 4444
+    subtensor:
+      __is_set: {}
+      network: test
+      chain_endpoint: wss://entrypoint-finney.opentensor.ai:443
+      _mock: false
+    no_prompt: false
+    config: null
+    strict: false
+    no_version_checking: false
+hotkey:
+  desc: null
+  value: 5EAYwTkVUR3KCGQ3JPGaqD6e2qsiBwe41peyUtt5wrXF2xGr
+allocated:
+  desc: null
+  value: 5EAYwTkVUR3KCGQ3JPGaqD6e2qsiBwe41peyUtt5wrXF2xGr
+signature:
+  desc: null
+  value: 589c89f5c9a8ed8f969be0156507bf8653d550c2d2a84a0862571c0e0bd9506930d2a96d9ffe122755a80c35a2a4ca598c11e52b661fbb9129888c8e619f528c
