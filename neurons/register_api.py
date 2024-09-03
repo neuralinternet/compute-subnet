@@ -2660,7 +2660,7 @@ class RegisterAPI:
             notify_url = self.status_notify_url
 
         retries = 0
-        while retries < MAX_NOTIFY_RETRY:
+        while retries < MAX_NOTIFY_RETRY or event == "DEALLOCATION":
             try:
                 # Send the POST request
                 data = json.dumps(msg)
@@ -2681,15 +2681,13 @@ class RegisterAPI:
                 else:
                     bt.logging.info(f"API: Notify failed with {hotkey} status code: "
                                     f"{response.status_code}, response: {response.text}")
-                    return None
-
+                    # return None
             except requests.exceptions.RequestException as e:
                 bt.logging.info(f"API: Notify {hotkey} failed: {e}")
 
             # Increment the retry counter and wait before retrying
             retries += 1
             await asyncio.sleep(NOTIFY_RETRY_PERIOD)
-
         return None
 
     async def _check_allocation(self):
