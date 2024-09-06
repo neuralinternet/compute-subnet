@@ -71,9 +71,9 @@ DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQ
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
-ALLOCATE_CHECK_COUNT = 6     # maximum timeout count
+ALLOCATE_CHECK_COUNT = 120     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
-NOTIFY_RETRY_PERIOD = 10     # notify retry interval
+NOTIFY_RETRY_PERIOD = 15     # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
