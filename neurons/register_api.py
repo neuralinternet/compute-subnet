@@ -66,6 +66,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 from utils.webhooks import notify_allocation_status
+
 # Constants
 DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
