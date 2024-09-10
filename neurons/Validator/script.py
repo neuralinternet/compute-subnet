@@ -22,6 +22,7 @@ import time
 import subprocess
 from cryptography.fernet import Fernet
 from typing import Tuple
+import paramiko
 
 secret_key = b'6iYtkeTvhzeQBAPhfImXj6n4AfJX07exqJV2dzlUDjg='  # key
 
@@ -246,7 +247,34 @@ def get_perf_info(encrypted=True):
     except (Exception, RuntimeError) as e:
         print(e)
         return ""
+    
+def check_ssh_login(host, port, username, password):
+    try:
+        # Create an SSH client instance
+        ssh_client = paramiko.SSHClient()
+        
+        # Automatically add the server's host key (you can adjust this if needed)
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        # Attempt to connect to the SSH server using the provided credentials
+        ssh_client.connect(hostname=host, port=port, username=username, password=password, timeout=10)
+        
+        # If login is successful
+        print("SSH login successful")
+        return True
+
+    except paramiko.AuthenticationException:
+        print("Authentication failed, please verify your credentials")
+        return False
+    except paramiko.SSHException as ssh_exception:
+        print(f"Unable to establish SSH connection: {ssh_exception}")
+        return False
+    except Exception as e:
+        print(f"Exception in connecting to the server: {e}")
+        return False
+    finally:
+        # Close the connection after the attempt
+        ssh_client.close()
 
 if __name__ == "__main__":
     print(f"{get_perf_info()}")
