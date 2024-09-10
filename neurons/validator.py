@@ -18,6 +18,7 @@
 
 import ast
 import asyncio
+import base64
 import json
 import os
 import random
@@ -36,6 +37,8 @@ import cryptography
 import torch
 from cryptography.fernet import Fernet
 from torch._C._te import Tensor
+import RSAEncryption as rsa
+from neurons.Validator.script import check_ssh_login
 
 import Validator.app_generator as ag
 from Validator.pow import gen_hash, run_validator_pow
@@ -354,6 +357,29 @@ class Validator:
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
 
+    def sync_checklist(self):
+        self.threads = []
+        for i in range(0, len(self.uids), self.validator_challenge_batch_size):
+            for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
+                try:
+                    axon = self._queryable_uids[_uid]
+                    self.threads.append(
+                        threading.Thread(
+                            target=self.execute_miner_checking_request,
+                            args=(_uid, axon),
+                            name=f"th_execute_miner_checking_request-{_uid}",
+                            daemon=True,
+                        )
+                    )
+                except KeyError:
+                    continue
+
+        for thread in self.threads:
+            thread.start()
+        
+        for thread in self.threads:
+            thread.join()
+
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
             for uid, axon in queryable_tuple_uids_axons:
@@ -539,6 +565,7 @@ class Validator:
 
         response = dendrite.query(axon, Allocate(timeline=1, checking=True), timeout=30)
         port = response.get("port", "")
+        status = response.get("status", False)
 
         if port:
             is_port_open = check_port(axon.ip, port)
@@ -546,8 +573,23 @@ class Validator:
             checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
 
             if is_port_open:
+                if status is True: # if it's able to check allocation
+                    private_key, public_key = rsa.generate_key_pair()
+                    response = dendrite.query(axon, Allocate(timeline=1, checking=False, public_key=public_key), timeout=60)
+                    if response and response["status"] is True:
+                        bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
+                        decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
+                        info = json.loads(decrypted_info_str)
+                        is_ssh_access = check_ssh_login(response['ip'], info['port'], info['username'], info['password'])
+
+                    deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                    if deregister_response and deregister_response["status"] is True:
+                        bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+
                 if axon.hotkey in checklist_hotkeys:
                     penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
+                if not is_ssh_access:
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH ACCESS DISABLED", "description": "It can not access to the server via ssh"})           
             else:
                 if axon.hotkey not in checklist_hotkeys:
                     penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT CLOSED", "description": "The port of ssh server is closed"})
@@ -786,27 +828,7 @@ class Validator:
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
 
-                        self.threads = []
-                        for i in range(0, len(self.uids), self.validator_challenge_batch_size):
-                            for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
-                                try:
-                                    axon = self._queryable_uids[_uid]
-                                    self.threads.append(
-                                        threading.Thread(
-                                            target=self.execute_miner_checking_request,
-                                            args=(_uid, axon),
-                                            name=f"th_execute_miner_checking_request-{_uid}",
-                                            daemon=True,
-                                        )
-                                    )
-                                except KeyError:
-                                    continue
-
-                        for thread in self.threads:
-                            thread.start()
-
-                        for thread in self.threads:
-                            thread.join()
+                        self.sync_checklist()
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
