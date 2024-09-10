@@ -1683,6 +1683,8 @@ class RegisterAPI:
 
                         if hotkey in allocated_hotkeys:
                             allocate_status = "reserved"
+                            if not stats:
+                                continue
                         else:
                             allocate_status = "available"
 
