@@ -1299,7 +1299,8 @@ class RegisterAPI:
                     )
                     entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
-                    allocation_list.append(entry)
+                    if hotkey not in self.checking_allocated:
+                        allocation_list.append(entry)
 
             except Exception as e:
                 bt.logging.error(
