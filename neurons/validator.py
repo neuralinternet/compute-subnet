@@ -573,6 +573,8 @@ class Validator:
             checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
 
             if is_port_open:
+                is_ssh_access = True
+                bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid}")
                 if status is True: # if it's able to check allocation
                     private_key, public_key = rsa.generate_key_pair()
                     response = dendrite.query(axon, Allocate(timeline=1, checking=False, public_key=public_key), timeout=60)
