@@ -67,7 +67,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 
 # Constants
-DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
@@ -1588,6 +1588,71 @@ class RegisterAPI:
                     f"API: An error occurred while retrieving runs from wandb: {e}"
                 )
                 return {} , []
+
+        @self.app.post(
+            "/list/count_all_gpus",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_gpus() -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
+            gpu_instances = {}
+            total_gpu_counts = {}
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_capacity = "{:.2f}".format(
+                                (gpu_miner["capacity"] / 1024)
+                            )
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            gpu_count = gpu_miner["count"]
+                            gpu_instances[(gpu_name, gpu_count)] = gpu_instances.get((gpu_name,gpu_count), 0) + 1
+                            total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
+                    bt.logging.info(f"API: List resources successfully")
+                    # convert the gpu instances and total gpu counts to readable dict
+                    instances = []
+                    gpu_instances = {instances.append({"name": gpu_name , "gpus" : gpu_count , "count": count}) for (gpu_name, gpu_count), count in gpu_instances.items()}
+
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "success": True,
+                        "message": "List resources successfully",
+                        "data": jsonable_encoder({"gpu_instances": instances, "total_gpu_counts": total_gpu_counts}),
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred while counting GPUs.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
         @self.app.post(
             "/list/resources_wandb",
             tags=["WandB"],
@@ -1622,7 +1687,7 @@ class RegisterAPI:
             self.wandb.api.flush()
 
             specs_details,running_hotkey = await get_wandb_running_miners()
-            
+
             # Initialize a dictionary to keep track of GPU instances
             resource_list = []
             gpu_instances = {}
