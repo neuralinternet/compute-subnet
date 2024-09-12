@@ -912,7 +912,7 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-        
+
         @self.app.post(path="/service/pause_docker",
                           tags=["Allocation"],
                           response_model=SuccessResponse | ErrorResponse,
@@ -1016,7 +1016,7 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-                
+
         @self.app.post(path="/service/unpause_docker",
                             tags=["Allocation"],
                             response_model=SuccessResponse | ErrorResponse,
@@ -1120,8 +1120,6 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-
-
 
         @self.app.post("/service/exchange_docker_key",
                        tags=["Allocation"],
@@ -1299,8 +1297,7 @@ class RegisterAPI:
                     )
                     entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
-                    if hotkey not in self.checking_allocated:
-                        allocation_list.append(entry)
+                    allocation_list.append(entry)
 
             except Exception as e:
                 bt.logging.error(
@@ -1552,7 +1549,38 @@ class RegisterAPI:
                         "err_detail": "No resources found.",
                     },
                 )
-            
+
+        async def get_wandb_running_miners():
+            """
+            Get the running miners from wandb
+            """
+
+            filter_rule = {
+                "$and": [
+                    {"config.config.netuid": self.config.netuid},
+                    {"config.role": "miner"},
+                    {"state": "running"},
+                ]
+            }
+            try:
+                return await run_in_threadpool(
+                    self.wandb.api.runs,
+                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filter_rule,
+                )
+            except Exception as e:
+                bt.logging.error(
+                    f"API: An error occurred while retrieving runs from wandb: {e}"
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content={
+                        "success": False,
+                        "message": "An error occurred while retrieving runs from wandb.",
+                        "error": str(e),
+                    },
+                )
+        
         @self.app.post(
             "/list/resources_wandb",
             tags=["WandB"],
@@ -1582,7 +1610,7 @@ class RegisterAPI:
             The API will return the current miner resource and their detail specs on the validator. <br>
             query: The query parameter to filter the resources. <br>
             """
-            
+
             specs_details = {}
             bt.logging.info(f"API: List resources(wandb) on compute subnet")            
             self.wandb.api.flush()
@@ -1590,15 +1618,8 @@ class RegisterAPI:
             # check wandb for available hotkeys
             # self.wandb.api.flush()
             running_hotkey = []
-            filter_rule = {
-                "$and": [
-                    {"config.config.netuid": self.config.netuid},
-                    {"config.role": "miner"},
-                    {"state": "running"},
-                ]
-            }
-            runs = await run_in_threadpool(self.wandb.api.runs,
-                                           f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+
+            runs = await get_wandb_running_miners()
             for run in runs:
                 run_config = run.config
                 run_hotkey = run_config.get("hotkey")
@@ -2382,7 +2403,6 @@ class RegisterAPI:
                     },
                 )
 
-
     @staticmethod
     def _init_config():
         """
@@ -2630,7 +2650,6 @@ class RegisterAPI:
             self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
-
 
     async def _notify_allocation_status(self, event_time: datetime, hotkey: str,
                                         uuid: str, event: str, details: str | None = ""):
