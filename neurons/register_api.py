@@ -1563,24 +1563,31 @@ class RegisterAPI:
                 ]
             }
             try:
-                return await run_in_threadpool(
+                specs_details = {}
+                running_hotkey = []
+                runs =  await run_in_threadpool(
                     self.wandb.api.runs,
                     f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                     filter_rule,
                 )
+                for run in runs:
+                    run_config = run.config
+                    run_hotkey = run_config.get("hotkey")
+                    running_hotkey.append(run_hotkey)
+                    specs = run_config.get("specs")
+                    configs = run_config.get("config")
+                    # check the signature
+                    if run_hotkey and configs:
+                        if specs:
+                            specs_details[run_hotkey] = specs
+                        else:
+                            specs_details[run_hotkey] = {}
+                return specs_details , running_hotkey
             except Exception as e:
                 bt.logging.error(
                     f"API: An error occurred while retrieving runs from wandb: {e}"
                 )
-                return JSONResponse(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    content={
-                        "success": False,
-                        "message": "An error occurred while retrieving runs from wandb.",
-                        "error": str(e),
-                    },
-                )
-        
+                return {} , []
         @self.app.post(
             "/list/resources_wandb",
             tags=["WandB"],
@@ -1611,28 +1618,11 @@ class RegisterAPI:
             query: The query parameter to filter the resources. <br>
             """
 
-            specs_details = {}
             bt.logging.info(f"API: List resources(wandb) on compute subnet")            
             self.wandb.api.flush()
 
-            # check wandb for available hotkeys
-            # self.wandb.api.flush()
-            running_hotkey = []
-
-            runs = await get_wandb_running_miners()
-            for run in runs:
-                run_config = run.config
-                run_hotkey = run_config.get("hotkey")
-                running_hotkey.append(run_hotkey)
-                specs = run_config.get("specs")
-                configs = run_config.get("config")
-                # check the signature
-                if run_hotkey and configs:
-                    if specs:
-                        specs_details[run_hotkey] = specs
-                    else:
-                        specs_details[run_hotkey] = {}
-
+            specs_details,running_hotkey = await get_wandb_running_miners()
+            
             # Initialize a dictionary to keep track of GPU instances
             resource_list = []
             gpu_instances = {}
