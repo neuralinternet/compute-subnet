@@ -216,7 +216,11 @@ class Miner:
         self.last_updated_block = self.current_block - (self.current_block % 100)
         self.allocate_action = False
 
-        self.miner_http_server = start_server(self.config.ssh.port)
+        if (
+            not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+            or not allocation_key_encoded
+        ):
+            self.miner_http_server = start_server(self.config.ssh.port)
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.

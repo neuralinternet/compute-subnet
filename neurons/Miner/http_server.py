@@ -31,6 +31,7 @@ def start_server(port) -> TCPServer:
     return httpd
 
 def stop_server(httpd: TCPServer) -> None:
-    httpd.shutdown()
-    httpd.server_close() 
+    if httpd:
+        httpd.shutdown()
+        httpd.server_close() 
     
