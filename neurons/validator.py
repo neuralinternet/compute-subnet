@@ -578,17 +578,23 @@ class Validator:
                 if status is True: # if it's able to check allocation
                     private_key, public_key = rsa.generate_key_pair()
                     device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
-                    response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
-                    if response and response["status"] is True:
-                        bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
-                        private_key = private_key.encode("utf-8")
-                        decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
-                        info = json.loads(decrypted_info_str)
-                        is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
+                    
+                    try:
+                        response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
+                        if response and response["status"] is True:
+                            bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
+                            private_key = private_key.encode("utf-8")
+                            decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
+                            info = json.loads(decrypted_info_str)
+                            is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
+                    except Exception as e:
+                        bt.logging.error(f"{e}")
+                        return
 
                     deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                     if deregister_response and deregister_response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+
 
                 if axon.hotkey in checklist_hotkeys:
                     penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
