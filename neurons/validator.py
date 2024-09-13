@@ -577,7 +577,8 @@ class Validator:
                 bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid}")
                 if status is True: # if it's able to check allocation
                     private_key, public_key = rsa.generate_key_pair()
-                    response = dendrite.query(axon, Allocate(timeline=1, checking=False, public_key=public_key), timeout=60)
+                    device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+                    response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
                     if response and response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
                         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
