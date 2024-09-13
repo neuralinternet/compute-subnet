@@ -467,10 +467,10 @@ class Miner:
                 if timeline > 0:
                     if self.allocate_action == False:
                         self.allocate_action = True
+                        stop_server(self.miner_http_server)
                         result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
                         self.allocate_action = False
                         synapse.output = result
-                        stop_server(self.miner_http_server)
                     else:
                         bt.logging.info(f"Allocation is already in progress. Please wait for the previous one to finish")
                         synapse.output = {"status": False}
