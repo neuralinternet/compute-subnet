@@ -1631,7 +1631,6 @@ class RegisterAPI:
                             )
                             gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                             gpu_count = gpu_miner["count"]
-<<<<<<< HEAD
                             GPU_COUNTS += gpu_count
                             GPU_MODELS.add(gpu_name)
                             cpu_miner = details["cpu"]
@@ -1648,29 +1647,16 @@ class RegisterAPI:
                             )
                             HARD_DISK_SIZES += float(hard_disk)
                     bt.logging.info(f"API: List resources successfully")
-=======
-                            gpu_instances[(gpu_name, gpu_count)] = gpu_instances.get((gpu_name,gpu_count), 0) + 1
-                            total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
-                    bt.logging.info(f"API: List resources successfully")
-                    # convert the gpu instances and total gpu counts to readable dict
-                    instances = []
-                    gpu_instances = {instances.append({"name": gpu_name , "gpus" : gpu_count , "count": count}) for (gpu_name, gpu_count), count in gpu_instances.items()}
-
->>>>>>> parent of f863a9d (change the count all endpoint to count based on CPU, GPU, RAM and DISK)
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
                         "success": True,
                         "message": "List resources successfully",
-<<<<<<< HEAD
                         "data": jsonable_encoder({"gpu_counts": GPU_COUNTS,
                                                   "gpu_models": list(GPU_MODELS),
                                                   "cpu_counts": CPU_COUNTS,
                                                   "ram_sizes": RAM_SIZES,
                                                   "hard_disk_sizes": HARD_DISK_SIZES}),
-=======
-                        "data": jsonable_encoder({"gpu_instances": instances, "total_gpu_counts": total_gpu_counts}),
->>>>>>> parent of f863a9d (change the count all endpoint to count based on CPU, GPU, RAM and DISK)
                     },
                 )
             except Exception as e:
