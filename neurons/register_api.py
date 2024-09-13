@@ -67,7 +67,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 
 # Constants
-DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
@@ -1628,19 +1628,35 @@ class RegisterAPI:
                             )
                             gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                             gpu_count = gpu_miner["count"]
-                            gpu_instances[(gpu_name, gpu_count)] = gpu_instances.get((gpu_name,gpu_count), 0) + 1
-                            total_gpu_counts[gpu_name] = total_gpu_counts.get(gpu_name, 0) + gpu_count
+                            # Extract CPU details
+                            cpu_miner = details["cpu"]
+                            cpu_count = cpu_miner["count"]
+
+                            # Extract RAM details
+                            ram_miner = details["ram"]
+                            ram = "{:.2f}".format(
+                                ram_miner["available"] / 1024.0 ** 3
+                            )
+
+                            # Extract Hard Disk details
+                            hard_disk_miner = details["hard_disk"]
+                            hard_disk = "{:.2f}".format(
+                                hard_disk_miner["free"] / 1024.0 ** 3
+                            )
+                            count_key = (gpu_name, gpu_count, cpu_count, ram, hard_disk)
+                            gpu_instances[count_key] = (
+                                gpu_instances.get(count_key, 0) + 1
+                            )
                     bt.logging.info(f"API: List resources successfully")
                     # convert the gpu instances and total gpu counts to readable dict
                     instances = []
-                    gpu_instances = {instances.append({"name": gpu_name , "gpus" : gpu_count , "count": count}) for (gpu_name, gpu_count), count in gpu_instances.items()}
-
+                    [instances.append({"gpu_name": key[0], "gpu_count": key[1], "cpu_count": key[2], "ram": key[3], "hard_disk": key[4], "count": value}) for key, value in gpu_instances.items()]
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
                         "success": True,
                         "message": "List resources successfully",
-                        "data": jsonable_encoder({"gpu_instances": instances, "total_gpu_counts": total_gpu_counts}),
+                        "data": jsonable_encoder({"gpu_instances": instances}),
                     },
                 )
             except Exception as e:
