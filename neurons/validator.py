@@ -584,7 +584,7 @@ class Validator:
                         private_key = private_key.encode("utf-8")
                         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
                         info = json.loads(decrypted_info_str)
-                        is_ssh_access = check_ssh_login(response['ip'], info['port'], info['username'], info['password'])
+                        is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
 
                     deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                     if deregister_response and deregister_response["status"] is True:
@@ -593,10 +593,10 @@ class Validator:
                 if axon.hotkey in checklist_hotkeys:
                     penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
                 if not is_ssh_access:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH ACCESS DISABLED", "description": "It can not access to the server via ssh"})           
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})           
             else:
                 if axon.hotkey not in checklist_hotkeys:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT CLOSED", "description": "The port of ssh server is closed"})
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
 
             self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
 
