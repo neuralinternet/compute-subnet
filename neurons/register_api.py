@@ -36,7 +36,7 @@ from urllib3.exceptions import InsecureRequestWarning
 import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
-
+import math
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
 from compute.axon import ComputeSubnetSubtensor
@@ -67,7 +67,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 
 # Constants
-DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
@@ -1590,7 +1590,7 @@ class RegisterAPI:
                 return {} , []
 
         @self.app.post(
-            "/list/count_all",
+            "/list/count_all_gpus",
             tags=["WandB"],
             response_model=SuccessResponse | ErrorResponse,
             responses={
@@ -1615,10 +1615,6 @@ class RegisterAPI:
             """
             bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
             GPU_COUNTS = 0 
-            GPU_MODELS = set()
-            CPU_COUNTS = 0
-            RAM_SIZES = 0
-            HARD_DISK_SIZES = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
                 if specs_details:
@@ -1632,31 +1628,11 @@ class RegisterAPI:
                             gpu_name = str(gpu_miner["details"][0]["name"]).lower()
                             gpu_count = gpu_miner["count"]
                             GPU_COUNTS += gpu_count
-                            GPU_MODELS.add(gpu_name)
-                            cpu_miner = details["cpu"]
-                            cpu_count = cpu_miner["count"]
-                            CPU_COUNTS += cpu_count
-                            ram_miner = details["ram"]
-                            ram = "{:.2f}".format(
-                                ram_miner["available"] / 1024.0 ** 3
-                            )
-                            RAM_SIZES += float(ram)
-                            hard_disk_miner = details["hard_disk"]
-                            hard_disk = "{:.2f}".format(
-                                hard_disk_miner["free"] / 1024.0 ** 3
-                            )
-                            HARD_DISK_SIZES += float(hard_disk)
                     bt.logging.info(f"API: List resources successfully")
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
-                        "success": True,
-                        "message": "List resources successfully",
-                        "data": jsonable_encoder({"gpu_counts": GPU_COUNTS,
-                                                  "gpu_models": list(GPU_MODELS),
-                                                  "cpu_counts": CPU_COUNTS,
-                                                  "ram_sizes": RAM_SIZES,
-                                                  "hard_disk_sizes": HARD_DISK_SIZES}),
+                        "count": GPU_COUNTS,
                     },
                 )
             except Exception as e:
@@ -1669,6 +1645,73 @@ class RegisterAPI:
                         "err_detail": e.__repr__(),
                     },
                 )
+        @self.app.post(
+            "/list/count_all_by_model",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_model(model: str , cpu_count: Optional[int] = None, ram_size: Optional[float] = None) -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")            
+            counter = 0
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        flag = 0
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            if model.lower() == gpu_name:
+                                if cpu_count is not None:
+                                    cpu_miner = details["cpu"]
+                                    if cpu_miner["count"] == cpu_count:
+                                        flag += 1
+                                elif ram_size is not None:
+                                    ram_miner = details["ram"]
+                                    ram = ram_miner["total"] / 1024.0 ** 3
+                                    if int(math.ceil(ram)) == int(ram_size):
+                                        flag += 1
+                                else:
+                                    flag += 1
+                            if flag:
+                                counter+=1
+                    bt.logging.info(f"API: List resources successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                    "count" : counter,
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                    "success": False,
+                    "message": "An error occurred while counting GPUs.",
+                    "err_detail": e.__repr__(),
+                    },
+                )
+
         @self.app.post(
             "/list/resources_wandb",
             tags=["WandB"],
