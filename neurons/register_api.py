@@ -1398,8 +1398,14 @@ class RegisterAPI:
                 running_hotkey.append(run_hotkey)
                 specs = run_config.get("specs")
                 configs = run_config.get("config")
+
+                is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
+
+                if is_active:
+                    bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
+
                 # check the signature
-                if run_hotkey and configs and run_hotkey not in penalized_hotkeys:
+                if run_hotkey and configs and run_hotkey not in penalized_hotkeys and is_active:
                     if specs:
                         specs_details[run_hotkey] = specs
                     else:
