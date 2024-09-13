@@ -581,6 +581,7 @@ class Validator:
                     response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
                     if response and response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
+                        private_key = private_key.encode("utf-8")
                         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
                         info = json.loads(decrypted_info_str)
                         is_ssh_access = check_ssh_login(response['ip'], info['port'], info['username'], info['password'])
