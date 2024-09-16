@@ -18,6 +18,7 @@
 
 import ast
 import asyncio
+import base64
 import json
 import os
 import random
@@ -31,10 +32,13 @@ import bittensor as bt
 import math
 import time
 
+from compute.utils.socket import check_port
 import cryptography
 import torch
 from cryptography.fernet import Fernet
 from torch._C._te import Tensor
+import RSAEncryption as rsa
+from neurons.Validator.script import check_ssh_login
 
 import Validator.app_generator as ag
 from Validator.pow import gen_hash, run_validator_pow
@@ -50,7 +54,7 @@ from compute import (
     specs_timeout,
 )
 from compute.axon import ComputeSubnetSubtensor
-from compute.protocol import Challenge, Specs
+from compute.protocol import Allocate, Challenge, Specs
 from compute.utils.db import ComputeDb
 from compute.utils.math import percent, force_to_float_or_default
 from compute.utils.parser import ComputeArgPaser
@@ -158,8 +162,6 @@ class Validator:
         self._wallet = bt.wallet(config=self.config)
         bt.logging.info(f"Wallet: {self.wallet}")
 
-        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
-
         # The subtensor is our connection to the Bittensor blockchain.
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
@@ -176,6 +178,9 @@ class Validator:
         self.db = ComputeDb()
         self.miners: dict = select_miners(self.db)
 
+        # Initialize wandb
+        self.wandb = ComputeWandb(self.config, self.wallet, os.path.basename(__file__))
+
         # Step 3: Set up initial scoring weights for validation
         bt.logging.info("Building validation weights.")
         self.uids: list = self.metagraph.uids.tolist()
@@ -184,6 +189,12 @@ class Validator:
         self.sync_status()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
+
+        # Initialize allocated_hotkeys as an empty list
+        self.allocated_hotkeys = []
+
+        # Initialize penalized_hotkeys as an empty list
+        self.penalized_hotkeys = []
 
         # Init the thread.
         self.lock = threading.Lock()
@@ -268,8 +279,13 @@ class Validator:
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
 
+        valid_validator_hotkeys = self.get_valid_validator_hotkeys()
+
         # Fetch allocated hotkeys
-        allocated_hotkeys = self.wandb.get_allocated_hotkeys(self.get_valid_validator_hotkeys(), True)
+        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
+
+        # Fetch penalized hotkeys
+        self.penalized_hotkeys = self.wandb.get_penalized_hotkeys(valid_validator_hotkeys, True)
 
         # Fetch docker requirement
         has_docker_hotkeys = select_has_docker_miners_hotkey(self.db)
@@ -288,7 +304,20 @@ class Validator:
                 else:
                     self.stats[uid]["has_docker"] = False
 
-                score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=allocated_hotkeys)
+                # Find the maximum score of all uids excluding allocated uids
+                # max_score_uids = max(
+                #     self.stats[uid]["score"]
+                #     for uid in self.stats
+                #     if "score" in self.stats[uid] and self.stats[uid].get("ss58_address") not in self.allocated_hotkeys
+                # )
+
+                # score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=self.allocated_hotkeys, max_score_uid=max_score_uids)
+                score = calc_score(self.stats[uid],
+                                    hotkey = hotkey,
+                                    allocated_hotkeys = self.allocated_hotkeys,
+                                    penalized_hotkeys = self.penalized_hotkeys,
+                                    validator_hotkeys = valid_validator_hotkeys)
+
                 self.stats[uid]["score"] = score
             except (ValueError, KeyError):
                 score = 0
@@ -327,6 +356,29 @@ class Validator:
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
+
+    def sync_checklist(self):
+        self.threads = []
+        for i in range(0, len(self.uids), self.validator_challenge_batch_size):
+            for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
+                try:
+                    axon = self._queryable_uids[_uid]
+                    self.threads.append(
+                        threading.Thread(
+                            target=self.execute_miner_checking_request,
+                            args=(_uid, axon),
+                            name=f"th_execute_miner_checking_request-{_uid}",
+                            daemon=True,
+                        )
+                    )
+                except KeyError:
+                    continue
+
+        for thread in self.threads:
+            thread.start()
+        
+        for thread in self.threads:
+            thread.join()
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
@@ -507,6 +559,53 @@ class Validator:
             self.pow_responses[uid] = response
             self.new_pow_benchmark[uid] = result_data
 
+    def execute_miner_checking_request(self, uid, axon: bt.AxonInfo):
+        dendrite = bt.dendrite(wallet=self.wallet)
+        bt.logging.info(f"Querying for {Allocate.__name__} - {uid}/{axon.hotkey}")
+
+        response = dendrite.query(axon, Allocate(timeline=1, checking=True), timeout=30)
+        port = response.get("port", "")
+        status = response.get("status", False)
+
+        if port:
+            is_port_open = check_port(axon.ip, port)
+            penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
+            checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
+
+            if is_port_open:
+                is_ssh_access = True
+                bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid}")
+                if status is True: # if it's able to check allocation
+                    private_key, public_key = rsa.generate_key_pair()
+                    device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+                    
+                    try:
+                        response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
+                        if response and response["status"] is True:
+                            bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
+                            private_key = private_key.encode("utf-8")
+                            decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
+                            info = json.loads(decrypted_info_str)
+                            is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
+                    except Exception as e:
+                        bt.logging.error(f"{e}")
+                        return
+
+                    deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                    if deregister_response and deregister_response["status"] is True:
+                        bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+
+
+                if axon.hotkey in checklist_hotkeys:
+                    penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
+                if not is_ssh_access:
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})           
+            else:
+                if axon.hotkey not in checklist_hotkeys:
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
+
+            self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
+
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
             return
@@ -640,12 +739,14 @@ class Validator:
         block_next_challenge = 1
         block_next_sync_status = 1
         block_next_set_weights = self.current_block + weights_rate_limit
-        block_next_hardware_info = 1
+        block_next_hardware_info = 1        
+        block_next_miner_checking = 1
 
         time_next_challenge = None
         time_next_sync_status = None
         time_next_set_weights = None
-        time_next_hardware_info = None
+        time_next_hardware_info = None        
+        time_next_miner_checking = None
 
         bt.logging.info("Starting validator loop.")
         while True:
@@ -661,6 +762,7 @@ class Validator:
                     time_next_hardware_info = self.next_info(
                         not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info
                     )
+                    time_next_miner_checking = self.next_info(not block_next_miner_checking == 1, block_next_miner_checking)
 
                     # Perform pow queries
                     if self.current_block % block_next_challenge == 0 or block_next_challenge < self.current_block:
@@ -678,6 +780,8 @@ class Validator:
                             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                                 try:
                                     axon = self._queryable_uids[_uid]
+                                    if axon.hotkey in self.allocated_hotkeys:
+                                        continue
                                     difficulty = self.calc_difficulty(_uid)
                                     password, _hash, _salt, mode, chars, mask = run_validator_pow(length=difficulty)
                                     self.pow_requests[_uid] = (password, _hash, _salt, mode, chars, mask, difficulty)
@@ -726,6 +830,16 @@ class Validator:
                         # self.loop.run_in_executor(None, self.execute_specs_request) replaced by wandb query.
                         self.get_specs_wandb()
 
+                    # Perform miner checking
+                    if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
+                        # Next block the validators will do port checking again.
+                        block_next_miner_checking = self.current_block + 50  # 50 -> every 10 minutes
+
+                        # Filter axons with stake and ip address.
+                        self._queryable_uids = self.get_queryable()
+
+                        self.sync_checklist()
+
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
                         self.sync_status()
@@ -733,10 +847,10 @@ class Validator:
                         # Log chain data to wandb
                         chain_data = {
                             "Block": self.current_block,
-                            "Stake": float(self.metagraph.S[self.validator_subnet_uid].numpy()),
-                            "Rank": float(self.metagraph.R[self.validator_subnet_uid].numpy()),
-                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid].numpy()),
-                            "Emission": float(self.metagraph.E[self.validator_subnet_uid].numpy()),
+                            "Stake": float(self.metagraph.S[self.validator_subnet_uid]),
+                            "Rank": float(self.metagraph.R[self.validator_subnet_uid]),
+                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid]),
+                            "Emission": float(self.metagraph.E[self.validator_subnet_uid]),
                         }
                         self.wandb.log_chain_data(chain_data)
 
@@ -759,7 +873,8 @@ class Validator:
                         f"next_challenge: #{block_next_challenge} ~ {time_next_challenge} | "
                         f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
                         f"set_weights: #{block_next_set_weights} ~ {time_next_set_weights} | "
-                        f"hardware_info: #{block_next_hardware_info} ~ {time_next_hardware_info}"
+                        f"hardware_info: #{block_next_hardware_info} ~ {time_next_hardware_info} |"
+                        f"miner_checking: #{block_next_miner_checking} ~ {time_next_miner_checking}"
                     )
                 )
                 time.sleep(1)

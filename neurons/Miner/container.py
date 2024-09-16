@@ -302,6 +302,41 @@ def restart_container():
         bt.logging.info(f"Error restart container {e}")
         return {"status": False}
 
+def pause_container():
+    try:
+        client, containers = get_docker()
+        running_container = None
+        for container in containers:
+            if container_name in container.name:
+                running_container = container
+                break
+        if running_container:
+            running_container.pause()
+            return {"status": True}
+        else:
+            bt.logging.info("Unable to find container")
+            return {"status": False}
+    except Exception as e:
+        bt.logging.info(f"Error pausing container {e}")
+        return {"status": False}
+
+def unpause_container():
+    try:
+        client, containers = get_docker()
+        running_container = None
+        for container in containers:
+            if container_name in container.name:
+                running_container = container
+                break
+        if running_container:
+            running_container.unpause()
+            return {"status": True}
+        else:
+            bt.logging.info("Unable to find container")
+            return {"status": False}
+    except Exception as e:
+        bt.logging.info(f"Error unpausing container {e}")
+        return {"status": False}
 
 def exchange_key_container(new_ssh_key: str):
     try:

@@ -23,6 +23,7 @@ import base64
 import os
 import json
 import bittensor as bt
+from compute.utils.socket import check_port
 import torch
 import time
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ from urllib3.exceptions import InsecureRequestWarning
 import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
-
+import math
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
 from compute.axon import ComputeSubnetSubtensor
@@ -70,9 +71,9 @@ DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQ
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
-ALLOCATE_CHECK_COUNT = 6     # maximum timeout count
+ALLOCATE_CHECK_COUNT = 120     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
-NOTIFY_RETRY_PERIOD = 10     # notify retry interval
+NOTIFY_RETRY_PERIOD = 15     # notify retry interval
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -263,7 +264,7 @@ class RegisterAPI:
         self.checking_allocated = []
         self.notify_retry_table = []
         self.deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
-        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")
+        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")        
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -912,6 +913,213 @@ class RegisterAPI:
                 cursor.close()
                 db.close()
 
+        @self.app.post(path="/service/pause_docker",
+                          tags=["Allocation"],
+                          response_model=SuccessResponse | ErrorResponse,
+                          responses={
+                            200: {
+                                 "model": SuccessResponse,
+                                 "description": "Resource pause successfully.",
+                            },
+                            403: {
+                                 "model": ErrorResponse,
+                                 "description": "An error occurred while pausing docker.",
+                            },
+                          })
+        async def pause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "pause",
+                        "ssh_key": "",
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker pause successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker pause without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource paused successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Pause not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSONResponse(
+                        status_code
+                        =status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during pause operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during pause operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
+
+        @self.app.post(path="/service/unpause_docker",
+                            tags=["Allocation"],
+                            response_model=SuccessResponse | ErrorResponse,
+                            responses={
+                                200: {
+                                    "model": SuccessResponse,
+                                    "description": "Resource unpause successfully.",
+                                },
+                                403: {
+                                    "model": ErrorResponse,
+                                    "description": "An error occurred while unpausing docker.",
+                                },
+                            })
+        async def unpause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+            # Instantiate the connection to the db
+            db = ComputeDb()
+            cursor = db.get_cursor()
+
+            try:
+                # Retrieve the allocation details for the given hotkey
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (hotkey,),
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    # Parse the JSON string in the 'details' column
+                    info = json.loads(row[0])
+                    result_hotkey = row[1]
+
+                    username = info["username"]
+                    password = info["password"]
+                    port = info["port"]
+                    ip = info["ip"]
+                    regkey = info["regkey"]
+                    uuid_key_db = info["uuid"]
+
+                    docker_action = {
+                        "action": "unpause",
+                        "ssh_key": "",
+                    }
+
+                    if uuid_key_db == uuid_key:
+                        index = self.metagraph.hotkeys.index(hotkey)
+                        axon = self.metagraph.axons[index]
+                        run_start = time.time()
+                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                                                  docker_change=True, docker_action=docker_action)
+                        response = await run_in_threadpool(
+                            self.dendrite.query, axon, allocate_class, timeout=60
+                        )
+                        run_end = time.time()
+                        time_eval = run_end - run_start
+                        # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+
+                        if response and response["status"] is True:
+                            bt.logging.info(f"API: Resource {hotkey} docker unpause successfully")
+                        else:
+                            bt.logging.error(f"API: Resource {hotkey} docker unpause without response.")
+
+                        return JSONResponse(
+                            status_code=status.HTTP_200_OK,
+                            content={
+                                "success": True,
+                                "message": "Resource unpaused successfully.",
+                            },
+                        )
+                    else:
+                        bt.logging.error(f"API: Invalid UUID key for {hotkey}")
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={
+                                "success": False,
+                                "message": "Unpause not successfully, please try again.",
+                                "err_detail": "Invalid UUID key",
+                            },
+                        )
+
+                else:
+                    bt.logging.info(f"API: No allocation details found for the provided hotkey")
+                    return JSON
+                    Response(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        content={
+                            "success": False,
+                            "message": "No allocation details found for the provided hotkey.",
+                            "err_detail": "No allocation details found for the provided hotkey.",
+                        },
+                    )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred during unpause operation {e.__repr__()}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred during unpause operation.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+            finally:
+                cursor.close()
+                db.close()
 
         @self.app.post("/service/exchange_docker_key",
                        tags=["Allocation"],
@@ -1247,7 +1455,395 @@ class RegisterAPI:
                                 if query is None or query == {}:
                                     add_resource = True
                                 else:
-                                    if query.gpu_name is not None and query.gpu_name not in gpu_name:
+                                    if query.gpu_name is not None and query.gpu_name.lower() not in gpu_name:
+                                        continue
+                                    if (query.gpu_capacity_max is not None and
+                                            float(gpu_capacity) > query.gpu_capacity_max):
+                                        continue
+                                    if (query.gpu_capacity_min is not None and
+                                            float(gpu_capacity) < query.gpu_capacity_min):
+                                        continue
+                                    if (query.cpu_count_max is not None and
+                                            int(cpu_count) > query.cpu_count_max):
+                                        continue
+                                    if (query.cpu_count_min is not None and
+                                            int(cpu_count) < query.cpu_count_min):
+                                        continue
+                                    if (query.ram_total_max is not None and
+                                            float(ram) > query.ram_total_max):
+                                        continue
+                                    if (query.ram_total_min is not None and
+                                            float(ram) < query.ram_total_min):
+                                        continue
+                                    if (query.hard_disk_total_max is not None and
+                                            float(hard_disk) > query.hard_disk_total_max):
+                                        continue
+                                    if (query.hard_disk_total_min is not None and
+                                            float(hard_disk) < query.hard_disk_total_min):
+                                        continue
+                                    add_resource = True
+
+                                if add_resource:
+                                    resource.cpu_count = int(cpu_count)
+                                    resource.gpu_name = gpu_name
+                                    resource.gpu_capacity = float(gpu_capacity)
+                                    resource.gpu_count = int(gpu_count)
+                                    resource.ram = float(ram)
+                                    resource.hard_disk = float(hard_disk)
+                                    resource.allocate_status = allocate_status
+                                    resource_list.append(resource)
+                        except (KeyError, IndexError, TypeError, ValueError) as e:
+                            bt.logging.error(f"API: Error occurred while filtering resources: {e}")
+                            continue
+
+                if stats:
+                    status_counts = {"available": 0, "reserved": 0, "total": 0}
+                    try:
+                        for item in resource_list:
+                            status_code = item.dict()["allocate_status"]
+                            if status_code in status_counts:
+                                status_counts[status_code] += 1
+                                status_counts["total"] += 1
+                    except Exception as e:
+                        bt.logging.error(f"API: Error occurred while counting status: {e}")
+                        status_counts = {"available": 0, "reserved": 0, "total": 0}
+
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder({"stats": status_counts}),
+                        },
+                    )
+                else:
+                    if page_number:
+                        page_size = page_size if page_size else 50
+                        result = self._paginate_list(resource_list, page_number, page_size)
+                    else:
+                        result = {
+                            "page_items": resource_list,
+                            "page_number": 1,
+                            "page_size": len(resource_list),
+                            "next_page_number": None,
+                        }
+
+                    bt.logging.info(f"API: List resources successfully")
+                    return JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "success": True,
+                            "message": "List resources successfully",
+                            "data": jsonable_encoder(result),
+                        },
+                    )
+
+            else:
+                bt.logging.info(f"API: There is no resource available")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "There is no resource available",
+                        "err_detail": "No resources found.",
+                    },
+                )
+
+        async def get_wandb_running_miners():
+            """
+            Get the running miners from wandb
+            """
+
+            filter_rule = {
+                "$and": [
+                    {"config.config.netuid": self.config.netuid},
+                    {"config.role": "miner"},
+                    {"state": "running"},
+                ]
+            }
+            try:
+                specs_details = {}
+                running_hotkey = []
+                runs =  await run_in_threadpool(
+                    self.wandb.api.runs,
+                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filter_rule,
+                )
+                penalized_hotkeys = await run_in_threadpool(
+                    self.wandb.get_penalized_hotkeys, [], False
+                )
+
+
+                for run in runs:
+                    run_config = run.config
+                    run_hotkey = run_config.get("hotkey")
+                    running_hotkey.append(run_hotkey)
+                    specs = run_config.get("specs")
+                    configs = run_config.get("config")
+                    is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
+
+                    if is_active:
+                        bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
+                    # check the signature
+                    if (
+                        run_hotkey
+                        and configs
+                        and run_hotkey not in penalized_hotkeys
+                        and is_active
+                    ):
+                        if specs:
+                            specs_details[run_hotkey] = specs
+                        else:
+                            specs_details[run_hotkey] = {}
+                return specs_details , running_hotkey
+            except Exception as e:
+                bt.logging.error(
+                    f"API: An error occurred while retrieving runs from wandb: {e}"
+                )
+                return {} , []
+
+        @self.app.post(
+            "/list/count_all_gpus",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_gpus() -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
+            GPU_COUNTS = 0 
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_capacity = "{:.2f}".format(
+                                (gpu_miner["capacity"] / 1024)
+                            )
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            gpu_count = gpu_miner["count"]
+                            GPU_COUNTS += gpu_count
+                    bt.logging.info(f"API: List resources successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "count": GPU_COUNTS,
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred while counting GPUs.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+        @self.app.post(
+            "/list/count_all_by_model",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_model(model: str , cpu_count: Optional[int] = None, ram_size: Optional[float] = None) -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")            
+            counter = 0
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        flag = 0
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            if model.lower() == gpu_name:
+                                if cpu_count is not None:
+                                    cpu_miner = details["cpu"]
+                                    if cpu_miner["count"] == cpu_count:
+                                        flag += 1
+                                elif ram_size is not None:
+                                    ram_miner = details["ram"]
+                                    ram = ram_miner["total"] / 1024.0 ** 3
+                                    if int(math.ceil(ram)) == int(ram_size):
+                                        flag += 1
+                                else:
+                                    flag += 1
+                            if flag:
+                                counter+=1
+                    bt.logging.info(f"API: List resources successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                    "count" : counter,
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                    "success": False,
+                    "message": "An error occurred while counting GPUs.",
+                    "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post(
+            "/list/resources_wandb",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def list_resources_wandb(query: ResourceQuery = None,
+                                 stats: bool = False,
+                                 page_size: Optional[int] = None,
+                                 page_number: Optional[int] = None) -> JSONResponse:
+            """
+            The list resources API endpoint. <br>
+            The API will return the current miner resource and their detail specs on the validator. <br>
+            query: The query parameter to filter the resources. <br>
+            """
+
+            bt.logging.info(f"API: List resources(wandb) on compute subnet")            
+            self.wandb.api.flush()
+
+            specs_details,running_hotkey = await get_wandb_running_miners()
+
+            # Initialize a dictionary to keep track of GPU instances
+            resource_list = []
+            gpu_instances = {}
+            total_gpu_counts = {}
+
+            # Get the allocated hotkeys from wandb
+            allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, [], False)
+
+            if specs_details:
+                # Iterate through the miner specs details and print the table
+                for hotkey, details in specs_details.items():
+                    if hotkey in running_hotkey:
+                        if details:  # Check if details are not empty
+                            resource = Resource()
+                            try:
+                                # Extract GPU details
+                                gpu_miner = details["gpu"]
+                                gpu_capacity = "{:.2f}".format(
+                                    (gpu_miner["capacity"] / 1024)
+                                )
+                                gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                                gpu_count = gpu_miner["count"]
+
+                                # Extract CPU details
+                                cpu_miner = details["cpu"]
+                                cpu_count = cpu_miner["count"]
+
+                                # Extract RAM details
+                                ram_miner = details["ram"]
+                                ram = "{:.2f}".format(
+                                    ram_miner["total"] / 1024.0 ** 3
+                                )
+
+                                # Extract Hard Disk details
+                                hard_disk_miner = details["hard_disk"]
+                                hard_disk = "{:.2f}".format(
+                                    hard_disk_miner["free"] / 1024.0 ** 3
+                                )
+
+                                # Update the GPU instances count
+                                gpu_key = (gpu_name, gpu_count)
+                                gpu_instances[gpu_key] = (
+                                        gpu_instances.get(gpu_key, 0) + 1
+                                )
+                                total_gpu_counts[gpu_name] = (
+                                        total_gpu_counts.get(gpu_name, 0) + gpu_count
+                                )
+
+                            except (KeyError, IndexError, TypeError):
+                                gpu_name = "Invalid details"
+                                gpu_capacity = "N/A"
+                                gpu_count = "N/A"
+                                cpu_count = "N/A"
+                                ram = "N/A"
+                                hard_disk = "N/A"
+                        else:
+                            gpu_name = "No details available"
+                            gpu_capacity = "N/A"
+                            gpu_count = "N/A"
+                            cpu_count = "N/A"
+                            ram = "N/A"
+                            hard_disk = "N/A"
+
+                        # Allocation status
+                        # allocate_status = "N/A"
+
+                        if hotkey in allocated_hotkeys:
+                            allocate_status = "reserved"
+                            if not stats:
+                                continue
+                        else:
+                            allocate_status = "available"
+
+                        add_resource = False
+                        # Print the row with column separators
+                        resource.hotkey = hotkey
+
+                        try:
+                            if gpu_name != "Invalid details" and gpu_name != "No details available":
+                                if query is None or query == {}:
+                                    add_resource = True
+                                else:
+                                    if query.gpu_name is not None and query.gpu_name.lower() not in gpu_name:
                                         continue
                                     if (query.gpu_capacity_max is not None and
                                             float(gpu_capacity) > query.gpu_capacity_max):
@@ -1937,7 +2533,6 @@ class RegisterAPI:
                     },
                 )
 
-
     @staticmethod
     def _init_config():
         """
@@ -2186,7 +2781,6 @@ class RegisterAPI:
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
 
-
     async def _notify_allocation_status(self, event_time: datetime, hotkey: str,
                                         uuid: str, event: str, details: str | None = ""):
         """
@@ -2360,21 +2954,15 @@ class RegisterAPI:
 
     @staticmethod
     def check_port_open(host, port, hotkey):
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(1)  # Set a timeout for the connection attempt
-                result = sock.connect_ex((host, port))
-                if result == 0:
-                    bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
-                    return True
-                else:
-                    bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
-                    return False
-        except socket.gaierror:
-            bt.logging.warning(f"API: Hostname {host} could not be resolved")
+        result = check_port(host, port)
+        if result is True:
+            bt.logging.info(f"API: Port {port} on {host} is open for {hotkey}")
+            return True
+        elif result is False:
+            bt.logging.info(f"API: Port {port} on {host} is closed for {hotkey}")
             return False
-        except socket.error:
-            bt.logging.error(f"API: Couldn't connect to server {host}")
+        else:
+            bt.logging.warning(f"API: Could not determine status of port {port} on {host} for {hotkey}")
             return False
 
     def run(self):

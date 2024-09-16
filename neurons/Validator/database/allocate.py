@@ -228,6 +228,27 @@ def update_allocation_db(hotkey: str, info: str, flag: bool):
         cursor.close()
         db.close()
 
+#  Update the ablacklist db
+def update_blacklist_db(hotkeys: list, flag: bool):
+    db = ComputeDb()
+    cursor = db.get_cursor()
+    try:
+        if flag:
+            # Insert the penalized hotkeys to the blacklist
+            cursor.executemany("""
+                INSERT INTO blacklist (hotkey)
+                VALUES (?) ON CONFLICT(hotkey) DO NOTHING
+            """, [(hotkey,) for hotkey in hotkeys])
+        else:
+            # Remove the hotkeys from the blacklist
+            cursor.executemany("DELETE FROM blacklist WHERE hotkey = ?", [(hotkey,) for hotkey in hotkeys])
+        db.conn.commit()
+    except Exception as e:
+        db.conn.rollback()
+        bt.logging.error(f"Error while updating blacklist: {e}")
+    finally:
+        cursor.close()
+        db.close()
 
 # Check if the miner meets required details
 def allocate_check_if_miner_meet(details, required_details):

@@ -35,7 +35,7 @@ def prevent_none(val):
 
 
 # Calculate score based on the performance information
-def calc_score(response, hotkey, allocated_hotkeys, mock=False):
+def calc_score(response, hotkey, allocated_hotkeys, penalized_hotkeys, validator_hotkeys, mock=False):
     """
     Method to calculate the score attributed to this miner dual uid - hotkey
     :param response:
@@ -59,9 +59,6 @@ def calc_score(response, hotkey, allocated_hotkeys, mock=False):
         challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
         challenge_difficulty_avg = prevent_none(response["last_20_difficulty_avg"])
         has_docker = response.get("has_docker", False)
-
-        if last_20_challenge_failed >= 10 or challenge_successes == 0:
-            return 0
 
         # Define base weights for the PoW
         success_weight = 1
@@ -114,6 +111,22 @@ def calc_score(response, hotkey, allocated_hotkeys, mock=False):
             final_score = difficulty + successes + time_elapsed - failed_penalty
             if penalty:
                 final_score = final_score/2
+
+        if (last_20_challenge_failed >= 19 or challenge_successes == 0) and not allocation_status:
+            return 0
+
+        # Penalize miners if their hotkey is in the penalized_hotkeys list
+        if hotkey in penalized_hotkeys:
+            # Calculate the penalty factor based on the proportion of penalized hotkeys
+            penalty_count = penalized_hotkeys.count(hotkey)
+            half_validators = len(validator_hotkeys) / 2
+
+            # If penalty count equals or exceeds half of the validators, set score to 0
+            if penalty_count >= half_validators:
+                final_score = 0
+            else:
+                penalty_multiplier = max(1 - (penalty_count / half_validators), 0)
+                final_score *= penalty_multiplier
 
         # Final score is > 0
         final_score = max(0, final_score)
