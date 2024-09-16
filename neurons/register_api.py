@@ -1570,14 +1570,28 @@ class RegisterAPI:
                     f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                     filter_rule,
                 )
+                penalized_hotkeys = await run_in_threadpool(
+                    self.wandb.get_penalized_hotkeys, [], False
+                )
+
+
                 for run in runs:
                     run_config = run.config
                     run_hotkey = run_config.get("hotkey")
                     running_hotkey.append(run_hotkey)
                     specs = run_config.get("specs")
                     configs = run_config.get("config")
+                    is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
+
+                    if is_active:
+                        bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
                     # check the signature
-                    if run_hotkey and configs:
+                    if (
+                        run_hotkey
+                        and configs
+                        and run_hotkey not in penalized_hotkeys
+                        and is_active
+                    ):
                         if specs:
                             specs_details[run_hotkey] = specs
                         else:
