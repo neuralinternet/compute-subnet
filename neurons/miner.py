@@ -186,6 +186,7 @@ class Miner:
 
         # check allocation status
         file_path = "allocation_key"
+        allocation_key_encoded = None
         if os.path.exists(file_path):
             # Open the file in read mode ('r') and read the data
             with open(file_path, "r") as file:
