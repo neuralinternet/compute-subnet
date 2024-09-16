@@ -1791,7 +1791,7 @@ class RegisterAPI:
                                 # Extract RAM details
                                 ram_miner = details["ram"]
                                 ram = "{:.2f}".format(
-                                    ram_miner["available"] / 1024.0 ** 3
+                                    ram_miner["total"] / 1024.0 ** 3
                                 )
 
                                 # Extract Hard Disk details
@@ -1829,6 +1829,8 @@ class RegisterAPI:
 
                         if hotkey in allocated_hotkeys:
                             allocate_status = "reserved"
+                            if not stats:
+                                continue
                         else:
                             allocate_status = "available"
 

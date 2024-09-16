@@ -68,10 +68,12 @@ from neurons.Miner.container import (
 )
 from compute.wandb.wandb import ComputeWandb
 from neurons.Miner.allocate import check_allocation, register_allocation
+from neurons.Miner.http_server import start_server, stop_server
 from neurons.Miner.pow import check_cuda_availability, run_miner_pow
 
 # from neurons.Miner.specs import RequestSpecsProcessor
 from neurons.Validator.script import check_docker_availability
+from socketserver import TCPServer
 
 
 class Miner:
@@ -87,6 +89,10 @@ class Miner:
     miner_whitelist_updated_threshold: int
 
     miner_subnet_uid: int
+
+    miner_http_server: TCPServer
+
+
 
     _axon: bt.axon
 
@@ -209,6 +215,12 @@ class Miner:
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
         self.allocate_action = False
+
+        if (
+            not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+            or not allocation_key_encoded
+        ):
+            self.miner_http_server = start_server(self.config.ssh.port)
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
@@ -459,6 +471,7 @@ class Miner:
                 if timeline > 0:
                     if self.allocate_action == False:
                         self.allocate_action = True
+                        stop_server(self.miner_http_server)
                         result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
                         self.allocate_action = False
                         synapse.output = result
@@ -467,8 +480,10 @@ class Miner:
                         synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
+                    self.miner_http_server = start_server(self.config.ssh.port)
                 synapse.output = result
         self.update_allocation(synapse)
+        synapse.output["port"] = int(self.config.ssh.port)
         return synapse
 
     # The blacklist function decides if a request should be ignored.
