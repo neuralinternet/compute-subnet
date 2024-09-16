@@ -36,7 +36,7 @@ from urllib3.exceptions import InsecureRequestWarning
 import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
-
+import math
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
 from compute.axon import ComputeSubnetSubtensor
@@ -912,7 +912,7 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-        
+
         @self.app.post(path="/service/pause_docker",
                           tags=["Allocation"],
                           response_model=SuccessResponse | ErrorResponse,
@@ -1016,7 +1016,7 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-                
+
         @self.app.post(path="/service/unpause_docker",
                             tags=["Allocation"],
                             response_model=SuccessResponse | ErrorResponse,
@@ -1120,8 +1120,6 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-
-
 
         @self.app.post("/service/exchange_docker_key",
                        tags=["Allocation"],
@@ -1299,8 +1297,7 @@ class RegisterAPI:
                     )
                     entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
-                    if hotkey not in self.checking_allocated:
-                        allocation_list.append(entry)
+                    allocation_list.append(entry)
 
             except Exception as e:
                 bt.logging.error(
@@ -1552,7 +1549,183 @@ class RegisterAPI:
                         "err_detail": "No resources found.",
                     },
                 )
-            
+
+        async def get_wandb_running_miners():
+            """
+            Get the running miners from wandb
+            """
+
+            filter_rule = {
+                "$and": [
+                    {"config.config.netuid": self.config.netuid},
+                    {"config.role": "miner"},
+                    {"state": "running"},
+                ]
+            }
+            try:
+                specs_details = {}
+                running_hotkey = []
+                runs =  await run_in_threadpool(
+                    self.wandb.api.runs,
+                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filter_rule,
+                )
+                penalized_hotkeys = await run_in_threadpool(
+                    self.wandb.get_penalized_hotkeys, [], False
+                )
+
+
+                for run in runs:
+                    run_config = run.config
+                    run_hotkey = run_config.get("hotkey")
+                    running_hotkey.append(run_hotkey)
+                    specs = run_config.get("specs")
+                    configs = run_config.get("config")
+                    is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
+
+                    if is_active:
+                        bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
+                    # check the signature
+                    if (
+                        run_hotkey
+                        and configs
+                        and run_hotkey not in penalized_hotkeys
+                        and is_active
+                    ):
+                        if specs:
+                            specs_details[run_hotkey] = specs
+                        else:
+                            specs_details[run_hotkey] = {}
+                return specs_details , running_hotkey
+            except Exception as e:
+                bt.logging.error(
+                    f"API: An error occurred while retrieving runs from wandb: {e}"
+                )
+                return {} , []
+
+        @self.app.post(
+            "/list/count_all_gpus",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_gpus() -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
+            GPU_COUNTS = 0 
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_capacity = "{:.2f}".format(
+                                (gpu_miner["capacity"] / 1024)
+                            )
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            gpu_count = gpu_miner["count"]
+                            GPU_COUNTS += gpu_count
+                    bt.logging.info(f"API: List resources successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "count": GPU_COUNTS,
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "message": "An error occurred while counting GPUs.",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+        @self.app.post(
+            "/list/count_all_by_model",
+            tags=["WandB"],
+            response_model=SuccessResponse | ErrorResponse,
+            responses={
+                200: {
+                    "model": SuccessResponse,
+                    "description": "List resources successfully.",
+                },
+                401: {"model": ErrorResponse, "description": "Missing authorization"},
+                404: {
+                    "model": ErrorResponse,
+                    "description": "There is no resource available",
+                },
+                422: {
+                    "model": ErrorResponse,
+                    "description": "Validation Error, Please check the request body.",
+                },
+            },
+        )
+        async def count_all_model(model: str , cpu_count: Optional[int] = None, ram_size: Optional[float] = None) -> JSONResponse:
+            """
+            Count all GPUs on the compute subnet
+            """
+            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")            
+            counter = 0
+            specs_details , running_hotkey = await get_wandb_running_miners()
+            try:
+                if specs_details:
+                    # Iterate through the miner specs details and print the table
+                    for hotkey, details in specs_details.items():
+                        flag = 0
+                        if details :
+                            gpu_miner = details["gpu"]
+                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
+                            if model.lower() == gpu_name:
+                                if cpu_count is not None:
+                                    cpu_miner = details["cpu"]
+                                    if cpu_miner["count"] == cpu_count:
+                                        flag += 1
+                                elif ram_size is not None:
+                                    ram_miner = details["ram"]
+                                    ram = ram_miner["total"] / 1024.0 ** 3
+                                    if int(math.ceil(ram)) == int(ram_size):
+                                        flag += 1
+                                else:
+                                    flag += 1
+                            if flag:
+                                counter+=1
+                    bt.logging.info(f"API: List resources successfully")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                    "count" : counter,
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while counting GPUs: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                    "success": False,
+                    "message": "An error occurred while counting GPUs.",
+                    "err_detail": e.__repr__(),
+                    },
+                )
+
         @self.app.post(
             "/list/resources_wandb",
             tags=["WandB"],
@@ -1582,44 +1755,11 @@ class RegisterAPI:
             The API will return the current miner resource and their detail specs on the validator. <br>
             query: The query parameter to filter the resources. <br>
             """
-            
-            specs_details = {}
+
             bt.logging.info(f"API: List resources(wandb) on compute subnet")            
             self.wandb.api.flush()
 
-            # check wandb for available hotkeys
-            # self.wandb.api.flush()
-            running_hotkey = []
-            filter_rule = {
-                "$and": [
-                    {"config.config.netuid": self.config.netuid},
-                    {"config.role": "miner"},
-                    {"state": "running"},
-                ]
-            }
-            runs = await run_in_threadpool(self.wandb.api.runs,
-                                           f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
-            # Get the penalized hotkeys from wandb
-            penalized_hotkeys = await run_in_threadpool(self.wandb.get_penalized_hotkeys, [], False)
-
-            for run in runs:
-                run_config = run.config
-                run_hotkey = run_config.get("hotkey")
-                running_hotkey.append(run_hotkey)
-                specs = run_config.get("specs")
-                configs = run_config.get("config")
-
-                is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
-
-                if is_active:
-                    bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
-
-                # check the signature
-                if run_hotkey and configs and run_hotkey not in penalized_hotkeys and is_active:
-                    if specs:
-                        specs_details[run_hotkey] = specs
-                    else:
-                        specs_details[run_hotkey] = {}
+            specs_details,running_hotkey = await get_wandb_running_miners()
 
             # Initialize a dictionary to keep track of GPU instances
             resource_list = []
@@ -2393,7 +2533,6 @@ class RegisterAPI:
                     },
                 )
 
-
     @staticmethod
     def _init_config():
         """
@@ -2641,7 +2780,6 @@ class RegisterAPI:
             self.allocation_table = self.wandb.get_allocated_hotkeys([], False)
             bt.logging.info(f"API: Allocation refreshed: {self.allocation_table}")
             await asyncio.sleep(DATA_SYNC_PERIOD)
-
 
     async def _notify_allocation_status(self, event_time: datetime, hotkey: str,
                                         uuid: str, event: str, details: str | None = ""):
