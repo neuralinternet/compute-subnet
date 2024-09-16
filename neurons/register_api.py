@@ -1599,14 +1599,23 @@ class RegisterAPI:
             }
             runs = await run_in_threadpool(self.wandb.api.runs,
                                            f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}", filter_rule)
+            # Get the penalized hotkeys from wandb
+            penalized_hotkeys = await run_in_threadpool(self.wandb.get_penalized_hotkeys, [], False)
+
             for run in runs:
                 run_config = run.config
                 run_hotkey = run_config.get("hotkey")
                 running_hotkey.append(run_hotkey)
                 specs = run_config.get("specs")
                 configs = run_config.get("config")
+
+                is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
+
+                if is_active:
+                    bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
+
                 # check the signature
-                if run_hotkey and configs:
+                if run_hotkey and configs and run_hotkey not in penalized_hotkeys and is_active:
                     if specs:
                         specs_details[run_hotkey] = specs
                     else:
@@ -1642,7 +1651,7 @@ class RegisterAPI:
                                 # Extract RAM details
                                 ram_miner = details["ram"]
                                 ram = "{:.2f}".format(
-                                    ram_miner["available"] / 1024.0 ** 3
+                                    ram_miner["total"] / 1024.0 ** 3
                                 )
 
                                 # Extract Hard Disk details
@@ -1680,6 +1689,8 @@ class RegisterAPI:
 
                         if hotkey in allocated_hotkeys:
                             allocate_status = "reserved"
+                            if not stats:
+                                continue
                         else:
                             allocate_status = "available"
 
