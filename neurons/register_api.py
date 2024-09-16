@@ -67,7 +67,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Union, List
 
 # Constants
-DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 300  # timeout check period
