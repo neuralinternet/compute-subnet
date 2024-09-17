@@ -838,7 +838,7 @@ class Validator:
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
 
-                        self.sync_checklist()
+                        #self.sync_checklist()
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
