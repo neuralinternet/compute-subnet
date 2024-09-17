@@ -383,6 +383,7 @@ class Validator:
         
         for thread in self.threads:
             thread.join()
+        self.wandb.update_penalized_hotkeys_checklist(self.penalized_hotkeys_checklist)
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
@@ -573,10 +574,7 @@ class Validator:
 
         if port:
             is_port_open = check_port(axon.ip, port)
-            penalized_hotkeys_checklist = self.penalized_hotkeys_checklist
-            checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
-
-            update_needed = False  # Track if we need to update the penalized hotkeys
+            checklist_hotkeys = [item['hotkey'] for item in self.penalized_hotkeys_checklist]
 
             if is_port_open:
                 is_ssh_access = True
@@ -603,18 +601,13 @@ class Validator:
 
 
                 if axon.hotkey in checklist_hotkeys:
-                    penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
-                    update_needed = True
+                    self.penalized_hotkeys_checklist = [item for item in self.penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
                 if not is_ssh_access:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})
-                    update_needed = True
+                    self.penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})
             else:
                 if axon.hotkey not in checklist_hotkeys:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
-                    update_needed = True
+                    self.penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
 
-            if update_needed:
-                self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
 
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
