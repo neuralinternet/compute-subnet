@@ -196,6 +196,9 @@ class Validator:
         # Initialize penalized_hotkeys as an empty list
         self.penalized_hotkeys = []
 
+        # Initialize penalized_hotkeys_checklist as an empty list
+        self.penalized_hotkeys_checklist = []        
+
         # Init the thread.
         self.lock = threading.Lock()
         self.threads: List[threading.Thread] = []
@@ -358,6 +361,7 @@ class Validator:
             self.init_prometheus(force_update=True)
 
     def sync_checklist(self):
+        self.penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
         self.threads = []
         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
@@ -569,8 +573,10 @@ class Validator:
 
         if port:
             is_port_open = check_port(axon.ip, port)
-            penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
+            penalized_hotkeys_checklist = self.penalized_hotkeys_checklist
             checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
+
+            update_needed = False  # Track if we need to update the penalized hotkeys
 
             if is_port_open:
                 is_ssh_access = True
@@ -598,13 +604,17 @@ class Validator:
 
                 if axon.hotkey in checklist_hotkeys:
                     penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
+                    update_needed = True
                 if not is_ssh_access:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})           
+                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})
+                    update_needed = True
             else:
                 if axon.hotkey not in checklist_hotkeys:
                     penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
+                    update_needed = True
 
-            self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
+            if update_needed:
+                self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
 
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
@@ -833,7 +843,7 @@ class Validator:
                     # Perform miner checking
                     if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
                         # Next block the validators will do port checking again.
-                        block_next_miner_checking = self.current_block + 50  # 50 -> every 10 minutes
+                        block_next_miner_checking = self.current_block + 300  # 300 -> every 60 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
