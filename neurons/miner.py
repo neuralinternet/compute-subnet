@@ -217,11 +217,11 @@ class Miner:
         self.last_updated_block = self.current_block - (self.current_block % 100)
         self.allocate_action = False
 
-        if (
-            not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
-            or not allocation_key_encoded
-        ):
-            self.miner_http_server = start_server(self.config.ssh.port)
+        # if (
+        #     not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+        #     or not allocation_key_encoded
+        # ):
+            # self.miner_http_server = start_server(self.config.ssh.port)
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
@@ -472,7 +472,7 @@ class Miner:
                 if timeline > 0:
                     if self.allocate_action == False:
                         self.allocate_action = True
-                        stop_server(self.miner_http_server)
+                        # stop_server(self.miner_http_server)
                         result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
                         self.allocate_action = False
                         synapse.output = result
@@ -481,7 +481,7 @@ class Miner:
                         synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
-                    self.miner_http_server = start_server(self.config.ssh.port)
+                    # self.miner_http_server = start_server(self.config.ssh.port)
                 synapse.output = result
         self.update_allocation(synapse)
         synapse.output["port"] = int(self.config.ssh.port)
