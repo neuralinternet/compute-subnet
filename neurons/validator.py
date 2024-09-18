@@ -359,6 +359,7 @@ class Validator:
 
     def sync_checklist(self):
         self.threads = []
+        self.penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
             for _uid in self.uids[i : i + self.validator_challenge_batch_size]:
                 try:
@@ -376,9 +377,11 @@ class Validator:
 
         for thread in self.threads:
             thread.start()
-        
+
         for thread in self.threads:
             thread.join()
+
+        self.wandb.update_penalized_hotkeys_checklist(self.penalized_hotkeys_checklist)
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
@@ -566,45 +569,40 @@ class Validator:
         response = dendrite.query(axon, Allocate(timeline=1, checking=True), timeout=30)
         port = response.get("port", "")
         status = response.get("status", False)
-
+        checklist_hotkeys = [item['hotkey'] for item in self.penalized_hotkeys_checklist]
         if port:
-            is_port_open = check_port(axon.ip, port)
-            penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
-            checklist_hotkeys = [item['hotkey'] for item in penalized_hotkeys_checklist]
-
-            if is_port_open:
-                is_ssh_access = True
-                bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid}")
-                if status is True: # if it's able to check allocation
-                    private_key, public_key = rsa.generate_key_pair()
-                    device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
-                    
-                    try:
-                        response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
-                        if response and response["status"] is True:
-                            bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
-                            private_key = private_key.encode("utf-8")
-                            decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
-                            info = json.loads(decrypted_info_str)
-                            is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
-                    except Exception as e:
-                        bt.logging.error(f"{e}")
-                        return
-
-                    deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
-                    if deregister_response and deregister_response["status"] is True:
-                        bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
-
-
-                if axon.hotkey in checklist_hotkeys:
-                    penalized_hotkeys_checklist = [item for item in penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
-                if not is_ssh_access:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})           
+            if not status:
+                is_port_open = check_port(axon.ip, port)
+                if (axon.hotkey not in checklist_hotkeys )and (not is_port_open):
+                    self.penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
+                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is closed and the miner should be allocated")
+                else:
+                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is open and the miner should be allocated")
             else:
-                if axon.hotkey not in checklist_hotkeys:
-                    penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
-
-            self.wandb.update_penalized_hotkeys_checklist(penalized_hotkeys_checklist)
+                is_ssh_access = True
+                private_key, public_key = rsa.generate_key_pair()
+                device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+                try:
+                    response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
+                    if response and response["status"] is True:
+                        bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
+                        private_key = private_key.encode("utf-8")
+                        decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
+                        info = json.loads(decrypted_info_str)
+                        is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
+                        deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                        if deregister_response and deregister_response["status"] is True:
+                            bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+                        else:
+                            bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid}")
+                except Exception as e:
+                    bt.logging.error(f"{e}")
+                    return
+                if axon.hotkey in checklist_hotkeys:
+                    self.penalized_hotkeys_checklist = [item for item in self.penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
+                if not is_ssh_access:
+                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - SSH access is disabled")
+                    self.penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "SSH_ACCESS_DISABLED", "description": "It can not access to the server via ssh"})               
 
     def execute_specs_request(self):
         if len(self.queryable_for_specs) > 0:
@@ -686,11 +684,11 @@ class Validator:
             bt.logging.info(f"{hotkey} - {specs}")
         """
         self.finalized_specs_once = True
-    
+
     def get_specs_wandb(self):
 
         bt.logging.info(f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}")
-     
+
         specs_dict = self.wandb.get_miner_specs(self._queryable_uids) 
         # Update the local db with the data from wandb
         update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
