@@ -575,9 +575,11 @@ class Validator:
                 is_port_open = check_port(axon.ip, port)
                 if (axon.hotkey not in checklist_hotkeys )and (not is_port_open):
                     self.penalized_hotkeys_checklist.append({"hotkey": axon.hotkey, "status_code": "PORT_CLOSED", "description": "The port of ssh server is closed"})
-                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is closed and the miner should be allocated")
+                    bt.logging.info(
+                        f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is closed and not usable, even though it has been allocated."
+                    )
                 else:
-                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is open and the miner should be allocated")
+                    bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is open and the miner is allocated")
             else:
                 is_ssh_access = True
                 private_key, public_key = rsa.generate_key_pair()
@@ -590,14 +592,13 @@ class Validator:
                         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
                         info = json.loads(decrypted_info_str)
                         is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
-                        deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
-                        if deregister_response and deregister_response["status"] is True:
-                            bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
-                        else:
-                            bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid}")
                 except Exception as e:
                     bt.logging.error(f"{e}")
-                    return
+                deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                if deregister_response and deregister_response["status"] is True:
+                    bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+                else:
+                    bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid}")
                 if axon.hotkey in checklist_hotkeys:
                     self.penalized_hotkeys_checklist = [item for item in self.penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
                 if not is_ssh_access:
