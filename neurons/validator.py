@@ -582,11 +582,13 @@ class Validator:
                     bt.logging.info(f"Debug {Allocate.__name__} - status of Checking allocation - {status} {uid} - Port is open and the miner is allocated")
             else:
                 is_ssh_access = True
+                allocation_status = False
                 private_key, public_key = rsa.generate_key_pair()
                 device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
                 try:
                     response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
                     if response and response["status"] is True:
+                        allocation_status = True
                         bt.logging.info(f"Debug {Allocate.__name__} - Successfully Allocated - {uid}")
                         private_key = private_key.encode("utf-8")
                         decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
@@ -594,7 +596,7 @@ class Validator:
                         is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
                 except Exception as e:
                     bt.logging.error(f"{e}")
-                for i in range(10): # Retry 10 times to deallocate
+                while True and allocation_status:
                     deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                     if deregister_response and deregister_response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
@@ -835,7 +837,7 @@ class Validator:
                     # Perform miner checking
                     if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
                         # Next block the validators will do port checking again.
-                        block_next_miner_checking = self.current_block + 1  # 50 -> every 10 minutes
+                        block_next_miner_checking = self.current_block + 50  # 50 -> every 10 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
