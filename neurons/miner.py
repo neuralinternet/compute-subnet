@@ -92,8 +92,6 @@ class Miner:
 
     miner_http_server: TCPServer
 
-
-
     _axon: bt.axon
 
     @property
@@ -185,6 +183,20 @@ class Miner:
         self.wandb.update_specs()
 
         # check allocation status
+        self.__check_alloaction_errors()
+
+        # Disable the Spec request and replaced with WanDB
+        # self.request_specs_processor = RequestSpecsProcessor()
+
+        self.last_updated_block = self.current_block - (self.current_block % 100)
+        self.allocate_action = False
+
+        # if (
+        #     not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+        #     or not allocation_key_encoded
+        # ):
+        # self.miner_http_server = start_server(self.config.ssh.port)
+    def __check_alloaction_errors(self):
         file_path = "allocation_key"
         allocation_key_encoded = None
         if os.path.exists(file_path):
@@ -210,19 +222,6 @@ class Miner:
                 bt.logging.info(
                     "Container is already running without allocated. Killing the container."
                 )
-
-        # Disable the Spec request and replaced with WanDB
-        # self.request_specs_processor = RequestSpecsProcessor()
-
-        self.last_updated_block = self.current_block - (self.current_block % 100)
-        self.allocate_action = False
-
-        if (
-            not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
-            or not allocation_key_encoded
-        ):
-            self.miner_http_server = start_server(self.config.ssh.port)
-
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
         # The axon handles request processing, allowing validators to send this process requests.
@@ -472,7 +471,7 @@ class Miner:
                 if timeline > 0:
                     if self.allocate_action == False:
                         self.allocate_action = True
-                        stop_server(self.miner_http_server)
+                        # stop_server(self.miner_http_server)
                         result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
                         self.allocate_action = False
                         synapse.output = result
@@ -481,7 +480,7 @@ class Miner:
                         synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
-                    self.miner_http_server = start_server(self.config.ssh.port)
+                    # self.miner_http_server = start_server(self.config.ssh.port)
                 synapse.output = result
         self.update_allocation(synapse)
         synapse.output["port"] = int(self.config.ssh.port)
@@ -669,6 +668,9 @@ class Miner:
                     else:
                         bt.logging.warning(f"API: Could not find the server port that was provided to validator")
                     self.wandb.update_miner_port_open(result)
+                    
+                    # check allocation status
+                    self.__check_alloaction_errors()
 
                     # Log chain data to wandb
                     chain_data = {
