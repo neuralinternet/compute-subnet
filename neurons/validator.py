@@ -594,7 +594,7 @@ class Validator:
                         is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
                 except Exception as e:
                     bt.logging.error(f"{e}")
-                while True:
+                for i in range(10): # Retry 10 times to deallocate
                     deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                     if deregister_response and deregister_response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
