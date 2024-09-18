@@ -356,6 +356,21 @@ class Validator:
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
+    def remove_duplicate_penalized_hotkeys(self):
+        """
+        Removes any duplicate entries in the penalized_hotkeys_checklist
+        based on the 'hotkey' field.
+        """
+        seen = set()
+        unique_penalized_list = []
+
+        for item in self.penalized_hotkeys_checklist:
+            if item['hotkey'] not in seen:
+                unique_penalized_list.append(item)
+                seen.add(item['hotkey'])
+
+        self.penalized_hotkeys_checklist = unique_penalized_list
+        bt.logging.info("Removed duplicate hotkeys from penalized_hotkeys_checklist.")
 
     def sync_checklist(self):
         self.threads = []
@@ -374,6 +389,7 @@ class Validator:
                     )
                 except KeyError:
                     continue
+        self.remove_duplicate_penalized_hotkeys()
 
         for thread in self.threads:
             thread.start()
