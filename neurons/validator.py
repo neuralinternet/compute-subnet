@@ -594,11 +594,14 @@ class Validator:
                         is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
                 except Exception as e:
                     bt.logging.error(f"{e}")
-                deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
-                if deregister_response and deregister_response["status"] is True:
-                    bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
-                else:
-                    bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid}")
+                while True:
+                    deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                    if deregister_response and deregister_response["status"] is True:
+                        bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
+                        break
+                    else:
+                        bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid} will retry in 5 seconds")
+                        time.sleep(5)
                 if axon.hotkey in checklist_hotkeys:
                     self.penalized_hotkeys_checklist = [item for item in self.penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
                 if not is_ssh_access:
@@ -832,7 +835,7 @@ class Validator:
                     # Perform miner checking
                     if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
                         # Next block the validators will do port checking again.
-                        block_next_miner_checking = self.current_block + 50  # 50 -> every 10 minutes
+                        block_next_miner_checking = self.current_block + 1  # 50 -> every 10 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
