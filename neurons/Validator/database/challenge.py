@@ -37,6 +37,7 @@ def select_challenge_stats(db: ComputeDb) -> dict:
         }
     """
     cursor = db.get_cursor()
+
     cursor.execute(
         """
 WITH RankedChallenges AS (SELECT uid,
@@ -61,8 +62,10 @@ FROM (SELECT uid,
              SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END)     AS challenge_successes,
              AVG(CASE WHEN success = 1 THEN elapsed_time END) AS challenge_elapsed_time_avg,
              AVG(CASE WHEN success = 1 THEN difficulty END)   AS challenge_difficulty_avg
-      FROM challenge_details
-      WHERE date(created_at) >= date('now', '-12 hours')
+      FROM (SELECT *
+            FROM challenge_details
+            ORDER BY created_at DESC
+            LIMIT 50) AS latest_entries
       GROUP BY uid, ss58_address) AS main_query
          LEFT JOIN (SELECT uid,
                            ss58_address,
