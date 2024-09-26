@@ -292,11 +292,17 @@ class Validator:
 
         self.pretty_print_dict_values(self.stats)
 
+        self._queryable_uids = self.get_queryable()
+
         # Calculate score
         for uid in self.uids:
             try:
-                # Determine if the user's hotkey has Docker
-                hotkey = self.stats[uid].get("ss58_address")
+                axon = self._queryable_uids[uid]
+                hotkey = axon.hotkey
+
+                if uid not in self.stats:
+                    self.stats[uid] = {}  # Initialize empty dictionary for this UID
+
                 if hotkey in has_docker_hotkeys:
                     self.stats[uid]["has_docker"] = True
                 elif not self.finalized_specs_once:
@@ -304,22 +310,14 @@ class Validator:
                 else:
                     self.stats[uid]["has_docker"] = False
 
-                # Find the maximum score of all uids excluding allocated uids
-                # max_score_uids = max(
-                #     self.stats[uid]["score"]
-                #     for uid in self.stats
-                #     if "score" in self.stats[uid] and self.stats[uid].get("ss58_address") not in self.allocated_hotkeys
-                # )
-
-                # score = calc_score(self.stats[uid], hotkey=hotkey, allocated_hotkeys=self.allocated_hotkeys, max_score_uid=max_score_uids)
-                score = calc_score(self.stats[uid],
-                                    hotkey = hotkey,
-                                    allocated_hotkeys = self.allocated_hotkeys,
-                                    penalized_hotkeys = self.penalized_hotkeys,
-                                    validator_hotkeys = valid_validator_hotkeys)
-
+                score = calc_score(self.stats[uid], hotkey, self.allocated_hotkeys, self.penalized_hotkeys, valid_validator_hotkeys)
                 self.stats[uid]["score"] = score
-            except (ValueError, KeyError):
+
+            except KeyError as e:
+                # bt.logging.info(f"KeyError occurred for UID {uid}: {str(e)}")
+                score = 0
+            except Exception as e:
+                # bt.logging.info(f"An unexpected exception occurred for UID {uid}: {str(e)}")
                 score = 0
 
             self.scores[uid] = score
@@ -858,7 +856,7 @@ class Validator:
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
 
-                        self.sync_checklist()
+                        #self.sync_checklist()
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
