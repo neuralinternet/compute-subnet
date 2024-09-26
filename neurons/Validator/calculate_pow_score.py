@@ -53,11 +53,11 @@ def calc_score(response, hotkey, allocated_hotkeys, penalized_hotkeys, validator
     :return:
     """
     try:
-        challenge_attempts = prevent_none(response["challenge_attempts"])
-        challenge_successes = prevent_none(response["challenge_successes"])
-        last_20_challenge_failed = prevent_none(response["last_20_challenge_failed"])
-        challenge_elapsed_time_avg = prevent_none(response["challenge_elapsed_time_avg"])
-        challenge_difficulty_avg = prevent_none(response["last_20_difficulty_avg"])
+        challenge_attempts = prevent_none(response.get("challenge_attempts",1))
+        challenge_successes = prevent_none(response.get("challenge_successes",0))
+        last_20_challenge_failed = prevent_none(response.get("last_20_challenge_failed",0))
+        challenge_elapsed_time_avg = prevent_none(response.get("challenge_elapsed_time_avg", compute.pow_timeout))
+        challenge_difficulty_avg = prevent_none(response.get("last_20_difficulty_avg", compute.pow_min_difficulty))
         has_docker = response.get("has_docker", False)
 
         # Define base weights for the PoW

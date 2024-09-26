@@ -40,56 +40,58 @@ def select_challenge_stats(db: ComputeDb) -> dict:
 
     cursor.execute(
         """
-WITH RankedChallenges AS (SELECT uid,
-                                 ss58_address,
-                                 success,
-                                 created_at,
-                                 ROW_NUMBER() OVER (PARTITION BY uid, ss58_address ORDER BY created_at DESC) AS row_num
-                          FROM challenge_details)
-SELECT main_query.uid,
-       main_query.ss58_address,
-       main_query.challenge_attempts,
-       main_query.challenge_successes,
-       main_query.challenge_elapsed_time_avg,
-       main_query.challenge_difficulty_avg,
-       COALESCE(main_query.challenge_failed, 0) as challenge_failed,
-       COALESCE(last_20_challenge_failed.last_20_challenge_failed, 0) as last_20_challenge_failed,
-       last_20_query.last_20_difficulty_avg
-FROM (SELECT uid,
-             ss58_address,
-             COUNT(*)                                         AS challenge_attempts,
-             COUNT(CASE WHEN success = 0 THEN 1 END)          AS challenge_failed,
-             SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END)     AS challenge_successes,
-             AVG(CASE WHEN success = 1 THEN elapsed_time END) AS challenge_elapsed_time_avg,
-             AVG(CASE WHEN success = 1 THEN difficulty END)   AS challenge_difficulty_avg
-      FROM (SELECT *
+        WITH RankedChallenges AS (
+            SELECT uid,
+                   ss58_address,
+                   success,
+                   elapsed_time,
+                   difficulty,
+                   created_at,
+                   ROW_NUMBER() OVER (PARTITION BY uid ORDER BY created_at DESC) AS row_num
             FROM challenge_details
-            ORDER BY created_at DESC
-            LIMIT 50) AS latest_entries
-      GROUP BY uid, ss58_address) AS main_query
-         LEFT JOIN (SELECT uid,
-                           ss58_address,
-                           COUNT(*) AS last_20_challenge_failed
-                    FROM (SELECT uid, ss58_address, success
-                          FROM RankedChallenges
-                          WHERE row_num <= 20
-                          ORDER BY created_at DESC) AS Last20Rows
-                    WHERE success = 0
-                    GROUP BY uid, ss58_address) AS last_20_challenge_failed
+        ),
+        FilteredChallenges AS (
+            SELECT *
+            FROM RankedChallenges
+            WHERE row_num <= 60
+        )
+        SELECT main_query.uid,
+               main_query.ss58_address,
+               COUNT(*)                                         AS challenge_attempts,
+               COUNT(CASE WHEN success = 0 THEN 1 END)          AS challenge_failed,
+               SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END)     AS challenge_successes,
+               AVG(CASE WHEN success = 1 THEN elapsed_time END) AS challenge_elapsed_time_avg,
+               AVG(CASE WHEN success = 1 THEN difficulty END)   AS challenge_difficulty_avg,
+               COALESCE(last_20_challenge_failed.last_20_challenge_failed, 0) as last_20_challenge_failed,
+               last_20_query.last_20_difficulty_avg
+        FROM (SELECT *
+              FROM FilteredChallenges
+              ORDER BY created_at DESC) AS main_query
+             LEFT JOIN (SELECT uid,
+                               ss58_address,
+                               COUNT(*) AS last_20_challenge_failed
+                        FROM (SELECT uid,
+                                     ss58_address,
+                                     success,
+                                     ROW_NUMBER() OVER (PARTITION BY uid ORDER BY created_at DESC) AS row_num
+                              FROM challenge_details)
+                        WHERE row_num <= 20 AND success = 0
+                        GROUP BY uid, ss58_address) AS last_20_challenge_failed
                    ON main_query.uid = last_20_challenge_failed.uid AND
                       main_query.ss58_address = last_20_challenge_failed.ss58_address
-         LEFT JOIN (SELECT uid,
-                           ss58_address,
-                           AVG(difficulty) AS last_20_difficulty_avg
-                    FROM (SELECT uid,
-                                 ss58_address,
-                                 difficulty,
-                                 ROW_NUMBER() OVER (PARTITION BY uid, ss58_address ORDER BY created_at DESC) AS row_num
-                          FROM challenge_details
-                          WHERE success = 1) AS subquery
-                    WHERE row_num <= 20
-                    GROUP BY uid, ss58_address) AS last_20_query
-                   ON main_query.uid = last_20_query.uid AND main_query.ss58_address = last_20_query.ss58_address;
+             LEFT JOIN (SELECT uid,
+                               ss58_address,
+                               AVG(difficulty) AS last_20_difficulty_avg
+                        FROM (SELECT uid,
+                                     ss58_address,
+                                     difficulty,
+                                     ROW_NUMBER() OVER (PARTITION BY uid ORDER BY created_at DESC) AS row_num
+                              FROM challenge_details
+                              WHERE success = 1)
+                        WHERE row_num <= 20
+                        GROUP BY uid, ss58_address) AS last_20_query
+                   ON main_query.uid = last_20_query.uid AND main_query.ss58_address = last_20_query.ss58_address
+        GROUP BY main_query.uid, main_query.ss58_address;
         """
     )
 
@@ -101,18 +103,18 @@ FROM (SELECT uid,
             uid,
             ss58_address,
             challenge_attempts,
+            challenge_failed,
             challenge_successes,
             challenge_elapsed_time_avg,
             challenge_difficulty_avg,
-            challenge_failed,
             last_20_challenge_failed,
             last_20_difficulty_avg,
         ) = result
         stats[uid] = {
             "ss58_address": ss58_address,
             "challenge_attempts": challenge_attempts,
-            "challenge_successes": challenge_successes,
             "challenge_failed": int(challenge_failed) if challenge_failed else 0,
+            "challenge_successes": challenge_successes,
             "challenge_elapsed_time_avg": challenge_elapsed_time_avg,
             "challenge_difficulty_avg": challenge_difficulty_avg,
             "last_20_challenge_failed": last_20_challenge_failed,
