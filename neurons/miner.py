@@ -656,18 +656,18 @@ class Miner:
                     self.sync_status()
 
                     # Check port open
-                    port = int(self.config.ssh.port)
-                    if port:
-                        result = check_port('localhost', port)
-                        if result is True:
-                            bt.logging.info(f"API: Port {port} on the server is open")
-                        elif result is False:
-                            bt.logging.info(f"API: Port {port} on the server is closed")
-                        else:
-                            bt.logging.warning(f"API: Could not determine status of port {port} on the server")
-                    else:
-                        bt.logging.warning(f"API: Could not find the server port that was provided to validator")
-                    self.wandb.update_miner_port_open(result)
+                    # port = int(self.config.ssh.port)
+                    # if port:
+                    #     result = check_port('localhost', port)
+                    #     if result is True:
+                    #         bt.logging.info(f"API: Port {port} on the server is open")
+                    #     elif result is False:
+                    #         bt.logging.info(f"API: Port {port} on the server is closed")
+                    #     else:
+                    #         bt.logging.warning(f"API: Could not determine status of port {port} on the server")
+                    # else:
+                    #     bt.logging.warning(f"API: Could not find the server port that was provided to validator")
+                    # self.wandb.update_miner_port_open(result)
                     
                     # check allocation status
                     self.__check_alloaction_errors()
