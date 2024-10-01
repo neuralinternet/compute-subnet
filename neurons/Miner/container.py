@@ -42,6 +42,16 @@ volume_path = "/tmp"  # Path inside the container where the volume will be mount
 ssh_port = 4444  # Port to map SSH service on the host
 
 
+def get_stored_ssh_key():
+    try:
+        file_path = 'allocation_key'
+        with open(file_path, 'r') as file:
+            allocation_key = file.read()
+        allocation_key = base64.b64decode(allocation_key).decode("utf-8")
+        return allocation_key
+    except Exception as e:
+        bt.logging.info(f"Error getting stored SSH key {e}")
+        return None
 # Initialize Docker client
 def get_docker():
     client = docker.from_env()
@@ -280,8 +290,12 @@ def build_sample_container():
         return {"status": False}
 
 
-def restart_container():
+def restart_container(public_key):
     try:
+        stored_ssh_key = get_stored_ssh_key()
+        if stored_ssh_key.strip() != public_key.strip():
+            bt.logging.info("Error restart the container: Permission denied.")
+            return {"status": False}
         client, containers = get_docker()
         running_container = None
         for container in containers:
@@ -302,8 +316,12 @@ def restart_container():
         bt.logging.info(f"Error restart container {e}")
         return {"status": False}
 
-def pause_container():
+def pause_container(public_key):
     try:
+        stored_ssh_key = get_stored_ssh_key()
+        if stored_ssh_key.strip() != public_key.strip():
+            bt.logging.info("Error pausing the container: Permission denied.")
+            return {"status": False}
         client, containers = get_docker()
         running_container = None
         for container in containers:
@@ -320,8 +338,12 @@ def pause_container():
         bt.logging.info(f"Error pausing container {e}")
         return {"status": False}
 
-def unpause_container():
+def unpause_container(public_key):
     try:
+        stored_ssh_key = get_stored_ssh_key()
+        if stored_ssh_key.strip() != public_key.strip():
+            bt.logging.info("Error unpausing the container: Permission denied.")
+            return {"status": False}
         client, containers = get_docker()
         running_container = None
         for container in containers:
@@ -338,8 +360,12 @@ def unpause_container():
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str):
+def exchange_key_container(public_key,new_ssh_key: str):
     try:
+        stored_ssh_key = get_stored_ssh_key()
+        if stored_ssh_key.strip() != public_key.strip():
+            bt.logging.info("Error exchanging the container key: Permission denied.")
+            return {"status": False}
         client, containers = get_docker()
         running_container = None
         for container in containers:
