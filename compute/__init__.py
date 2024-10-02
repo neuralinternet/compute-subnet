@@ -79,7 +79,7 @@ TRUSTED_VALIDATORS_HOTKEYS = [
     "5EhvL1FVkQPpMjZX4MAADcW42i3xPSF1KiCpuaxTYVr28sux",  # TAO-Validator.com
     "5FFApaS75bv5pJHfAp2FVLBj9ZaXuFDjEypsaBNc1wCfe52v",  # RoundTable21
     "5DvTpiniW9s3APmHRYn8FroUWyfnLtrsid5Mtn5EwMXHN2ed",  # FirstTensor
-    "5HbLYXUBy1snPR8nfioQ7GoA9x76EELzEq9j7F32vWUQHm1x",  # Tensorplex
+    "5E4z3h9yVhmQyCFWNbY9BPpwhx4xFiPwq3eeqmBgVF6KULde",  # Tensorplex
     "5CXRfP2ekFhe62r7q3vppRajJmGhTi7vwvb2yr79jveZ282w",  # Rizzo
     "5HNQURvmjjYhTSksi8Wfsw676b4owGwfLR2BFAQzG7H3HhYf",  # Neural Inτerneτ
     "5DnXm2tBGAD57ySJv5SfpTfLcsQbSKKp6xZKFWABw3cYUgqg",  # Love
