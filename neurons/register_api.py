@@ -2665,6 +2665,10 @@ class RegisterAPI:
             reverse=True,
         )
 
+        # Exclude the last 10 elements if the length is greater than 10
+        if len(sorted_hotkeys) > 10:
+            sorted_hotkeys = sorted_hotkeys[:-10]
+
         # Loop the sorted candidates and check if one can allocate the device
         for hotkey in sorted_hotkeys:
             index = self.metagraph.hotkeys.index(hotkey)
