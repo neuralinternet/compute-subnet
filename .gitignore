@@ -247,3 +247,6 @@ database.db
 neurons/Miner/app
 
 test_speed_file.dat
+
+# cert
+cert/
