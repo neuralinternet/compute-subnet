@@ -1769,10 +1769,40 @@ class RegisterAPI:
             # Get the allocated hotkeys from wandb
             allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, [], False)
 
+            axon_hotkeys = [axon.hotkey for axon in self.metagraph.axons]
+
+            # Sort the candidates with their score
+            scores = self.metagraph.S.float()
+
+            if len(axon_hotkeys) != len(scores):
+                return JSONResponse(
+                                status_code=status.HTTP_404_NOT_FOUND,
+                                content={
+                                    "success": False,
+                                    "message": "Could not get correct scores from metagraph.",
+                                    "err_detail": "Could not get correct scores from metagraph.",
+                                },
+                            )
+
+            score_dict = {
+                hotkey: score.item()
+                for hotkey, score in zip(axon_hotkeys, scores)
+            }
+
+            sorted_hotkeys = sorted(
+                axon_hotkeys,
+                key=lambda hotkey: score_dict.get(hotkey, 0),
+                reverse=True,
+            )
+            
+            last_miners = []
+            if len(sorted_hotkeys) > 10:
+                last_miners = sorted_hotkeys[-10:]
+
             if specs_details:
                 # Iterate through the miner specs details and print the table
                 for hotkey, details in specs_details.items():
-                    if hotkey in running_hotkey:
+                    if hotkey in running_hotkey and hotkey not in last_miners:
                         if details:  # Check if details are not empty
                             resource = Resource()
                             try:
@@ -2705,6 +2735,28 @@ class RegisterAPI:
             "type": requirements.gpu_type,
         }, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
 
+        axon_hotkeys = [axon.hotkey for axon in self.metagraph.axons]
+
+        # Sort the candidates with their score
+        scores = self.metagraph.S.float()
+
+        if len(axon_hotkeys) != len(scores):
+            return {"status": False, "msg": "Could not get correct scores from metagraph."}
+
+        score_dict = {
+            hotkey: score.item()
+            for hotkey, score in zip(axon_hotkeys, scores)
+        }
+
+        sorted_hotkeys = sorted(
+            axon_hotkeys,
+            key=lambda hotkey: score_dict.get(hotkey, 0),
+            reverse=True,
+        )
+        
+        if len(sorted_hotkeys) > 10 and hotkey in sorted_hotkeys[-10:]:
+            return {"status": False, "msg": "Requested resource is not available."}
+        
         # Instantiate the connection to the db
         for axon in self.metagraph.axons:
             if axon.hotkey == hotkey:
