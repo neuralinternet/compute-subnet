@@ -37,6 +37,7 @@ import urllib3
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
 import math
+from ipwhois import IPWhois
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
 from compute.axon import ComputeSubnetSubtensor
@@ -136,6 +137,8 @@ class Resource(BaseModel):
     gpu_name: str = ""
     gpu_capacity: str = ""
     gpu_count: int = 1
+    ip: str = ""
+    geo: str = ""
     ram: str = "0"
     hard_disk: str = "0"
     allocate_status: str = ""  # "Avail." or "Res."
@@ -1222,7 +1225,7 @@ class RegisterAPI:
             finally:
                 cursor.close()
                 db.close()
-
+                
         @self.app.post(
             "/list/allocations_sql",
             tags=["SQLite"],
@@ -1323,7 +1326,6 @@ class RegisterAPI:
                     "data": jsonable_encoder(allocation_list),
                 },
             )
-
         @self.app.post(
             "/list/resources_sql",
             tags=["SQLite"],
@@ -1491,6 +1493,7 @@ class RegisterAPI:
                                     resource.hard_disk = float(hard_disk)
                                     resource.allocate_status = allocate_status
                                     resource_list.append(resource)
+                            resource_list = await map_axon_ip_to_resources(resource_list)
                         except (KeyError, IndexError, TypeError, ValueError) as e:
                             bt.logging.error(f"API: Error occurred while filtering resources: {e}")
                             continue
@@ -1548,7 +1551,21 @@ class RegisterAPI:
                         "err_detail": "No resources found.",
                     },
                 )
-
+        async def map_axon_ip_to_resources(resources):
+            """
+            Map axon IPs to the list of resources based on hotkeys.
+            """
+            for resource in resources:
+                hotkey = resource.hotkey
+                if hotkey:
+                    for axon in self.metagraph.axons:
+                        if axon.hotkey == hotkey:
+                            resource.ip = axon.ip
+                            obj = IPWhois(resource.ip)
+                            result = obj.lookup_rdap()
+                            resource.geo = result.get("asn_country_code","Unknown")
+                            break
+            return resources
         async def get_wandb_running_miners():
             """
             Get the running miners from wandb
@@ -1895,6 +1912,7 @@ class RegisterAPI:
                                     resource.hard_disk = float(hard_disk)
                                     resource.allocate_status = allocate_status
                                     resource_list.append(resource)
+                            resource_list = await map_axon_ip_to_resources(resource_list)
                         except (KeyError, IndexError, TypeError, ValueError) as e:
                             bt.logging.error(f"API: Error occurred while filtering resources: {e}")
                             continue
