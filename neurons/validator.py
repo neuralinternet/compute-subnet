@@ -196,6 +196,9 @@ class Validator:
         # Initialize penalized_hotkeys as an empty list
         self.penalized_hotkeys = []
 
+        # Initialize penalized_hotkeys_checklist as an empty list
+        self.penalized_hotkeys_checklist = []
+
         # Init the thread.
         self.lock = threading.Lock()
         self.threads: List[threading.Thread] = []
@@ -275,14 +278,39 @@ class Validator:
 
             bt.logging.trace(log)
 
+    def update_allocation_wandb(self):
+        hotkey_list = []
+        # Instantiate the connection to the db
+        cursor = self.db.get_cursor()
+        try:
+            # Retrieve all records from the allocation table
+            cursor.execute("SELECT id, hotkey, details FROM allocation")
+            rows = cursor.fetchall()
+            for row in rows:
+                id, hotkey, details = row
+                hotkey_list.append(hotkey)
+        except Exception as e:
+            bt.logging.info(f"An error occurred while retrieving allocation details: {e}")
+        finally:
+            cursor.close()
+
+        # Update wandb
+        try:
+            self.wandb.update_allocated_hotkeys(hotkey_list)
+        except Exception as e:
+            bt.logging.info(f"Error updating wandb : {e}")
+
     def sync_scores(self):
         # Fetch scoring stats
         self.stats = select_challenge_stats(self.db)
 
         valid_validator_hotkeys = self.get_valid_validator_hotkeys()
 
+        self.update_allocation_wandb()
+
         # Fetch allocated hotkeys
         self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
+        # bt.logging.info(f"Allocated hotkeys: {self.allocated_hotkeys}")
 
         # Fetch penalized hotkeys
         self.penalized_hotkeys = self.wandb.get_penalized_hotkeys(valid_validator_hotkeys, True)
@@ -354,6 +382,7 @@ class Validator:
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
+
     def remove_duplicate_penalized_hotkeys(self):
         """
         Removes any duplicate entries in the penalized_hotkeys_checklist
@@ -371,6 +400,7 @@ class Validator:
         bt.logging.info("Removed duplicate hotkeys from penalized_hotkeys_checklist.")
 
     def sync_checklist(self):
+        self.penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
         self.threads = []
         self.penalized_hotkeys_checklist = self.wandb.get_penalized_hotkeys_checklist(self.get_valid_validator_hotkeys(), True)
         for i in range(0, len(self.uids), self.validator_challenge_batch_size):
@@ -579,7 +609,6 @@ class Validator:
     def execute_miner_checking_request(self, uid, axon: bt.AxonInfo):
         dendrite = bt.dendrite(wallet=self.wallet)
         bt.logging.info(f"Querying for {Allocate.__name__} - {uid}/{axon.hotkey}")
-
         response = dendrite.query(axon, Allocate(timeline=1, checking=True), timeout=30)
         port = response.get("port", "")
         status = response.get("status", False)
@@ -610,13 +639,16 @@ class Validator:
                         is_ssh_access = check_ssh_login(axon.ip, port, info['username'], info['password'])
                 except Exception as e:
                     bt.logging.error(f"{e}")
-                while True and allocation_status:
+
+                max_retry = 0
+                while allocation_status and max_retry < 3:
                     deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                     if deregister_response and deregister_response["status"] is True:
                         bt.logging.info(f"Debug {Allocate.__name__} - Deallocated - {uid}")
                         break
                     else:
                         bt.logging.error(f"Debug {Allocate.__name__} - Failed to deallocate - {uid} will retry in 5 seconds")
+                        max_retry += 1
                         time.sleep(5)
                 if axon.hotkey in checklist_hotkeys:
                     self.penalized_hotkeys_checklist = [item for item in self.penalized_hotkeys_checklist if item['hotkey'] != axon.hotkey]
@@ -851,12 +883,12 @@ class Validator:
                     # Perform miner checking
                     if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
                         # Next block the validators will do port checking again.
-                        block_next_miner_checking = self.current_block + 50  # 50 -> every 10 minutes
+                        block_next_miner_checking = self.current_block + 50  # 300 -> every 60 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
 
-                        #self.sync_checklist()
+                        # self.sync_checklist()
 
                     if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
                         block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
