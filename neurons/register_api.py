@@ -668,30 +668,31 @@ class RegisterAPI:
                     uuid_key_db = info["uuid"]
 
                     if uuid_key_db == uuid_key:
-                        index = self.metagraph.hotkeys.index(hotkey)
-                        axon = self.metagraph.axons[index]
-                        run_start = time.time()
-                        retry_count = 0
+                        if hotkey in self.metagraph.hotkeys:
+                            index = self.metagraph.hotkeys.index(hotkey)
+                            axon = self.metagraph.axons[index]
+                            run_start = time.time()
+                            retry_count = 0
 
-                        while retry_count < MAX_NOTIFY_RETRY:
-                            allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
-                            deregister_response = await run_in_threadpool(
-                                self.dendrite.query, axon, allocate_class, timeout=60
-                            )
-                            run_end = time.time()
-                            time_eval = run_end - run_start
-                            # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
+                            while retry_count < MAX_NOTIFY_RETRY:
+                                allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
+                                deregister_response = await run_in_threadpool(
+                                    self.dendrite.query, axon, allocate_class, timeout=60
+                                )
+                                run_end = time.time()
+                                time_eval = run_end - run_start
+                                # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
 
-                            if deregister_response and deregister_response["status"] is True:
-                                bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
-                                break
-                            else:
-                                retry_count += 1
-                                bt.logging.info(f"API: Resource {hotkey} no response to deallocated signal - retry {retry_count}")
-                                await asyncio.sleep(1)
+                                if deregister_response and deregister_response["status"] is True:
+                                    bt.logging.info(f"API: Resource {hotkey} deallocated successfully")
+                                    break
+                                else:
+                                    retry_count += 1
+                                    bt.logging.info(f"API: Resource {hotkey} no response to deallocated signal - retry {retry_count}")
+                                    await asyncio.sleep(1)
 
-                        if retry_count == MAX_NOTIFY_RETRY:
-                            bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
+                            if retry_count == MAX_NOTIFY_RETRY:
+                                bt.logging.error(f"API: Resource {hotkey} deallocated successfully without response.")
 
                         deallocated_at = datetime.now(timezone.utc)
                         update_allocation_db(result_hotkey, info, False)
