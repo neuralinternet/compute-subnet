@@ -107,6 +107,7 @@ class Allocation(BaseModel):
     ssh_username: str = ""
     ssh_password: str = ""
     ssh_command: str = ""
+    status: str = ""
     ssh_key: str = ""
     uuid_key: str = ""
 
@@ -1296,6 +1297,12 @@ class RegisterAPI:
                     )
                     entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
+                    # check the online status in self.checking_allocated
+                    entry.status = "online"
+                    for item in self.checking_allocated:
+                        if item.get("hotkey") == hotkey:
+                            entry.status = offline
+                            break
                     allocation_list.append(entry)
 
             except Exception as e:
