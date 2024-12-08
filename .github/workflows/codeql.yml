@@ -2,9 +2,9 @@ name: "CodeQL Advanced"
 
 on:
   push:
-    branches: [ "feat/csn-294-build-out-codeql" ]
+    branches: [ "dev" ]
   pull_request:
-    branches: [ "feat/csn-294-build-out-codeql" ]
+    branches: [ "dev" ]
   schedule:
     - cron: '22 6 * * 5'
 
