@@ -10,6 +10,8 @@ import paramiko  # For SSH functionality
 from compute.protocol import Allocate  # Allocate is still needed for the actual allocation process
 from compute.wandb.wandb import ComputeWandb  # Importing ComputeWandb
 
+VALID_VALIDATOR_HOTKEYS = ["5GmvyePN9aYErXBBhBnxZKGoGk4LKZApE4NkaSzW62CYCYNA"]
+
 class MinerChecker:
     def __init__(self, config):
         self.config = config
@@ -38,7 +40,7 @@ class MinerChecker:
         self.axons = self.get_miners() # Retrieve the list of axons (miners)
 
         #Step 1: Fetch allocated hotkeys from wandb with an empty validator list and flag set to False
-        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys([], False) # Get allocated miners
+        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(VALID_VALIDATOR_HOTKEYS, True) # Get allocated miners
         # Step 2: Create threads for miners that are NOT allocated
         for i in range(0, len(self.axons), self.validator_challenge_batch_size): 
             for axon in self.axons[i: i + self.validator_challenge_batch_size]: 
@@ -92,19 +94,26 @@ class MinerChecker:
         device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
 
         try:
-            # Simulate an allocation query with Allocate
-            response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
-            if response and response["status"] is True: 
-                allocation_status = True 
-                bt.logging.info(f"Successfully allocated miner {axon.hotkey}") 
-                private_key = private_key.encode("utf-8") 
-                decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"])) 
-                info = json.loads(decrypted_info_str)
-                # Use the SSH check function
-                is_ssh_access = self.check_ssh_login(axon.ip, info['port'], info['username'], info['password']) 
+            check_allocation = dendrite.query(axon, Allocate(timeline=30, device_requirement=device_requirement, checking=True,), timeout=30)
+
+            if check_allocation and check_allocation["status"] is True:
+                bt.logging.info(f"Successfully passed allocaton check: miner {axon.hotkey}")
+                # Simulate an allocation query with Allocate
+                response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
+                if response and response["status"] is True:
+                    allocation_status = True
+                    bt.logging.info(f"Successfully allocated miner {axon.hotkey}")
+                    private_key = private_key.encode("utf-8")
+                    decrypted_info_str = rsa.decrypt_data(private_key, base64.b64decode(response["info"]))
+                    info = json.loads(decrypted_info_str)
+                    # Use the SSH check function
+                    is_ssh_access = self.check_ssh_login(axon.ip, info['port'], info['username'], info['password'])
+                else:
+                    # Penalize if the allocation failed
+                    self.penalize_miner(axon.hotkey, "ALLOCATION_FAILED", "Allocation failed during resource allocation")
             else:
                 # Penalize if the allocation failed
-                self.penalize_miner(axon.hotkey, "ALLOCATION_FAILED", "Allocation failed during resource allocation") 
+                self.penalize_miner(axon.hotkey, "ALLOCATION_FAILED", "Allocation check failed: not reachable/running container")
         except Exception as e:
             bt.logging.error(f"Error during allocation for {axon.hotkey}: {e}")
             self.penalize_miner(axon.hotkey, "ALLOCATION_ERROR", f"Error during allocation: {str(e)}")
