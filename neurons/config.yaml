@@ -1,0 +1,89 @@
+ssh_config:
+  host: "213.173.109.104"
+  user: "root"
+  port: 21598
+  miner_script_path: "miner_script_m_merkletree.py"
+  
+gpu_performance:
+  GPU_TFLOPS_FP16:
+    NVIDIA H200: 610
+    NVIDIA H100 80GB HBM3: 570
+    NVIDIA H100: 330
+    NVIDIA A100-SXM4-80GB: 238.8
+    NVIDIA A100 80GB PCIe: 197
+    NVIDIA A100-SXM4-40GB: 257
+    NVIDIA L40s: 171
+    NVIDIA L40: 116
+    NVIDIA RTX 6000 Ada Generation: 112
+    NVIDIA RTX A6000: 48.5
+    NVIDIA RTX A5000: 60.0
+    NVIDIA RTX A4500: 44.0
+    NVIDIA RTX 4000 Ada Generation: 70
+    NVIDIA A40: 40.0
+    NVIDIA RTX 4090: 157
+    NVIDIA GeForce RTX 3090: 66.4
+    NVIDIA L4: 51
+  GPU_TFLOPS_FP32:
+    NVIDIA H200: 49.6
+    NVIDIA H100 80GB HBM3: 49.0
+    NVIDIA H100: 37.2
+    NVIDIA A100-SXM4-80GB: 18.2
+    NVIDIA A100 80GB PCIe: 16.9
+    NVIDIA A100-SXM4-40GB: 18.2
+    NVIDIA L40s: 35.5
+    NVIDIA L40: 27.0
+    NVIDIA RTX 6000 Ada Generation: 26.0
+    NVIDIA RTX A6000: 21.28
+    NVIDIA GeForce RTX 3090: 21.7
+    NVIDIA RTX A5000: 15.8
+    NVIDIA RTX A4500: 14.3
+    NVIDIA RTX 4000 Ada Generation: 14.6
+    NVIDIA A40: 22.8
+    NVIDIA RTX 4090: 48.5
+    NVIDIA L4: 9
+  GPU_AVRAM:
+    NVIDIA H200: 68.72
+    NVIDIA H100 80GB HBM3: 34.36
+    NVIDIA H100: 34.36
+    NVIDIA A100-SXM4-80GB: 34.36
+    NVIDIA A100 80GB PCIe: 34.36
+    NVIDIA A100-SXM4-40GB: 17.18
+    NVIDIA L40s: 17.18
+    NVIDIA L40: 17.18
+    NVIDIA RTX 6000 Ada Generation: 17.18
+    NVIDIA RTX A6000: 17.18
+    NVIDIA RTX A5000: 8.59
+    NVIDIA RTX A4500: 8.59
+    NVIDIA RTX 4000 Ada Generation: 8.59
+    NVIDIA A40: 17.18
+    NVIDIA RTX 4090: 8.59
+    NVIDIA GeForce RTX 3090: 8.59
+    NVIDIA L4: 8.59
+
+  gpu_tolerance_pairs:
+    NVIDIA L40: NVIDIA RTX 6000 Ada Generation
+    NVIDIA RTX 6000 Ada Generation: NVIDIA L40
+    NVIDIA RTX 4000 Ada Generation: NVIDIA RTX A5000
+    NVIDIA RTX A5000: NVIDIA RTX 4000 Ada Generation
+
+  gpu_scores:
+    NVIDIA H200: 3.99
+    NVIDIA H100 80GB HBM3: 2.99
+    NVIDIA H100: 2.79
+    NVIDIA A100-SXM4-80GB: 1.89
+    NVIDIA A100 80GB PCIe: 1.64
+    NVIDIA L40s: 1.03
+    NVIDIA RTX 6000 Ada Generation: 0.88
+    NVIDIA L40: 0.99
+    NVIDIA RTX A6000: 0.76
+    NVIDIA RTX 4090: 0.69
+    NVIDIA A40: 0.39
+    NVIDIA GeForce RTX 3090: 0.43
+    NVIDIA L4: 0.43
+    NVIDIA RTX A5000: 0.36
+    NVIDIA RTX A4500: 0.34
+
+merkle_proof:
+  time_tolerance: 5
+  submatrix_size: 512  # Adjust as needed (e.g., 1000)
+  hash_algorithm: 'sha256'  # Options: 'sha256', 'blake3'
