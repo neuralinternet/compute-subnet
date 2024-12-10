@@ -34,6 +34,8 @@ import requests
 import socket
 from urllib3.exceptions import InsecureRequestWarning
 import urllib3
+
+from neurons.Validator.database.pog import get_pog_specs
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
 import math
@@ -66,6 +68,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from typing import Optional, Union, List
+from compute import (TRUSTED_VALIDATORS_HOTKEYS)
 
 # Constants
 DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
@@ -75,6 +78,7 @@ ALLOCATE_CHECK_PERIOD = 60  # timeout check period
 ALLOCATE_CHECK_COUNT = 30     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
 NOTIFY_RETRY_PERIOD = 15     # notify retry interval
+MAX_ALLOCATION_RETRY = 5
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -181,7 +185,7 @@ class RegisterAPI:
             wallet: Optional[bt.wallet] = None,
             subtensor: Optional[bt.subtensor] = None,
             dendrite: Optional[bt.dendrite] = None,
-            metagraph: Optional[bt.metagraph] = None,
+            metagraph: Optional[bt.metagraph] = None, # type: ignore
             wandb: Optional[ComputeWandb] = None,
     ):
 
@@ -1305,7 +1309,7 @@ class RegisterAPI:
                     entry.status = "online"
                     for item in self.checking_allocated:
                         if item.get("hotkey") == hotkey:
-                            entry.status = offline
+                            entry.status = "offline"
                             break
                     allocation_list.append(entry)
 
@@ -1794,13 +1798,17 @@ class RegisterAPI:
 
             specs_details,running_hotkey = await get_wandb_running_miners()
 
+            bt.logging.info(f"Number of running miners: {len(running_hotkey)}")
+
             # Initialize a dictionary to keep track of GPU instances
             resource_list = []
             gpu_instances = {}
             total_gpu_counts = {}
 
             # Get the allocated hotkeys from wandb
-            allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, [], False)
+            allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, TRUSTED_VALIDATORS_HOTKEYS, True)
+            bt.logging.info(f"Allocated hotkeys: {allocated_hotkeys}")
+            bt.logging.info(f"Number of allocated hotkeys: {len(allocated_hotkeys)}")
 
             db = ComputeDb()
 
@@ -1811,8 +1819,9 @@ class RegisterAPI:
                 for hotkey, details in specs_details.items():
 
                     miner_older_than = self.miner_is_older_than(db, 48, hotkey)
+                    miner_pog_ok = self.miner_pog_ok((db, 48, hotkey))
 
-                    if hotkey in running_hotkey and miner_older_than:
+                    if hotkey in running_hotkey and miner_pog_ok:
                         if details:  # Check if details are not empty
                             resource = Resource()
                             try:
@@ -1947,6 +1956,10 @@ class RegisterAPI:
                         },
                     )
                 else:
+                    bt.logging.info(f"Number of resources returned: {len(resource_list)}")
+                    bt.logging.trace("Resource List Contents:")
+                    for resource in resource_list:
+                        bt.logging.trace(vars(resource))
                     if page_number:
                         page_size = page_size if page_size else 50
                         result = self._paginate_list(resource_list, page_number, page_size)
@@ -2456,9 +2469,9 @@ class RegisterAPI:
                 if not validator_runs:
                     bt.logging.info(f"API: No validator with allocated info in the project opencompute.")
                     return JSONResponse(
-                        status_code=status.HTTP_200_OK,
+                        status_code=status.HTTP_404_NOT_FOUND,
                         content={
-                            "success": True,
+                            "success": False,
                             "message": "No validator with allocated info in the project opencompute.",
                             "data": {},
                         },
@@ -2742,34 +2755,54 @@ class RegisterAPI:
             "type": requirements.gpu_type,
         }, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
 
+        # Start of allocation process
+        bt.logging.info(f"API: Starting container allocation with hotkey: {hotkey}")
+
+        bt.logging.info(f"Docker Requirement: {docker_requirement}")
+
         # Instantiate the connection to the db
         for axon in self.metagraph.axons:
             if axon.hotkey == hotkey:
-                check_allocation = self.dendrite.query(
-                    axon,
-                    Allocate(
-                        timeline=timeline,
-                        device_requirement=device_requirement,
-                        checking=True,
-                    ),
-                    timeout=60,
-                )
-                if check_allocation and check_allocation["status"] is True:
-                    register_response = self.dendrite.query(
+                attempt = 0
+                # Retry allocation up to max_retries times
+
+                while attempt < MAX_ALLOCATION_RETRY:
+                    attempt += 1
+                    check_allocation = self.dendrite.query(
                         axon,
                         Allocate(
                             timeline=timeline,
                             device_requirement=device_requirement,
-                            checking=False,
-                            public_key=public_key,
-                            docker_requirement=docker_requirement,
+                            checking=True,
                         ),
-                        timeout=100,
+                        timeout=30,
                     )
-                    if register_response and register_response["status"] is True:
-                        register_response["ip"] = axon.ip
-                        register_response["hotkey"] = axon.hotkey
-                        return register_response
+
+                    if not check_allocation or check_allocation.get("status") is not True:
+                        bt.logging.warning(f"API: Allocation check failed for hotkey: {hotkey}")
+                        continue  # Move to the next axon if allocation check failed
+
+                    bt.logging.info(f"API: Allocation check passed for hotkey: {hotkey}")
+
+                    if check_allocation and check_allocation["status"] is True:
+                        register_response = self.dendrite.query(
+                            axon,
+                            Allocate(
+                                timeline=60,
+                                device_requirement=device_requirement,
+                                checking=False,
+                                public_key=public_key,
+                                docker_requirement=docker_requirement,
+                            ),
+                            timeout=60,
+                        )
+                        if register_response and register_response["status"] is True:
+                            register_response["ip"] = axon.ip
+                            register_response["hotkey"] = axon.hotkey
+                            return register_response
+
+                    # Log or print retry attempt (optional)
+                    print(f"Attempt {attempt} failed for hotkey {hotkey}, retrying...") if attempt < MAX_ALLOCATION_RETRY else None
 
         return {"status": False, "msg": "Requested resource is not available."}
 
@@ -3014,12 +3047,24 @@ class RegisterAPI:
         try:
             cursor.execute("SELECT MIN(created_at) FROM challenge_details WHERE ss58_address = ?", (ss58_address,))
             oldest_timestamp = cursor.fetchone()[0]
-            return (datetime.now() - datetime.fromisoformat(oldest_timestamp)).total_seconds() > hours * 3600 if oldest_timestamp else False
+            if oldest_timestamp:
+                if (datetime.now() - datetime.fromisoformat(oldest_timestamp)).total_seconds() <= hours * 3600:
+                    print(f"Hotkey not old enough: {ss58_address}")
+                    return False
+                return True
+            return False
         except Exception as e:
             bt.logging.info(f"Error occurred: {e}")
             return False
         finally:
             cursor.close()
+
+    def miner_pog_ok(self, db: ComputeDb, hours: int, ss58_address: str) -> bool:
+        gpu_specs = get_pog_specs(self.db, ss58_address)
+        if gpu_specs is not None:
+            return True
+        else:
+            return False
 
     def run(self):
         """

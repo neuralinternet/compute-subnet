@@ -70,7 +70,7 @@ def kill_container():
             client.images.prune(filters={"dangling": True})
             bt.logging.info("Container was killed successfully")
         else:
-           bt.logging.info("Unable to find container")
+           bt.logging.info("No running container.")
         return True
     except Exception as e:
         bt.logging.info(f"Error killing container {e}")

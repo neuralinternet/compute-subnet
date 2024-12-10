@@ -704,6 +704,7 @@ class Validator:
                 raise ValueError("No GPUs detected.")
 
             # Step 5: Run the benchmarking mode
+            bt.logging.info(f"💻 {hotkey}: Executing benchmarking mode.")
             bt.logging.trace(f"{hotkey}: [Step 5] Executing benchmarking mode on the miner...")
             execution_output = execute_script_on_miner(ssh_client, mode='benchmark')
             bt.logging.trace(f"{hotkey}: [Step 5] Benchmarking completed.")

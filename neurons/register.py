@@ -32,7 +32,7 @@ import RSAEncryption as rsa
 from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
 from compute.wandb.wandb import ComputeWandb
-from neurons.Validator.database.allocate import select_allocate_miners_hotkey, update_allocation_db, update_blacklist_db, get_miner_details
+from neurons.Validator.database.allocate import select_allocate_miners_hotkey, update_allocation_db, get_miner_details, update_blacklist_db
 from compute.utils.version import get_local_version
 
 from compute.utils.db import ComputeDb
@@ -344,8 +344,10 @@ def allocate_hotkey(wandb):
 
 
 def deallocate(wandb):
-    # Get hotkey:
-    hotkey = input("Enter the hotkey of the resource to de-allocate: ")
+    # Get hotkey(s): *
+    hotkeys_input = input("Enter the hotkey(s) to de-allocate (comma-separated for multiple): ")  # *
+    # Split the input by commas and strip any extra whitespace to create a list of hotkeys *
+    hotkey_list = [hotkey.strip() for hotkey in hotkeys_input.split(',')]  # *
 
     config = get_config()
 
@@ -376,45 +378,66 @@ def deallocate(wandb):
     db = ComputeDb()
     cursor = db.get_cursor()
 
+    debug = False
+    last_batch = False
+
     try:
-        # Retrieve the allocation details for the given hotkey
-        cursor.execute("SELECT details, hotkey FROM allocation WHERE hotkey = ?", (hotkey,))
-        row = cursor.fetchone()
+        for hotkey in hotkey_list:  # *
+            # Retrieve the allocation details for the given hotkey
+            cursor.execute("SELECT details, hotkey FROM allocation WHERE hotkey = ?", (hotkey,))
+            row = cursor.fetchone()
 
-        if row:
-            # Parse the JSON string in the 'details' column
-            info = json.loads(row[0])
-            result_hotkey = row[1]
+            if row:
+                # Parse the JSON string in the 'details' column
+                info = json.loads(row[0])
+                result_hotkey = row[1]
 
-            username = info['username']
-            password = info['password']
-            port = info['port']
-            ip = info['ip']
-            regkey = info['regkey']
+                username = info['username']
+                password = info['password']
+                port = info['port']
+                ip = info['ip']
+                regkey = info['regkey']
 
-            index = metagraph.hotkeys.index(hotkey)
-            axon = metagraph.axons[index]
-            deregister_response = dendrite.query(
-                axon,
-                Allocate(timeline=0, device_requirement="", checking=False, public_key=regkey),
-                timeout=60,
-            )
-            if deregister_response and deregister_response["status"] is True:
-                print("Resource de-allocated successfully.")
+                # Update database and wandb first to mark as deallocated
+                if not debug:
+                    update_allocation_db(result_hotkey, info, False)  # Mark as deallocated immediately
+                    update_allocation_wandb(wandb)  # Update `wandb` as well
+                    print(f"Resource with hotkey {hotkey} marked as de-allocated in sql/wandb.")
+
+                # Find the index in metagraph and locate the corresponding axon
+                try:
+                    index = metagraph.hotkeys.index(hotkey)
+                    axon = metagraph.axons[index]
+
+                    deregister_response = None
+
+                    if not debug:
+                        deregister_response = dendrite.query(
+                            axon,
+                            Allocate(timeline=0, device_requirement="", checking=False, public_key=regkey),
+                            timeout=60,
+                        )
+                    if deregister_response and deregister_response["status"] is True:
+                        print(f"Resource with hotkey {hotkey} de-allocated successfully.")  # *
+                    else:
+                        print(f"No response from axon server for hotkey {hotkey}.")  # *
+                except ValueError:
+                    print(f"Hotkey {hotkey} not found in the metagraph.")  # *
+
+                #update_allocation_db(result_hotkey, info, False)
+                #update_allocation_wandb(wandb)
+
             else:
-                print("No Response from axon server, Resource de-allocated successfully .")
-
-            update_allocation_db(result_hotkey, info, False)
-            update_allocation_wandb(wandb)
-
-        else:
-            print("No allocation details found for the provided hotkey.")
+                print(f"No allocation details found for hotkey {hotkey}.")  # *
+            print()
 
     except Exception as e:
         print(f"An error occurred during de-allocation: {e}")
     finally:
         cursor.close()
         db.close()
+    if last_batch:
+        update_allocation_wandb(wandb)  # Update `wandb` as well
 
 def list_allocations(wandb):
     # Instantiate the connection to the db
@@ -459,6 +482,47 @@ def list_allocations(wandb):
         cursor.close()
         db.close()
 
+def list_allocations_hotkeys(wandb):
+
+    config = get_config()
+    subtensor = bt.subtensor(config=config)
+    metagraph = subtensor.metagraph(config.netuid)
+
+    # Instantiate the connection to the db
+    db = ComputeDb()
+    cursor = db.get_cursor()
+
+    try:
+        # Retrieve all records from the allocation table
+        cursor.execute("SELECT id, hotkey, details FROM allocation")
+        rows = cursor.fetchall()
+
+        # ANSI escape code for blue text
+        BLUE = '\033[94m'
+        RESET = '\033[0m'
+        print("=" * 80)  # Print a separator line for the title
+        print(f"{BLUE}LIST OF ALLOCATED HOTKEYS IN METAGRAPH{RESET}")
+        print("=" * 80)  # Print a separator line for the title
+
+        # Filter hotkeys based on metagraph
+        metagraph_hotkeys = [axon.hotkey for axon in metagraph.axons]
+        filtered_hotkeys = [row[1] for row in rows if row[1] in metagraph_hotkeys]
+
+        if not filtered_hotkeys:
+            print("No resources allocated that match the metagraph hotkeys.")
+        else:
+            for hotkey in filtered_hotkeys:
+                print(hotkey)
+
+            # Print the total number of hotkeys at the end
+            print("=" * 80)
+            print(f"Total hotkeys: {len(filtered_hotkeys)}")
+
+    except Exception as e:
+        print(f"An error occurred while retrieving allocation details: {e}")
+    finally:
+        cursor.close()
+        db.close()
 
 def list_resources(wandb): 
     db = ComputeDb()
@@ -704,7 +768,6 @@ def list_penalizations(wandb):
     else:
         print("No hotkeys are currently penalized.")
 
-
 def print_welcome_message():
     welcome_text = pyfiglet.figlet_format("Compute Subnet 27", width=120)
     print(welcome_text)
@@ -739,9 +802,9 @@ def main():
     parser_list = subparsers.add_parser('list_a', help='List allocated resources')
     parser_list.set_defaults(func=list_allocations)
 
-    # Subparser for the 'list_resources'
-    parser_list = subparsers.add_parser('list_r', help='List resources')
-    parser_list.set_defaults(func=list_resources)
+    # Subparser for the 'list_allocations_hotkeys'
+    parser_list = subparsers.add_parser('list_ah', help='List allocated resources, hotkeys')
+    parser_list.set_defaults(func=list_allocations_hotkeys)
 
     # Subparser for the 'penalize_hotkey' command
     parser_penalize_hotkey = subparsers.add_parser('p_hotkey', help='Penalize resource via hotkey')
@@ -754,6 +817,10 @@ def main():
     # Subparser for the 'list_p' command
     parser_list_penalizations = subparsers.add_parser('list_p', help='List penalized hotkeys')
     parser_list_penalizations.set_defaults(func=list_penalizations)
+
+    # Subparser for the 'list_resources'
+    parser_list = subparsers.add_parser('list_r', help='List resources')
+    parser_list.set_defaults(func=list_resources)
 
     # Print help before entering the command loop
     parser.print_help()
