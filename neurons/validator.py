@@ -361,10 +361,10 @@ class Validator:
                 self.stats[uid]["score"] = score
 
             except KeyError as e:
-                # bt.logging.info(f"KeyError occurred for UID {uid}: {str(e)}")
+                bt.logging.trace(f"KeyError occurred for UID {uid}: {str(e)}")
                 score = 0
             except Exception as e:
-                # bt.logging.info(f"An unexpected exception occurred for UID {uid}: {str(e)}")
+                bt.logging.trace(f"An unexpected exception occurred for UID {uid}: {str(e)}")
                 score = 0
 
             self.scores[uid] = score
@@ -591,14 +591,14 @@ class Validator:
                         else:
                             raise RuntimeError("GPU test failed")
                     except Exception as e:
-                        # bt.logging.warning(f"Exception in worker for {hotkey}: {e}")
+                        bt.logging.trace(f"Exception in worker for {hotkey}: {e}")
                         retry_counts[hotkey] += 1
                         if retry_counts[hotkey] < self.retry_limit:
-                            bt.logging.info(f"{hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
+                            bt.logging.info(f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
                             await asyncio.sleep(self.retry_interval)
                             await queue.put(axon)
                         else:
-                            bt.logging.info(f"{hotkey}: Miner failed after {self.retry_limit} attempts.")
+                            bt.logging.info(f"❌ {hotkey}: Miner failed after {self.retry_limit} attempts.")
                             update_pog_stats(self.db, hotkey, None, None)
                     finally:
                         queue.task_done()
@@ -608,7 +608,7 @@ class Validator:
             num_cores = multiprocessing.cpu_count()
             num_workers = 256 #8 * num_cores
             workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
-            # bt.logging.info(f"Started {num_workers} worker tasks for Proof-of-GPU benchmarking.")
+            bt.logging.trace(f"Started {num_workers} worker tasks for Proof-of-GPU benchmarking.")
 
             # Wait until the queue is fully processed
             await queue.join()
@@ -664,7 +664,7 @@ class Validator:
             private_key, public_key = rsa.generate_key_pair()
             allocation_response = self.allocate_miner(axon, private_key, public_key)
             if not allocation_response:
-                bt.logging.info(f"{hotkey}: Busy or not allocatable.")
+                bt.logging.info(f"🌀 {hotkey}: Busy or not allocatable.")
                 return (hotkey, None, 0)
             allocation_status = True
             miner_info = allocation_response
@@ -777,7 +777,7 @@ class Validator:
                 bt.logging.info(f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s)")
                 return (hotkey, gpu_name, num_gpus)
             else:
-                bt.logging.warning(f"{hotkey}: GPU Identification: Aborted due to verification failure")
+                bt.logging.info(f"⚠️ {hotkey}: GPU Identification: Aborted due to verification failure")
                 return (hotkey, None, 0)
 
         except Exception as e:

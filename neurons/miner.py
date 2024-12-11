@@ -171,8 +171,6 @@ class Miner:
         self.hashcat_workload_profile = self.config.miner_hashcat_workload_profile
         self.hashcat_extended_options = self.config.miner_hashcat_extended_options
 
-        check_hashcat_version(hashcat_path=self.hashcat_path)
-
         self.uids: list = self.metagraph.uids.tolist()
 
         self.sync_status()
@@ -183,7 +181,7 @@ class Miner:
         self.wandb.update_specs()
 
         # check allocation status
-        self.allocation_status = None
+        self.allocation_status = False
         self.__check_alloaction_errors()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
@@ -192,12 +190,15 @@ class Miner:
     def __check_alloaction_errors(self):
         file_path = "allocation_key"
         allocation_key_encoded = None
+        valid_validator_hotkeys = self.get_valid_validator_hotkeys()
+
+        allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
+        self.allocation_status = self.wallet.hotkey.ss58_address in allocated_hotkeys
+
         if os.path.exists(file_path):
             # Open the file in read mode ('r') and read the data
             with open(file_path, "r") as file:
                 allocation_key_encoded = file.read()
-
-            self.allocation_status = self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
 
             if (
                 not self.allocation_status
@@ -217,6 +218,7 @@ class Miner:
                 bt.logging.info(
                     "Container is already running without allocated. Killing the container."
                 )
+
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
         # The axon handles request processing, allowing validators to send this process requests.
@@ -585,6 +587,15 @@ class Miner:
             valid_validator.append((uid, hotkey, version))
         return valid_validator
 
+    def get_valid_validator_hotkeys(self):
+        valid_hotkeys = []
+        valid_validator_uids = self.get_valid_validator_uids()
+        for uid in valid_validator_uids:
+            neuron = self.subtensor.neuron_for_uid(uid, self.config.netuid)
+            hotkey = neuron.hotkey
+            valid_hotkeys.append(hotkey)
+        return valid_hotkeys
+
     def next_info(self, cond, next_block):
         if cond:
             return calculate_next_block_time(self.current_block, next_block)
@@ -640,7 +651,7 @@ class Miner:
                     or block_next_sync_status < self.current_block
                 ):
                     block_next_sync_status = (
-                        self.current_block + 25
+                        self.current_block + 75
                     )  # 75 ~ every 15 minutes
                     self.sync_status()
                     

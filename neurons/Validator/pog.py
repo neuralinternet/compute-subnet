@@ -9,6 +9,7 @@ import json
 import tempfile
 import yaml
 import torch
+import bittensor as bt
 
 def load_yaml_config(file_path):
     """
@@ -62,11 +63,11 @@ def identify_gpu(fp16_tflops, fp32_tflops, estimated_avram, gpu_data, reported_n
     if reported_name:
         # Check if identified GPU matches the tolerance pair
         if identified_gpu in tolerance_pairs and reported_name == tolerance_pairs.get(identified_gpu):
-            print(f"[Tolerance Adjustment] Detected GPU {identified_gpu} matches reported GPU {reported_name}.")
+            bt.logging.trace(f"[Tolerance Adjustment] Detected GPU {identified_gpu} matches reported GPU {reported_name}.")
             identified_gpu = reported_name
         # Check if reported GPU matches the tolerance pair in reverse
         elif reported_name in tolerance_pairs and identified_gpu == tolerance_pairs.get(reported_name):
-            print(f"[Tolerance Adjustment] Reported GPU {reported_name} matches detected GPU {identified_gpu}.")
+            bt.logging.trace(f"[Tolerance Adjustment] Reported GPU {reported_name} matches detected GPU {identified_gpu}.")
             identified_gpu = reported_name
 
     return identified_gpu
@@ -268,21 +269,21 @@ def verify_responses(seeds, root_hashes, responses, indices, n):
 
             # Check if the miner's value matches the expected value
             if not np.isclose(value_miner, value_validator, atol=1e-5):
-                # print(f"[Verification] GPU {gpu_id}: Value mismatch at index ({i}, {j}).")
+                bt.logging.trace(f"[Verification] GPU {gpu_id}: Value mismatch at index ({i}, {j}).")
                 gpu_failed = True
                 break  # Exit the loop for this GPU as it has already failed
 
             # Verify the Merkle proof for the row
             if not verify_merkle_proof_row(row_miner, proof, bytes.fromhex(root_hash), i, total_leaves):
-                # print(f"[Verification] GPU {gpu_id}: Invalid Merkle proof at index ({i}).")
+                bt.logging.trace(f"[Verification] GPU {gpu_id}: Invalid Merkle proof at index ({i}).")
                 gpu_failed = True
                 break  # Exit the loop for this GPU as it has already failed
 
         if gpu_failed:
             failed_gpus.append(gpu_id)
-            # print(f"[Verification] GPU {gpu_id} failed verification.")
-        # else:
-            # print(f"[Verification] GPU {gpu_id} passed verification.")
+            bt.logging.trace(f"[Verification] GPU {gpu_id} failed verification.")
+        else:
+            bt.logging.trace(f"[Verification] GPU {gpu_id} passed verification.")
 
     # Calculate the number of GPUs that passed verification
     passed_gpus = num_gpus - len(failed_gpus)
@@ -290,14 +291,14 @@ def verify_responses(seeds, root_hashes, responses, indices, n):
     # Determine if verification passes based on the required_passes
     if passed_gpus >= required_passes:
         verification_passed = True
-        # print(f"[Verification] SUCCESS: {passed_gpus} out of {num_gpus} GPUs passed verification.")
-        # if len(failed_gpus) > 0:
-        #     print(f"            Note: {len(failed_gpus)} GPU(s) failed verification but within allowed threshold.")
+        bt.logging.trace(f"[Verification] SUCCESS: {passed_gpus} out of {num_gpus} GPUs passed verification.")
+        if len(failed_gpus) > 0:
+            bt.logging.trace(f"            Note: {len(failed_gpus)} GPU(s) failed verification but within allowed threshold.")
     else:
         verification_passed = False
-        # print(f"[Verification] FAILURE: Only {passed_gpus} out of {num_gpus} GPUs passed verification.")
-        # if len(failed_gpus) > 0:
-        #     print(f"            {len(failed_gpus)} GPU(s) failed verification which exceeds the allowed threshold.")
+        bt.logging.trace(f"[Verification] FAILURE: Only {passed_gpus} out of {num_gpus} GPUs passed verification.")
+        if len(failed_gpus) > 0:
+            bt.logging.trace(f"            {len(failed_gpus)} GPU(s) failed verification which exceeds the allowed threshold.")
 
     return verification_passed
 

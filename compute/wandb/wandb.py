@@ -492,18 +492,6 @@ class ComputeWandb:
 
         return False
 
-    def sync_allocated(self, hotkey):
-        """
-        This function syncs the allocated status of the miner with the wandb run.
-        """
-        # Fetch allocated hotkeys
-        allocated_hotkeys = self.get_allocated_hotkeys([], False)
-
-        if hotkey in allocated_hotkeys:
-            return True
-        else:
-            return False
-
     def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
         """ This function gets penalized hotkeys checklist from your validator run """
         if self.run:

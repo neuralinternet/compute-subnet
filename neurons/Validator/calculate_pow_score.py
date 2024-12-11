@@ -52,7 +52,7 @@ def calc_score_pog(gpu_specs, hotkey, allocated_hotkeys, config_data, mock=False
             score += 100
 
         # Logging score
-        bt.logging.info(f"Score - {hotkey}: {score}/200")
+        bt.logging.info(f"Score - {hotkey}: {score:.2f}/200")
 
         # Normalize the score
         normalized_score = normalize(score, 0, 200)
