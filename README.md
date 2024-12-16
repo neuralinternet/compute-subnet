@@ -148,11 +148,11 @@ Once you have done so, you can run the miner and validator with the following co
 
 ## Running Miner
 
-Miners contribute processing resources, specifically GPU (Graphics Processing Unit) to enable optimal performance in essential GPU-based computing tasks. The system uses a hardware specification-based reward mechanism that incentivizes miners through a tiered structure, with rewards directly correlated to the processing capabilities of their hardware. High-performance devices receive greater compensation, reflecting their significant contributions to the network's overall computational throughput. Detailed scoring metrics and supported GPUs can be found in the config.yaml file under the gpu_scores section.
+Miners contribute processing resources, specifically GPU (Graphics Processing Unit) to enable optimal performance in essential GPU-based computing tasks. The system uses a hardware specification-based reward mechanism that incentivizes miners through a tiered structure, with rewards directly correlated to the processing capabilities of their hardware. High-performance devices receive greater compensation, reflecting their significant contributions to the network's overall computational throughput. Detailed scoring metrics and supported GPUs can be found in the config.yaml file under the gpu_scores section. A comprehensive explanation of scoring is provided below in the section titled "Understanding the Score Calculation Process".
 
 The primary role of miners is to provide their resources to validators. The allocation and management of these resources are entirely handled on the validator's side. Validators dynamically allocate and deallocate a miner's resources based on availability and network demand. This ensures an efficient and flexible distribution of computational power, meeting the fluctuating needs of the network.
 
-It is important to ensure that port 4444 is open on the host machine or that an alternative open port is specified. This allows validators to access the miner's allocated resources and retrieve GPU specifications seamlessly.
+It is important to ensure that port 4444 is open on the host machine or that an alternative open port is specified. This allows validators to access the miner's allocated resources and retrieve GPU specifications seamlessly. Changing the miner's hardware while it is allocated is possible, but it will result in the validator deallocating your miner
 
 ```bash
 # To run the miner
@@ -188,7 +188,8 @@ The score calculation function now determines a miner's performance primarily ba
 - NVIDIA H100: 2.79 
 - NVIDIA A100-SXM4-80GB: 1.89 
 - NVIDIA A100 80GB PCIe: 1.64 
-- NVIDIA L40s: 1.03 NVIDIA L40: 0.99 
+- NVIDIA L40s: 1.03 
+- NVIDIA L40: 0.99 
 - NVIDIA RTX 6000 Ada Generation: 0.88 
 - NVIDIA RTX A6000: 0.76 
 - NVIDIA RTX 4090: 0.69 
@@ -313,7 +314,7 @@ Flags that you can use with the validator script.
 
 ## Benchmarking the machine
 
-**Note: Starting from v1.6.0, hashcat benchmarking is no longer performed. The information below is provided purely as legacy reference and will be updated in future releases.**
+**Note**: Starting from v1.6.0, hashcat benchmarking is no longer performed. The information below is provided purely as legacy reference and will be updated in future releases.
 
 ### Benchmarking hashcat's performance directly:
 ```bash
