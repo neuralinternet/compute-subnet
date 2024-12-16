@@ -188,7 +188,7 @@ class Validator:
         self.config_data = load_yaml_config(config_file)
         cpu_cores = os.cpu_count() or 1
         configured_max_workers = self.config_data["merkle_proof"].get("max_workers", 32)
-        safe_max_workers = min(cpu_cores + 4, configured_max_workers)
+        safe_max_workers = min((cpu_cores + 4)*4, configured_max_workers)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=safe_max_workers)
         self.results = {}
         self.gpu_task = None  # Track the GPU task
@@ -653,7 +653,7 @@ class Validator:
             # Number of concurrent workers
             # Determine a safe default number of workers
             cpu_cores = os.cpu_count() or 1
-            safe_max_workers = min(cpu_cores + 4, num_workers)
+            safe_max_workers = min((cpu_cores + 4)*4, num_workers)
 
             workers = [asyncio.create_task(worker()) for _ in range(safe_max_workers)]
             bt.logging.trace(f"Started {safe_max_workers} worker tasks for Proof-of-GPU benchmarking.")
