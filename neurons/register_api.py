@@ -78,7 +78,7 @@ ALLOCATE_CHECK_PERIOD = 60  # timeout check period
 ALLOCATE_CHECK_COUNT = 30     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
 NOTIFY_RETRY_PERIOD = 15     # notify retry interval
-MAX_ALLOCATION_RETRY = 5
+MAX_ALLOCATION_RETRY = 8
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -2758,7 +2758,7 @@ class RegisterAPI:
         # Start of allocation process
         bt.logging.info(f"API: Starting container allocation with hotkey: {hotkey}")
 
-        bt.logging.info(f"Docker Requirement: {docker_requirement}")
+        bt.logging.trace(f"Docker Requirement: {docker_requirement}")
 
         # Instantiate the connection to the db
         for axon in self.metagraph.axons:
@@ -2802,7 +2802,8 @@ class RegisterAPI:
                             return register_response
 
                     # Log or print retry attempt (optional)
-                    print(f"Attempt {attempt} failed for hotkey {hotkey}, retrying...") if attempt < MAX_ALLOCATION_RETRY else None
+                    bt.logging.trace(f"Attempt {attempt} failed for hotkey {hotkey}, retrying...") if attempt < MAX_ALLOCATION_RETRY else None
+                    time.sleep(10)  # Sleep before the next retry attempt
 
         return {"status": False, "msg": "Requested resource is not available."}
 
