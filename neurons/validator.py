@@ -51,9 +51,7 @@ from compute import (
     SUSPECTED_EXPLOITERS_COLDKEYS,
     __version_as_int__,
     validator_permit_stake,
-    weights_rate_limit,
-    pog_retry_limit,
-    pog_retry_interval
+    weights_rate_limit
     )
 from compute.axon import ComputeSubnetSubtensor
 from compute.protocol import Allocate, Challenge, Specs
@@ -190,8 +188,6 @@ class Validator:
         self.config_data = load_yaml_config(config_file)
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=256)  # Adjust as needed
         self.results = {}
-        self.retry_limit = pog_retry_limit
-        self.retry_interval = pog_retry_interval
         self.gpu_task = None  # Track the GPU task
 
         # Step 3: Set up initial scoring weights for validation
@@ -525,17 +521,52 @@ class Validator:
         return valid_hotkeys
 
     def get_specs_wandb(self):
-
+        """
+        Retrieves hardware specifications from Wandb, updates the miner_details table,
+        and checks for differences in GPU specs, logging changes only for allocated hotkeys.
+        """
         bt.logging.info(f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}")
 
+        # Retrieve specs from Wandb
         specs_dict = self.wandb.get_miner_specs(self._queryable_uids)
-        # Update the local db with the data from wandb
+
+        # Fetch current specs from miner_details using the existing function
+        current_miner_details = get_miner_details(self.db)
+
+        # Compare and detect GPU spec changes for allocated hotkeys
+        for hotkey, new_specs in specs_dict.values():
+            if hotkey in self.allocated_hotkeys:  # Check if hotkey is allocated
+                current_specs = current_miner_details.get(hotkey, {})
+                current_gpu_specs = current_specs.get("gpu", {})
+                new_gpu_specs = new_specs.get("gpu", {})
+
+                # Compare the GPU specs
+                if current_gpu_specs != new_gpu_specs:
+                    axon = None
+                    for uid, axon_info in self._queryable_uids.items():
+                        if axon_info.hotkey == hotkey:
+                            axon = axon_info
+                            break
+                    if axon:
+                        bt.logging.info(f"GPU specs changed for allocated hotkey {hotkey}:")
+                        bt.logging.info(f"Old specs: {current_gpu_specs}")
+                        bt.logging.info(f"New specs: {new_gpu_specs}")
+                        self.deallocate_miner(axon, None)
+
+        # Update the local db with the new data from Wandb
         update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
 
         # Log the hotkey and specs
-        bt.logging.info(f"✅ Hardware list responses:")
+        bt.logging.info(f"✅ GPU specs per hotkey (Wandb):")
         for hotkey, specs in specs_dict.values():
-            bt.logging.info(f"{hotkey} - {specs}")
+            gpu_info = specs.get("gpu", {})
+            gpu_details = gpu_info.get("details", [])
+            if gpu_details:
+                gpu_name = gpu_details[0].get("name", "Unknown GPU")
+                gpu_count = gpu_info.get("count", 1)  # Assuming 'count' reflects the number of GPUs
+                bt.logging.info(f"{hotkey}: {gpu_name} x {gpu_count}")
+            else:
+                bt.logging.info(f"{hotkey}: No GPU details available")
 
         self.finalized_specs_once = True
 
@@ -546,8 +577,20 @@ class Validator:
         """
         try:
             self._queryable_uids = self.get_queryable()
-            bt.logging.info(f"💻 Starting Proof-of-GPU benchmarking for uids: {list(self._queryable_uids.keys())}")
 
+            # Settings
+            merkle_proof = self.config_data["merkle_proof"]
+            retry_limit = merkle_proof.get("pog_retry_limit",30)
+            retry_interval = merkle_proof.get("pog_retry_interval",75)
+            num_workers = merkle_proof.get("max_workers",256)
+            max_delay = merkle_proof.get("max_random_delay",1200)
+
+            # Random delay for PoG
+            delay = random.uniform(0, max_delay)  # Random delay
+            bt.logging.info(f"💻⏳ Scheduled Proof-of-GPU task to start in {delay:.2f} seconds.")
+            await asyncio.sleep(delay)
+
+            bt.logging.info(f"💻 Starting Proof-of-GPU benchmarking for uids: {list(self._queryable_uids.keys())}")
             # Shared dictionary to store results
             self.results = {}
             # Dictionary to track retry counts
@@ -581,7 +624,7 @@ class Validator:
                         result = await asyncio.get_event_loop().run_in_executor(
                             self.executor, self.test_miner_gpu, axon, self.config_data
                         )
-                        if result[1] is not None and result[2] >= 0:
+                        if result[1] is not None and result[2] > 0:
                             async with results_lock:
                                 self.results[hotkey] = {
                                     "gpu_name": result[1],
@@ -593,20 +636,18 @@ class Validator:
                     except Exception as e:
                         bt.logging.trace(f"Exception in worker for {hotkey}: {e}")
                         retry_counts[hotkey] += 1
-                        if retry_counts[hotkey] < self.retry_limit:
+                        if retry_counts[hotkey] < retry_limit:
                             bt.logging.info(f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
-                            await asyncio.sleep(self.retry_interval)
+                            await asyncio.sleep(retry_interval)
                             await queue.put(axon)
                         else:
-                            bt.logging.info(f"❌ {hotkey}: Miner failed after {self.retry_limit} attempts.")
+                            bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts.")
                             update_pog_stats(self.db, hotkey, None, None)
                     finally:
                         queue.task_done()
 
 
             # Number of concurrent workers
-            num_cores = multiprocessing.cpu_count()
-            num_workers = 256 #8 * num_cores
             workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
             bt.logging.trace(f"Started {num_workers} worker tasks for Proof-of-GPU benchmarking.")
 
@@ -619,16 +660,15 @@ class Validator:
             # Wait until all worker tasks are cancelled
             await asyncio.gather(*workers, return_exceptions=True)
 
-            bt.logging.info(f"✅ Proof-of-GPU benchmarking completed.")
+            bt.logging.success(f"✅ Proof-of-GPU benchmarking completed.")
             return self.results
         except Exception as e:
-            bt.logging.error(f"Exception in proof_of_gpu: {e}\n{traceback.format_exc()}")
+            bt.logging.info(f"❌ Exception in proof_of_gpu: {e}\n{traceback.format_exc()}")
 
     def on_gpu_task_done(self, task):
         try:
             results = task.result()
-            bt.logging.info(f"Proof-of-GPU Results: {results}")
-            # Optionally, process results further here
+            bt.logging.trace(f"Proof-of-GPU Results: {results}")
             self.gpu_task = None  # Reset the task reference
             self.sync_scores()
 
@@ -656,8 +696,7 @@ class Validator:
             merkle_proof = config_data["merkle_proof"]
             time_tol = merkle_proof.get("time_tolerance",5)
             # Extract miner_script path
-            ssh_config = config_data["ssh_config"]
-            miner_script_path = ssh_config["miner_script_path"]
+            miner_script_path = merkle_proof["miner_script_path"]
 
             # Step 1: Allocate Miner
             # Generate RSA key pair
@@ -674,6 +713,7 @@ class Validator:
             # Step 2: Connect via SSH
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            bt.logging.trace(f"{hotkey}: Connect to Miner via SSH.")
             ssh_client.connect(host, port=miner_info.get('port', 22), username=miner_info['username'], password=miner_info['password'], timeout=10)
             if not (ssh_client):
                 ssh_client.close()
@@ -737,10 +777,8 @@ class Validator:
             # Parse the execution output
             root_hashes_list, gpu_timings_list = parse_merkle_output(execution_output)
             bt.logging.trace(f"{hotkey}: [Merkle Proof] Root hashes received from GPUs:")
-            # for gpu_id, root_hash in root_hashes_list:
-            #     bt.logging.info(f"        GPU {gpu_id}: {root_hash}")
-            # Changed line:
-            bt.logging.trace(f"{hotkey}: GPU {{gpu_id}}: {{root_hash}}")
+            for gpu_id, root_hash in root_hashes_list:
+                bt.logging.trace(f"{hotkey}: GPU {{gpu_id}}: {{root_hash}}")
 
             # Calculate total times
             total_multiplication_time = 0.0
@@ -777,11 +815,11 @@ class Validator:
                 bt.logging.info(f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s)")
                 return (hotkey, gpu_name, num_gpus)
             else:
-                bt.logging.info(f"⚠️ {hotkey}: GPU Identification: Aborted due to verification failure")
+                bt.logging.info(f"⚠️  {hotkey}: GPU Identification: Aborted due to verification failure")
                 return (hotkey, None, 0)
 
         except Exception as e:
-            bt.logging.error(f"{hotkey}: Error testing Miner: {e}")
+            bt.logging.info(f"❌ {hotkey}: Error testing Miner: {e}")
             return (hotkey, None, 0)
 
         finally:
@@ -826,7 +864,7 @@ class Validator:
                     timeout=30,
                 )
                 if response and response.get("status") is True:
-                    # bt.logging.info(f"Successfully allocated miner {axon.hotkey}")
+                    bt.logging.trace(f"Successfully allocated miner {axon.hotkey}")
                     decrypted_info_str = rsa.decrypt_data(
                         private_key.encode("utf-8"),
                         base64.b64decode(response["info"]),
@@ -855,9 +893,27 @@ class Validator:
         """
         Deallocate a miner by sending a deregistration query.
 
-        :param uid: Unique identifier for the axon.
         :param axon: Axon object containing miner details.
+        :param public_key: Public key of the miner; if None, it will be retrieved from the database.
         """
+        if not public_key:
+            try:
+                # Instantiate the connection to the database and retrieve miner details
+                db = ComputeDb()
+                cursor = db.get_cursor()
+
+                cursor.execute(
+                    "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
+                    (axon.hotkey,)
+                )
+                row = cursor.fetchone()
+
+                if row:
+                    info = json.loads(row[0])  # Parse JSON string from the 'details' column
+                    public_key = info.get("regkey")
+            except Exception as e:
+                bt.logging.trace(f"{axon.hotkey}: Missing public key: {e}")
+
         try:
             dendrite = bt.dendrite(wallet=self.wallet)
             retry_count = 0
@@ -866,7 +922,7 @@ class Validator:
 
             while allocation_status and retry_count < max_retries:
                 try:
-                    # Deallocation query
+                    # Send deallocation query
                     deregister_response = dendrite.query(
                         axon,
                         Allocate(
@@ -876,34 +932,30 @@ class Validator:
                         ),
                         timeout=60,
                     )
+
                     if deregister_response and deregister_response.get("status") is True:
                         allocation_status = False
                         bt.logging.trace(f"Deallocated miner {axon.hotkey}")
-                        break
                     else:
                         retry_count += 1
                         bt.logging.trace(
-                            f"{axon.hotkey}: Failed to deallocate miner."
+                            f"{axon.hotkey}: Failed to deallocate miner. "
                             f"(attempt {retry_count}/{max_retries})"
                         )
                         if retry_count >= max_retries:
-                            bt.logging.trace(
-                                f"{axon.hotkey}: Max retries reached for deallocating miner."
-                            )
+                            bt.logging.trace(f"{axon.hotkey}: Max retries reached for deallocating miner.")
                         time.sleep(5)
                 except Exception as e:
                     retry_count += 1
                     bt.logging.trace(
-                        f"{axon.hotkey}: Error while trying to deallocate miner."
-                        f"(attempt {retry_count}/{max_retries}) for {axon.hotkey}: {e}"
+                        f"{axon.hotkey}: Error while trying to deallocate miner. "
+                        f"(attempt {retry_count}/{max_retries}): {e}"
                     )
                     if retry_count >= max_retries:
-                        bt.logging.trace(
-                            f"{axon.hotkey}: Max retries reached for deallocating miner."
-                        )
+                        bt.logging.trace(f"{axon.hotkey}: Max retries reached for deallocating miner.")
                     time.sleep(5)
         except Exception as e:
-            bt.logging.trace(f"{axon.hotkey}: Unexpected error during deallocation for: {e}")
+            bt.logging.trace(f"{axon.hotkey}: Unexpected error during deallocation: {e}")
 
     def set_weights(self):
         # Remove all negative scores and attribute them 0.
@@ -967,13 +1019,12 @@ class Validator:
 
                     # Perform proof of GPU (pog) queries
                     if self.current_block % block_next_pog == 0 or block_next_pog < self.current_block:
-                        block_next_pog = self.current_block + random.randint(300, 350)  # 300,350 -> between ~ 60 and 70 minutes
+                        block_next_pog = self.current_block + 360
 
                         if self.gpu_task is None or self.gpu_task.done():
                             # Schedule proof_of_gpu as a background task
                             self.gpu_task = asyncio.create_task(self.proof_of_gpu())
                             self.gpu_task.add_done_callback(self.on_gpu_task_done)
-                            bt.logging.info("Scheduled Proof-of-GPU task.")
                         else:
                             bt.logging.info("Proof-of-GPU task is already running.")
 
