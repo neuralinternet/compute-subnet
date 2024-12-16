@@ -65,7 +65,7 @@ def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus):
 
 def get_pog_specs(db: ComputeDb, hotkey):
     """
-    Retrieves any GPU spec entry for a given hotkey where gpu_name is not None.
+    Retrieves the most recent GPU spec entry for a given hotkey where gpu_name is not None.
 
     :param hotkey: The miner's hotkey identifier.
     :return: A dictionary with 'gpu_name' and 'num_gpus' or None if no valid entries exist.
@@ -77,6 +77,7 @@ def get_pog_specs(db: ComputeDb, hotkey):
             SELECT gpu_name, num_gpus
             FROM pog_stats
             WHERE hotkey = ? AND gpu_name IS NOT NULL AND num_gpus IS NOT NULL
+            ORDER BY created_at DESC
             LIMIT 1
             """,
             (hotkey,)

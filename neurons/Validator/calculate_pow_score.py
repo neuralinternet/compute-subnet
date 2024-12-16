@@ -42,7 +42,7 @@ def calc_score_pog(gpu_specs, hotkey, allocated_hotkeys, config_data, mock=False
         score_factor = 100/max_score
 
         gpu_name = gpu_specs.get("gpu_name")
-        num_gpus = gpu_specs.get("num_gpus")
+        num_gpus = min(gpu_specs.get("num_gpus"), 8)
 
         # Get GPU score
         score = gpu_scores.get(gpu_name) * num_gpus * score_factor

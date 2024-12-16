@@ -472,7 +472,7 @@ class Miner:
                 else:
                     result = deregister_allocation(public_key)
                     # self.miner_http_server = start_server(self.config.ssh.port)
-                synapse.output = result
+                    synapse.output = result
         self.update_allocation(synapse)
         synapse.output["port"] = int(self.config.ssh.port)
         return synapse
@@ -683,7 +683,7 @@ class Miner:
                     f"Emission: {self.metagraph.E[self.miner_subnet_uid]:.6f} | "
                     #f"update_validator: #{block_next_updated_validator} ~ {time_next_updated_validator} | "
                     f"Sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
-                    f"Allocated: {self.allocation_status}"
+                    f"Allocated: {'Yes' if self.allocation_status else 'No'}"
                 )
                 time.sleep(5)
 
