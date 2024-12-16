@@ -88,7 +88,7 @@ merkle_proof:
   time_tolerance: 5
   submatrix_size: 512
   hash_algorithm: 'sha256'
-  pog_retry_limit: 20
+  pog_retry_limit: 22
   pog_retry_interval: 60  # seconds
-  max_workers: 32 # python's default
+  max_workers: 64
   max_random_delay: 900 # 900 seconds
