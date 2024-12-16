@@ -42,40 +42,51 @@ python3 -m pip install -e .
 
 ## Extra dependencies - Miners
 
-### Hashcat
-
-```bash
-# Minimal hashcat version >= v6.2.6
-wget https://hashcat.net/files/hashcat-6.2.6.tar.gz
-tar xzvf hashcat-6.2.6.tar.gz
-cd hashcat-6.2.6/
-make
-make install  # prefixed by sudo if not in the sudoers
-hashcat --version
-```
-
 ### Cuda
 
+To ensure **optimal performance and compatibility**, it is **strongly recommended** to install the **latest available CUDA version** from NVIDIA.
+
 ```bash
-# Recommended cuda version: 12.3
-wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
-apt-get update
-apt-get -y install cuda-toolkit-12-3
-apt-get -y install -y cuda-drivers
+# Visit NVIDIA's official CUDA download page to get the latest version:
+# https://developer.nvidia.com/cuda-downloads
 
-# Valid for x64 architecture. Consult nvidia documentation for any other architecture.
-export CUDA_VERSION=cuda-12.3
-export PATH=$PATH:/usr/local/$CUDA_VERSION/bin
-export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
+# Select your operating system, architecture, distribution, and version to get the appropriate installer.
 
-echo "">>~/.bashrc
-echo "PATH=$PATH">>~/.bashrc
-echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
+# Example for Ubuntu 22.04 (replace with the latest version as needed):
 
-reboot  # Changes might need a restart depending on the system
+# Download the CUDA repository package (update the URL to the latest version)
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-repo-ubuntu2204-latest_amd64.deb
 
+# Install the CUDA repository package
+sudo dpkg -i cuda-repo-ubuntu2204-latest_amd64.deb
+
+# Import the GPG key
+sudo cp /var/cuda-repo-ubuntu2204-latest/cuda-*-keyring.gpg /usr/share/keyrings/
+
+# Update the package lists
+sudo apt-get update
+
+# Install CUDA Toolkit and drivers
+sudo apt-get -y install cuda-toolkit
+sudo apt-get -y install cuda-drivers
+
+# Set environment variables
+export CUDA_PATH=/usr/local/cuda
+export PATH=$PATH:$CUDA_PATH/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CUDA_PATH/lib64
+
+# Persist environment variables by adding them to ~/.bashrc
+echo "export CUDA_PATH=/usr/local/cuda" >> ~/.bashrc
+echo "export PATH=\$PATH:\$CUDA_PATH/bin" >> ~/.bashrc
+echo "export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:\$CUDA_PATH/lib64" >> ~/.bashrc
+
+# Apply the changes
+source ~/.bashrc
+
+# Reboot the system to finalize the installation
+sudo reboot
+
+# Verify the installation
 nvidia-smi
 nvcc --version
 
@@ -137,24 +148,11 @@ Once you have done so, you can run the miner and validator with the following co
 
 ## Running Miner
 
-A dedicated medium article is available [here](https://medium.com/@neuralinternet/how-to-run-a-compute-miner-82498b93e7e1)
+Miners contribute processing resources, specifically GPU (Graphics Processing Unit) to enable optimal performance in essential GPU-based computing tasks. The system uses a hardware specification-based reward mechanism that incentivizes miners through a tiered structure, with rewards directly correlated to the processing capabilities of their hardware. High-performance devices receive greater compensation, reflecting their significant contributions to the network's overall computational throughput. Detailed scoring metrics and supported GPUs can be found in the config.yaml file under the gpu_scores section.
 
-Miners contribute processing resources, notably GPU (Graphics Processing Unit) and CPU (Central Processing Unit)
-instances, to facilitate optimal performance in essential GPU and CPU-based computing tasks. The system operates on a
-performance-based reward mechanism, where miners are incentivized through a tiered reward structure correlated to the
-processing capability of their hardware. High-performance devices are eligible for increased compensation, reflecting
-their greater contribution to the network's computational throughput. Emphasizing the integration of GPU instances is
-critical due to their superior computational power, particularly in tasks demanding parallel processing capabilities.
-Consequently, miners utilizing GPU instances are positioned to receive substantially higher rewards compared to their
-CPU counterparts, in alignment with the greater processing power and efficiency GPUs bring to the network.
+The primary role of miners is to provide their resources to validators. The allocation and management of these resources are entirely handled on the validator's side. Validators dynamically allocate and deallocate a miner's resources based on availability and network demand. This ensures an efficient and flexible distribution of computational power, meeting the fluctuating needs of the network.
 
-The primary contribution of miners lies in providing their resources to the validator. The management of these resources' 
-reservations is entirely handled on the validator's side. A validator has the capability to allocate and deallocate a miner's 
-resource based on availability and demand. Currently, the maximum duration of allocation for each reservation is limited to 60 days. 
-This mechanism guarantees a dynamic and efficient distribution of computational power, accommodating the fluctuating demands across the network.
-
-Important: It's crucial to ensure that port 4444 is open on the host machine to grant validators access to the allocated resource on the miner.
-
+It is important to ensure that port 4444 is open on the host machine or that an alternative open port is specified. This allows validators to access the miner's allocated resources and retrieve GPU specifications seamlessly.
 
 ```bash
 # To run the miner
@@ -164,83 +162,79 @@ python -m miner.py
     --subtensor.network <your chain url>  # blockchain endpoint you want to connect
     --wallet.name <your miner wallet> # name of your wallet
     --wallet.hotkey <your miner hotkey> # hotkey name of your wallet
+    --ssh.port <your ssh port> # The port you want to provide for allocations, default: 4444
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
 ```
 
 ## Running Validator
 
-Validators hold the critical responsibility of rigorously assessing and verifying the computational capabilities of
-miners. This multifaceted evaluation process commences with validators requesting miners to provide comprehensive
-performance data, which includes not only processing speeds and efficiencies but also critical metrics like Random
-Access Memory (RAM) capacity and disk space availability.
+Validators play a crucial role in meticulously evaluating and verifying the computational capabilities of miners. This thorough assessment begins with validators requesting detailed performance data from miners, encompassing hardware specifications, efficiencies, and critical metrics such as Random Access Memory (RAM) capacity and disk space availability.
 
-The inclusion of RAM and disk space measurements is vital, as these components significantly impact the overall
-performance and reliability of the miners' hardware. RAM capacity influences the ability to handle large or multiple
-tasks simultaneously, while adequate disk space ensures sufficient storage.
+The inclusion of RAM and disk space metrics is essential, as these components significantly influence the overall performance and reliability of a miner's hardware. RAM capacity determines the ability to manage large or multiple tasks simultaneously, while sufficient disk space ensures adequate storage for sustained operations.
 
-Following the receipt of this detailed hardware and performance information, validators proceed to test the miners'
-computational integrity. This is achieved by presenting them with complex hashing challenges, designed to evaluate the
-processing power and reliability of the miners' systems. Validators adjust the difficulty of these problems based on the
-comprehensive performance profile of each miner, including their RAM and disk space metrics.
+Once this comprehensive hardware and performance information is received, validators test the computational integrity of miners using torch-based computational tasks, such as matrix multiplications. These tests are designed to accurately determine the hardware specifications and performance capabilities of the miners' systems.
 
-In addition to measuring the time taken by miners to resolve these problems, validators meticulously verify the accuracy
-of the responses. This thorough examination of both speed and precision, complemented by the assessment of RAM and disk
-space utilization, forms the crux of the evaluation process.
-
-Based on this extensive analysis, validators update the miners' scores, reflecting a holistic view of their
-computational capacity, efficiency, and hardware quality. This score then determines the miner's weight within the
-network, directly influencing their potential rewards and standing.
-This scoring process, implemented through a Python script, considers various factors including CPU, GPU, hard disk, and
-RAM performance. The script's structure and logic are outlined below:
+Based on the results of this hardware identification process, validators update the miners' scores. These scores determine the miners' weight within the network, directly affecting their potential rewards and standing in the system.
 
 ## Understanding the Score Calculation Process
 
-**The scoring system has been updated, if you want to check the old hardware mechanism:** [Hardware scoring](docs/hardware_scoring.md)
+**The scoring system has been updated!**
 
-The score calculation function determines a miner's performance based on various factors:
+The score calculation function now determines a miner's performance primarily based on their GPU hardware and resource allocation. Only the GPUs listed below are supported and scored correctly.
 
-**Successful Problem Resolution**: The success rate of solving challenges in the last 24 hours. Score range: (0,100).
+**GPU Base Scores**: The following GPUs are assigned specific base scores, reflecting their relative performance:
+- NVIDIA H200: 3.90 
+- NVIDIA H100 80GB HBM3: 2.99 
+- NVIDIA H100: 2.79 
+- NVIDIA A100-SXM4-80GB: 1.89 
+- NVIDIA A100 80GB PCIe: 1.64 
+- NVIDIA L40s: 1.03 NVIDIA L40: 0.99 
+- NVIDIA RTX 6000 Ada Generation: 0.88 
+- NVIDIA RTX A6000: 0.76 
+- NVIDIA RTX 4090: 0.69 
+- NVIDIA GeForce RTX 3090: 0.43 
+- NVIDIA L4: 0.43 
+- NVIDIA A40: 0.39 
+- NVIDIA RTX A5000: 0.36 
+- NVIDIA RTX A4500: 0.34
 
-**Problem Difficulty**: This measures the complexity of the solved tasks. The code restricts this difficulty to a minimum and maximum allowed value. Score range: (0,100).
+**Scaling Factor**: Determine the highest GPU base score, multiply it by 8 (the maximum number of GPUs), and set this scenario as the 100-point baseline. A scaling factor is derived so that using eight of the top GPU models equals 100 points.
 
-**Elapsed Time**: The time taken to solve the problem impacts the score. A shorter time results in a higher score. Score range: (0,100).
+**GPU Score**: Multiply the chosen GPU’s base score by the number of GPUs (up to 8) and by the scaling factor to find the miner’s GPU score (0–100).
 
-**Failure Penalty**: The failure rate of solving the last 20 challenges. Score range: (0,100).
-
-**Allocation Score**: Miners that have allocated machine resources receive the maximum challenge score and an additional allocation score, which is proportional to their average challenge difficulty. Score range: (0,100).
-
-**Scoring Weights**: Each score component is weighted with the corresponding weight before being added to the total score.
-
-- Successful Problem Resolution Weight = 1.0
-- Problem Difficulty Weight = 1.0
-- Elapsed Time Weight = 0.5
-- Failure Penalty Weight = 0.5
-- Allocation Weight = 0.4
+**Allocation Bonus**: If a miner has allocated machine resources, add 100 points to the GPU score, allowing a maximum score of up to 200.
 
 **Total Score**:
 
-- Score (not allocated) = (Successful Problem Resolution * Resolution Weight) + (Problem Difficulty * Difficulty Weight) + (Elapsed Time * Time Weight) - (Failure Penalty * Penalty Weight)
-- Score (allocated) = Maximum Challenge Score + (Allocation Score * Allocation Weight)
+- Score (not allocated) = GPU Score (0–100)
+- Score (allocated) = GPU Score + 100 (up to 200)
 
-### Example 1: Miner A's Weighted Total Score
+### Example 1: Miner A's Total Score
 
-- **Successful Problem Resolution**: 95%
-- **Problem Difficulty**: 7
-- **Elapsed Time**: 4.6 seconds
-- **Failure Penalty**: 2.6%
+- **GPU**: NVIDIA H200 (Base Score: 3.90)
+- **Number of GPUs**: 8
 - **Allocation**: True
 
-Total Score = Score (allocated) = 264.6
+Step-by-step calculation:
+1. Highest scenario: 3.90 * 8 = 31.2  
+2. Scaling factor: 100 / 31.2 ≈ 3.2051  
+3. GPU Score: 3.90 * 8 * 3.2051 ≈ 100  
+4. Allocation Bonus: 100 + 100 = 200
 
-### Example 2: Miner B's Weighted Total Score
+Total Score = 200
 
-- **Successful Problem Resolution**: 92%
-- **Problem Difficulty**: 9
-- **Elapsed Time**: 16 seconds
-- **Failure Penalty**: 3.1%
+### Example 2: Miner B's Total Score
+
+- **GPU**: NVIDIA RTX 4090 (Base Score: 0.69)
+- **Number of GPUs**: 2
 - **Allocation**: False
 
-Total Score = Score (not allocated) = 193.7
+Step-by-step calculation:
+1. Scaling factor (same as above): 3.2051  
+2. GPU Score: 0.69 * 2 * 3.2051 ≈ 4.42  
+3. No allocation bonus applied.
+
+Total Score = 4.42
 
 ```bash
 # To run the validator
@@ -318,6 +312,9 @@ Flags that you can use with the validator script.
 - `--miner.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
 
 ## Benchmarking the machine
+
+**Note: Starting from v1.6.0, hashcat benchmarking is no longer performed. The information below is provided purely as legacy reference and will be updated in future releases.**
+
 ### Benchmarking hashcat's performance directly:
 ```bash
 hashcat -b -m 610
