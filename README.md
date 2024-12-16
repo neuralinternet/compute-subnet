@@ -176,6 +176,17 @@ Once this comprehensive hardware and performance information is received, valida
 
 Based on the results of this hardware identification process, validators update the miners' scores. These scores determine the miners' weight within the network, directly affecting their potential rewards and standing in the system.
 
+```bash
+# To run the validator
+cd neurons
+python -m validator.py
+    --netuid <your netuid> # The subnet id you want to connect to
+    --subtensor.network <your chain url> # blockchain endpoint you want to connect
+    --wallet.name <your validator wallet>  # name of your wallet
+    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
+    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
+```
+
 ## Understanding the Score Calculation Process
 
 **The scoring system has been updated!**
@@ -183,20 +194,20 @@ Based on the results of this hardware identification process, validators update 
 The score calculation function now determines a miner's performance primarily based on their GPU hardware and resource allocation. Only the GPUs listed below are supported and scored correctly.
 
 **GPU Base Scores**: The following GPUs are assigned specific base scores, reflecting their relative performance:
-- NVIDIA H200: 3.90 
-- NVIDIA H100 80GB HBM3: 2.99 
-- NVIDIA H100: 2.79 
-- NVIDIA A100-SXM4-80GB: 1.89 
-- NVIDIA A100 80GB PCIe: 1.64 
-- NVIDIA L40s: 1.03 
-- NVIDIA L40: 0.99 
-- NVIDIA RTX 6000 Ada Generation: 0.88 
-- NVIDIA RTX A6000: 0.76 
-- NVIDIA RTX 4090: 0.69 
-- NVIDIA GeForce RTX 3090: 0.43 
-- NVIDIA L4: 0.43 
-- NVIDIA A40: 0.39 
-- NVIDIA RTX A5000: 0.36 
+- NVIDIA H200: 4.00
+- NVIDIA H100 80GB HBM3: 3.30
+- NVIDIA H100: 2.80
+- NVIDIA A100-SXM4-80GB: 1.90
+- NVIDIA A100 80GB PCIe: 1.65
+- NVIDIA L40s: 1.10
+- NVIDIA L40: 1.00
+- NVIDIA RTX 6000 Ada Generation: 0.90
+- NVIDIA RTX A6000: 0.78
+- NVIDIA RTX 4090: 0.68
+- NVIDIA GeForce RTX 3090: 0.43
+- NVIDIA L4: 0.43
+- NVIDIA A40: 0.39
+- NVIDIA RTX A5000: 0.36
 - NVIDIA RTX A4500: 0.34
 
 **Scaling Factor**: Determine the highest GPU base score, multiply it by 8 (the maximum number of GPUs), and set this scenario as the 100-point baseline. A scaling factor is derived so that using eight of the top GPU models equals 100 points.
@@ -236,17 +247,6 @@ Step-by-step calculation:
 3. No allocation bonus applied.
 
 Total Score = 4.42
-
-```bash
-# To run the validator
-cd neurons
-python -m validator.py 
-    --netuid <your netuid> # The subnet id you want to connect to
-    --subtensor.network <your chain url> # blockchain endpoint you want to connect
-    --wallet.name <your validator wallet>  # name of your wallet
-    --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
-    --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
-```
 
 ## Resource Allocation Mechanism
 
@@ -296,7 +296,6 @@ Flags that you can use with the validator script.
 
 - `--validator.whitelist.unrecognized`: (Optional) Whitelist the unrecognized miners. Default: False.
 - `--validator.perform.hardware.query <bool>`: (Optional) Perform the specs query - useful to register to a miner's machine. Default: True.
-- `--validator.challenge.batch.size <size>`: (Optional) Batch size that perform the challenge queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 256.
 - `--validator.specs.batch.size <size>`: (Optional) Batch size that perform the specs queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
 - `--validator.force.update.prometheus`: (Optional) Force the try-update of prometheus version. Default: False.
 - `--validator.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
@@ -305,9 +304,6 @@ Flags that you can use with the validator script.
 
 ---
 
-- `--miner.hashcat.path <path>`: (Optional) The path of the hashcat binary. Default: hashcat.
-- `--miner.hashcat.workload.profile <profile>`: (Optional) Performance to apply with hashcat profile: 1 Low, 2 Economic, 3 High, 4 Insane. Run `hashcat -h` for more information. Default: 3.
-- `--miner.hashcat.extended.options <options>`: (Optional) Any extra options you found usefull to append to the hascat runner (I'd perhaps recommend -O). Run `hashcat -h` for more information. Default: ''.
 - `--miner.whitelist.not.enough.stake`: (Optional) Whitelist the validators without enough stake. Default: False.
 - `--miner.whitelist.not.updated`: (Optional) Whitelist validators not using the last version of the code. Default: False.
 - `--miner.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
@@ -372,8 +368,9 @@ Enter any additional options for hashcat to use. It's recommended to use the ```
 
 ## Troubleshooting
 
-> "I don't receive any request, 'Challenge' or 'Specs', what could be the reason ?"
+> "I don't receive any request, 'Challenge' or 'Specs' or 'Allocation', what could be the reason ?"
 
+Starting from v1.6.0, hashcat challenge benchmarking is no longer performed.
 Most probably you are running into a **network issue**. 
 - check your ports 
 - check your firewall

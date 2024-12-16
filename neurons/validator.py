@@ -186,7 +186,10 @@ class Validator:
         # Load configuration from YAML
         config_file = "config.yaml"
         self.config_data = load_yaml_config(config_file)
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=256)  # Adjust as needed
+        cpu_cores = os.cpu_count() or 1
+        configured_max_workers = self.config_data["merkle_proof"].get("max_workers", 32)
+        safe_max_workers = min(cpu_cores + 4, configured_max_workers)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=safe_max_workers)
         self.results = {}
         self.gpu_task = None  # Track the GPU task
 
@@ -582,7 +585,7 @@ class Validator:
             merkle_proof = self.config_data["merkle_proof"]
             retry_limit = merkle_proof.get("pog_retry_limit",30)
             retry_interval = merkle_proof.get("pog_retry_interval",75)
-            num_workers = merkle_proof.get("max_workers",256)
+            num_workers = merkle_proof.get("max_workers",32)
             max_delay = merkle_proof.get("max_random_delay",1200)
 
             # Random delay for PoG
@@ -648,8 +651,12 @@ class Validator:
 
 
             # Number of concurrent workers
-            workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
-            bt.logging.trace(f"Started {num_workers} worker tasks for Proof-of-GPU benchmarking.")
+            # Determine a safe default number of workers
+            cpu_cores = os.cpu_count() or 1
+            safe_max_workers = min(cpu_cores + 4, num_workers)
+
+            workers = [asyncio.create_task(worker()) for _ in range(safe_max_workers)]
+            bt.logging.trace(f"Started {safe_max_workers} worker tasks for Proof-of-GPU benchmarking.")
 
             # Wait until the queue is fully processed
             await queue.join()
@@ -1083,7 +1090,7 @@ class Validator:
                         f"next_pog: #{block_next_pog} ~ {time_next_pog} | "
                         f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
                         f"set_weights: #{block_next_set_weights} ~ {time_next_set_weights} | "
-                        f"hardware_info: #{block_next_hardware_info} ~ {time_next_hardware_info} |"
+                        f"wandb_info: #{block_next_hardware_info} ~ {time_next_hardware_info} |"
                     )
                 )
                 await asyncio.sleep(1)

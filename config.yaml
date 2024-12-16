@@ -67,16 +67,16 @@ gpu_performance:
     NVIDIA RTX A6000: NVIDIA A40
 
   gpu_scores:
-    NVIDIA H200: 3.90
-    NVIDIA H100 80GB HBM3: 2.99
-    NVIDIA H100: 2.79
-    NVIDIA A100-SXM4-80GB: 1.89
-    NVIDIA A100 80GB PCIe: 1.64
-    NVIDIA L40s: 1.03
-    NVIDIA RTX 6000 Ada Generation: 0.88
-    NVIDIA L40: 0.99
-    NVIDIA RTX A6000: 0.76
-    NVIDIA RTX 4090: 0.69
+    NVIDIA H200: 4.0
+    NVIDIA H100 80GB HBM3: 3.30
+    NVIDIA H100: 2.80
+    NVIDIA A100-SXM4-80GB: 1.90
+    NVIDIA A100 80GB PCIe: 1.65
+    NVIDIA L40s: 1.10
+    NVIDIA RTX 6000 Ada Generation: 0.90
+    NVIDIA L40: 1.0
+    NVIDIA RTX A6000: 0.78
+    NVIDIA RTX 4090: 0.68
     NVIDIA A40: 0.39
     NVIDIA GeForce RTX 3090: 0.43
     NVIDIA L4: 0.43
@@ -88,7 +88,7 @@ merkle_proof:
   time_tolerance: 5
   submatrix_size: 512
   hash_algorithm: 'sha256'
-  pog_retry_limit: 30
-  pog_retry_interval: 70  # seconds
-  max_workers: 256
+  pog_retry_limit: 20
+  pog_retry_interval: 60  # seconds
+  max_workers: 32 # python's default
   max_random_delay: 900 # 900 seconds

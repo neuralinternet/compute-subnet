@@ -226,30 +226,40 @@ def password_generator(length):
     random_str = "".join(secrets.choice(alphabet) for _ in range(length))
     return random_str
 
-
 def build_check_container(image_name: str, container_name: str):
-    client = docker.from_env()
-    dockerfile = '''
-    FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
-    CMD echo "compute-subnet"
-    '''
     try:
+        client = docker.from_env()
+        dockerfile = '''
+        FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+        CMD echo "compute-subnet"
+        '''
+
         # Create a file-like object from the Dockerfile
         f = BytesIO(dockerfile.encode('utf-8'))
 
         # Build the Docker image
         image, _ = client.images.build(fileobj=f, tag=image_name)
+        bt.logging.trace(f"Docker image '{image_name}' built successfully.")
 
         # Create the container from the built image
         container = client.containers.create(image_name, name=container_name)
+        bt.logging.trace(f"Container '{container_name}' created successfully.")
         return container
-    except docker.errors.BuildError:
-        pass
-    except docker.errors.APIError:
-        pass
-    finally:
-        client.close()
 
+    except docker.errors.BuildError as e:
+        pass
+    except docker.errors.APIError as e:
+        pass
+    except Exception as e:
+        bt.logging.error(
+            "Insufficient permissions to execute Docker commands. Please ensure the current user is added to the 'docker' group "
+            "and has the necessary privileges. Run 'sudo usermod -aG docker $USER' and restart your session."
+        )
+    finally:
+        try:
+            client.close()
+        except Exception as close_error:
+            bt.logging.warning(f"Error closing the Docker client: {close_error}")
 
 def build_sample_container():
     """
