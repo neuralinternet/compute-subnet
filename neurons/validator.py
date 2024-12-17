@@ -543,17 +543,36 @@ class Validator:
                 current_gpu_specs = current_specs.get("gpu", {})
                 new_gpu_specs = new_specs.get("gpu", {})
 
-                # Compare the GPU specs
-                if current_gpu_specs != new_gpu_specs:
+                # Extract the count values
+                current_count = current_gpu_specs.get("count", 0)
+                new_count = new_gpu_specs.get("count", 0)
+
+                # Initialize names to None by default
+                current_name = None
+                new_name = None
+
+                # Retrieve the current name if details are present and non-empty
+                current_details = current_gpu_specs.get("details", [])
+                if isinstance(current_details, list) and len(current_details) > 0:
+                    current_name = current_details[0].get("name")
+
+                # Retrieve the new name if details are present and non-empty
+                new_details = new_gpu_specs.get("details", [])
+                if isinstance(new_details, list) and len(new_details) > 0:
+                    new_name = new_details[0].get("name")
+
+                # Compare only count and name
+                if current_count != new_count or current_name != new_name:
                     axon = None
                     for uid, axon_info in self._queryable_uids.items():
                         if axon_info.hotkey == hotkey:
                             axon = axon_info
                             break
+
                     if axon:
                         bt.logging.info(f"GPU specs changed for allocated hotkey {hotkey}:")
-                        bt.logging.info(f"Old specs: {current_gpu_specs}")
-                        bt.logging.info(f"New specs: {new_gpu_specs}")
+                        bt.logging.info(f"Old count: {current_count}, Old name: {current_name}")
+                        bt.logging.info(f"New count: {new_count}, New name: {new_name}")
                         self.deallocate_miner(axon, None)
 
         # Update the local db with the new data from Wandb

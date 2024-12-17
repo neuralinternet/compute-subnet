@@ -238,6 +238,7 @@ def build_check_container(image_name: str, container_name: str):
         f = BytesIO(dockerfile.encode('utf-8'))
 
         # Build the Docker image
+        bt.logging.info("Building the Docker image... this may take a few minutes during the initial installation.")
         image, _ = client.images.build(fileobj=f, tag=image_name)
         bt.logging.trace(f"Docker image '{image_name}' built successfully.")
 
