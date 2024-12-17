@@ -74,8 +74,8 @@ from compute import (TRUSTED_VALIDATORS_HOTKEYS)
 DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
-ALLOCATE_CHECK_PERIOD = 60  # timeout check period
-ALLOCATE_CHECK_COUNT = 30     # maximum timeout count
+ALLOCATE_CHECK_PERIOD = 180  # timeout check period
+ALLOCATE_CHECK_COUNT = 20     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
 NOTIFY_RETRY_PERIOD = 15     # notify retry interval
 MAX_ALLOCATION_RETRY = 8
