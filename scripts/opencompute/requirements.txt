@@ -1,0 +1,4 @@
+streamlit==1.33.0  # Adjust the version based on what you're currently using or the latest available
+wandb==0.16.6     # Adjust according to the version you wish to use
+python-dotenv==1.0.1  # For loading environment variables
+pandas==2.2.2      # Adjust based on your current or desired version
