@@ -103,7 +103,7 @@ class Miner:
         return self._subtensor
 
     @property
-    def metagraph(self) -> bt.metagraph:
+    def metagraph(self) -> bt.metagraph: # type: ignore
         return self._metagraph
 
     @property
@@ -171,8 +171,6 @@ class Miner:
         self.hashcat_workload_profile = self.config.miner_hashcat_workload_profile
         self.hashcat_extended_options = self.config.miner_hashcat_extended_options
 
-        check_hashcat_version(hashcat_path=self.hashcat_path)
-
         self.uids: list = self.metagraph.uids.tolist()
 
         self.sync_status()
@@ -183,29 +181,27 @@ class Miner:
         self.wandb.update_specs()
 
         # check allocation status
+        self.allocation_status = False
         self.__check_alloaction_errors()
-
-        # Disable the Spec request and replaced with WanDB
-        # self.request_specs_processor = RequestSpecsProcessor()
 
         self.last_updated_block = self.current_block - (self.current_block % 100)
         self.allocate_action = False
 
-        # if (
-        #     not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
-        #     or not allocation_key_encoded
-        # ):
-        # self.miner_http_server = start_server(self.config.ssh.port)
     def __check_alloaction_errors(self):
         file_path = "allocation_key"
         allocation_key_encoded = None
+        valid_validator_hotkeys = self.get_valid_validator_hotkeys()
+
+        allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
+        self.allocation_status = self.wallet.hotkey.ss58_address in allocated_hotkeys
+
         if os.path.exists(file_path):
             # Open the file in read mode ('r') and read the data
             with open(file_path, "r") as file:
                 allocation_key_encoded = file.read()
 
             if (
-                not self.wandb.sync_allocated(self.wallet.hotkey.ss58_address)
+                not self.allocation_status
                 and allocation_key_encoded
             ):
                 # Decode the base64-encoded public key from the file
@@ -222,6 +218,7 @@ class Miner:
                 bt.logging.info(
                     "Container is already running without allocated. Killing the container."
                 )
+
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
         # The axon handles request processing, allowing validators to send this process requests.
@@ -396,12 +393,6 @@ class Miner:
     # def priority_specs(self, synapse: Specs) -> float:
     #    return self.base_priority(synapse) + miner_priority_specs
 
-    # This is the PerfInfo function, which decides the miner's response to a valid, high-priority request.
-    # def specs(self, synapse: Specs) -> Specs:
-    #    app_data = synapse.specs_input
-    #    synapse.specs_output = self.request_specs_processor.get_respond(app_data)
-    #    return synapse
-
     # The blacklist function decides if a request should be ignored.
     def blacklist_allocate(self, synapse: Allocate) -> typing.Tuple[bool, str]:
         return self.base_blacklist(synapse)
@@ -481,7 +472,7 @@ class Miner:
                 else:
                     result = deregister_allocation(public_key)
                     # self.miner_http_server = start_server(self.config.ssh.port)
-                synapse.output = result
+                    synapse.output = result
         self.update_allocation(synapse)
         synapse.output["port"] = int(self.config.ssh.port)
         return synapse
@@ -508,18 +499,18 @@ class Miner:
             f"{v_id}/{synapse.challenge_difficulty}/{synapse.challenge_hash[10:20]}"
         )
 
-        result = run_miner_pow(
-            run_id=run_id,
-            _hash=synapse.challenge_hash,
-            salt=synapse.challenge_salt,
-            mode=synapse.challenge_mode,
-            chars=synapse.challenge_chars,
-            mask=synapse.challenge_mask,
-            hashcat_path=self.hashcat_path,
-            hashcat_workload_profile=self.hashcat_workload_profile,
-            hashcat_extended_options=self.hashcat_extended_options,
-        )
-        synapse.output = result
+        # result = run_miner_pow(
+        #     run_id=run_id,
+        #     _hash=synapse.challenge_hash,
+        #     salt=synapse.challenge_salt,
+        #     mode=synapse.challenge_mode,
+        #     chars=synapse.challenge_chars,
+        #     mask=synapse.challenge_mask,
+        #     hashcat_path=self.hashcat_path,
+        #     hashcat_workload_profile=self.hashcat_workload_profile,
+        #     hashcat_extended_options=self.hashcat_extended_options,
+        # )
+        # synapse.output = result
         return synapse
 
     def get_updated_validator(self):
@@ -596,6 +587,15 @@ class Miner:
             valid_validator.append((uid, hotkey, version))
         return valid_validator
 
+    def get_valid_validator_hotkeys(self):
+        valid_hotkeys = []
+        valid_validator_uids = self.get_valid_validator_uids()
+        for uid in valid_validator_uids:
+            neuron = self.subtensor.neuron_for_uid(uid, self.config.netuid)
+            hotkey = neuron.hotkey
+            valid_hotkeys.append(hotkey)
+        return valid_hotkeys
+
     def next_info(self, cond, next_block):
         if cond:
             return calculate_next_block_time(self.current_block, next_block)
@@ -651,23 +651,9 @@ class Miner:
                     or block_next_sync_status < self.current_block
                 ):
                     block_next_sync_status = (
-                        self.current_block + 25
-                    )  # 25 ~ every 5 minutes
+                        self.current_block + 75
+                    )  # 75 ~ every 15 minutes
                     self.sync_status()
-
-                    # Check port open
-                    # port = int(self.config.ssh.port)
-                    # if port:
-                    #     result = check_port('localhost', port)
-                    #     if result is True:
-                    #         bt.logging.info(f"API: Port {port} on the server is open")
-                    #     elif result is False:
-                    #         bt.logging.info(f"API: Port {port} on the server is closed")
-                    #     else:
-                    #         bt.logging.warning(f"API: Could not determine status of port {port} on the server")
-                    # else:
-                    #     bt.logging.warning(f"API: Could not find the server port that was provided to validator")
-                    # self.wandb.update_miner_port_open(result)
                     
                     # check allocation status
                     self.__check_alloaction_errors()
@@ -695,8 +681,9 @@ class Miner:
                     f"Consensus: {self.metagraph.C[self.miner_subnet_uid]:.6f} | "
                     f"Incentive: {self.metagraph.I[self.miner_subnet_uid]:.6f} | "
                     f"Emission: {self.metagraph.E[self.miner_subnet_uid]:.6f} | "
-                    f"update_validator: #{block_next_updated_validator} ~ {time_next_updated_validator} | "
-                    f"sync_status: #{block_next_sync_status} ~ {time_next_sync_status}"
+                    #f"update_validator: #{block_next_updated_validator} ~ {time_next_updated_validator} | "
+                    f"Sync_status: #{block_next_sync_status} ~ {time_next_sync_status} | "
+                    f"Allocated: {'Yes' if self.allocation_status else 'No'}"
                 )
                 time.sleep(5)
 

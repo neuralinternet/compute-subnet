@@ -196,10 +196,28 @@ class ComputeWandb:
         This function updates the allocated hotkeys on validator side.
         It's useless to alter this information as it needs to be signed by a valid validator hotkey.
         """
+        self.api.flush()
+
+        # Step 1: Read penalized hotkeys from the file (penalized_hotkeys.json in the root directory)
+        penalized_hotkeys = []
+        try:
+            with open("penalized_hotkeys.json", 'r') as file:
+                penalized_hotkeys_data = json.load(file)
+                penalized_hotkeys = [entry["hotkey"] for entry in penalized_hotkeys_data]  # Extract hotkeys
+        except FileNotFoundError:
+            bt.logging.trace("Penalized hotkeys file not found.")
+        except json.JSONDecodeError:
+            bt.logging.trace("Error decoding JSON from penalized hotkeys file.")
+
         # Update the configuration with the new keys
+        # update_dict = {
+        #         "allocated_hotkeys": hotkey_list
+        #     }
+
         update_dict = {
-                "allocated_hotkeys": hotkey_list
-            }
+                "allocated_hotkeys": hotkey_list,               # Update allocated hotkeys
+                "penalized_hotkeys_checklist": penalized_hotkeys  # Add penalized hotkeys to the config
+                }
         self.run.config.update(update_dict, allow_val_change=True)
 
         # Track allocated hotkeys over time
@@ -213,6 +231,8 @@ class ComputeWandb:
         This function updates the penalized hotkeys checklist on validator side.
         It's useless to alter this information as it needs to be signed by a valid validator hotkey.
         """
+        self.api.flush()
+
         # Update the configuration with the new keys
         update_dict = {
                 "penalized_hotkeys_checklist": hotkey_list
@@ -230,6 +250,8 @@ class ComputeWandb:
         This function updates the allocated hotkeys on validator side.
         It's useless to alter this information as it needs to be signed by a valid validator hotkey.
         """
+        self.api.flush()
+
         # Update the configuration with the new keys
         update_dict = {
                 "penalized_hotkeys": hotkey_list
@@ -349,7 +371,7 @@ class ComputeWandb:
 
         return penalized_keys_list
     
-    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
+    def get_penalized_hotkeys_checklist_bak(self, valid_validator_hotkeys, flag):
         """
         This function gets all penalized hotkeys checklist from all validators.
         Only relevant for validators.
@@ -470,14 +492,16 @@ class ComputeWandb:
 
         return False
 
-    def sync_allocated(self, hotkey):
-        """
-        This function syncs the allocated status of the miner with the wandb run.
-        """
-        # Fetch allocated hotkeys
-        allocated_hotkeys = self.get_allocated_hotkeys([], False)
-
-        if hotkey in allocated_hotkeys:
-            return True
+    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
+        """ This function gets penalized hotkeys checklist from your validator run """
+        if self.run:
+            try:
+                run_config = self.run.config
+                penalized_hotkeys_checklist = run_config.get('penalized_hotkeys_checklist')
+                return penalized_hotkeys_checklist
+            except Exception as e:
+                bt.logging.info(f"Run ID: {self.run.id}, Name: {self.run.name}, Error: {e}")
+                return []
         else:
-            return False
+            bt.logging.info(f"No run info found")
+            return []
