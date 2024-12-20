@@ -1142,7 +1142,7 @@ class RegisterAPI:
                                "description": "An error occurred while exchanging docker key.",
                            },
                        })
-        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
+        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str, key_type) -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1170,6 +1170,7 @@ class RegisterAPI:
                     docker_action = {
                         "action": "exchange_key",
                         "ssh_key": ssh_key,
+                        "key_type": key_type,
                     }
 
                     if uuid_key_db == uuid_key:
