@@ -61,7 +61,6 @@ from neurons.Miner.container import (
     build_sample_container,
     check_container,
     kill_container,
-    kill_test_container,
     restart_container,
     exchange_key_container,
     pause_container,
