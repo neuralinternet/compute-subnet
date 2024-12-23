@@ -210,43 +210,43 @@ The score calculation function now determines a miner's performance primarily ba
 - NVIDIA RTX A5000: 0.36
 - NVIDIA RTX A4500: 0.34
 
-**Scaling Factor**: Determine the highest GPU base score, multiply it by 8 (the maximum number of GPUs), and set this scenario as the 100-point baseline. A scaling factor is derived so that using eight of the top GPU models equals 100 points.
+**Scaling Factor**: Determine the highest GPU base score, multiply it by 8 (the maximum number of GPUs), and set this scenario as the 100-point baseline. A scaling factor is derived so that using eight of the top GPU models equals 50 points.
 
-**GPU Score**: Multiply the chosen GPU’s base score by the number of GPUs (up to 8) and by the scaling factor to find the miner’s GPU score (0–100).
+**GPU Score**: Multiply the chosen GPU’s base score by the number of GPUs (up to 8) and by the scaling factor to find the miner’s GPU score (0–50).
 
-**Allocation Bonus**: If a miner has allocated machine resources, add 100 points to the GPU score, allowing a maximum score of up to 200.
+**Allocation Bonus**: If a miner has allocated machine resources, the GPU score is multiplied by 2, allowing a maximum score of up to 100.
 
 **Total Score**:
 
-- Score (not allocated) = GPU Score (0–100)
-- Score (allocated) = GPU Score + 100 (up to 200)
+- Score (not allocated) = GPU Score (0–50)
+- Score (allocated) = GPU Score * 2 (up to 100)
 
 ### Example 1: Miner A's Total Score
 
 - **GPU**: NVIDIA H200 (Base Score: 3.90)
 - **Number of GPUs**: 8
-- **Allocation**: True
+- **Allocation**: False
 
 Step-by-step calculation:
-1. Highest scenario: 3.90 * 8 = 31.2  
-2. Scaling factor: 100 / 31.2 ≈ 3.2051  
-3. GPU Score: 3.90 * 8 * 3.2051 ≈ 100  
-4. Allocation Bonus: 100 + 100 = 200
+1. Highest scenario: 4 * 8 = 32
+2. Scaling factor: 50 / 32 ≈ 1.5625
+3. GPU Score: 4 * 8 * 1.5625 ≈ 50
+4. Allocation Bonus: 0
 
-Total Score = 200
+Total Score = 50
 
 ### Example 2: Miner B's Total Score
 
 - **GPU**: NVIDIA RTX 4090 (Base Score: 0.69)
 - **Number of GPUs**: 2
-- **Allocation**: False
+- **Allocation**: True
 
 Step-by-step calculation:
-1. Scaling factor (same as above): 3.2051  
-2. GPU Score: 0.69 * 2 * 3.2051 ≈ 4.42  
-3. No allocation bonus applied.
+1. Scaling factor (same as above): 1.5625
+2. GPU Score: 0.68 * 2 * 1.5625 ≈ 2.125
+3. Allocation Bonus: 2.125 * 2 = 4.25
 
-Total Score = 4.42
+Total Score = 4.25
 
 ## Resource Allocation Mechanism
 
