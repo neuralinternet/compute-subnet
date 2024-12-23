@@ -643,8 +643,13 @@ class Validator:
                         break
                     hotkey = axon.hotkey
                     try:
-                        result = await asyncio.get_event_loop().run_in_executor(
-                            self.executor, self.test_miner_gpu, axon, self.config_data
+                        # Set a timeout for the GPU test
+                        timeout = 300  # e.g., 5 minutes
+                        result = await asyncio.wait_for(
+                            asyncio.get_event_loop().run_in_executor(
+                                self.executor, self.test_miner_gpu, axon, self.config_data
+                            ),
+                            timeout=timeout
                         )
                         if result[1] is not None and result[2] > 0:
                             async with results_lock:
@@ -655,6 +660,16 @@ class Validator:
                             update_pog_stats(self.db, hotkey, result[1], result[2])
                         else:
                             raise RuntimeError("GPU test failed")
+                    except asyncio.TimeoutError:
+                        bt.logging.warning(f"⏳ Timeout while testing {hotkey}. Retrying...")
+                        retry_counts[hotkey] += 1
+                        if retry_counts[hotkey] < retry_limit:
+                            bt.logging.info(f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
+                            await asyncio.sleep(retry_interval)
+                            await queue.put(axon)
+                        else:
+                            bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts (Timeout).")
+                            update_pog_stats(self.db, hotkey, None, None)
                     except Exception as e:
                         bt.logging.trace(f"Exception in worker for {hotkey}: {e}")
                         retry_counts[hotkey] += 1
@@ -667,7 +682,6 @@ class Validator:
                             update_pog_stats(self.db, hotkey, None, None)
                     finally:
                         queue.task_done()
-
 
             # Number of concurrent workers
             # Determine a safe default number of workers
