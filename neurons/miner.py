@@ -61,6 +61,7 @@ from neurons.Miner.container import (
     build_sample_container,
     check_container,
     kill_container,
+    kill_test_container,
     restart_container,
     exchange_key_container,
     pause_container,
@@ -218,6 +219,7 @@ class Miner:
                 bt.logging.info(
                     "Container is already running without allocated. Killing the container."
                 )
+        kill_test_container()
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.
