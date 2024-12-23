@@ -219,7 +219,6 @@ class Miner:
                 bt.logging.info(
                     "Container is already running without allocated. Killing the container."
                 )
-        kill_test_container()
 
     def init_axon(self):
         # Step 6: Build and link miner functions to the axon.

@@ -55,52 +55,44 @@ def get_docker():
 def kill_container():
     try:
         client, containers = get_docker()
+        running_container_test = None
         running_container = None
-        for container in containers:
-            if container.name == container_name:
-                running_container = container
-                break
-        if running_container:
-            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
-            if running_container.status == "running":
-                running_container.exec_run(cmd="kill -15 1")
-                running_container.wait()
-                # running_container.stop()
-            running_container.remove()
-            # Remove all dangling images
-            client.images.prune(filters={"dangling": True})
-            bt.logging.info("Container was killed successfully")
-        else:
-           bt.logging.info("No running container.")
-        return True
-    except Exception as e:
-        bt.logging.info(f"Error killing container {e}")
-        return False
 
-# Kill the currently running test container
-def kill_test_container():
-    try:
-        client, containers = get_docker()
-        running_container = None
+        # Check for container_name_test first
         for container in containers:
             if container.name == container_name_test:
-                running_container = container
+                running_container_test = container
                 break
-        if running_container:
-            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+
+        # If container_name_test is not found, check for container_name
+        if not running_container_test:
+            for container in containers:
+                if container.name == container_name:
+                    running_container = container
+                    break
+
+        # Kill and remove the appropriate container
+        if running_container_test:
+            if running_container_test.status == "running":
+                running_container_test.exec_run(cmd="kill -15 1")
+                running_container_test.wait()
+            running_container_test.remove()
+            bt.logging.info(f"Container '{container_name_test}' was killed successfully")
+        elif running_container:
             if running_container.status == "running":
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
-                # running_container.stop()
             running_container.remove()
-            # Remove all dangling images
-            client.images.prune(filters={"dangling": True})
-            bt.logging.info("Test container was killed successfully")
+            bt.logging.info(f"Container '{container_name}' was killed successfully")
         else:
-           bt.logging.info("No running container.")
+            bt.logging.info("No running container found.")
+
+        # Remove all dangling images
+        client.images.prune(filters={"dangling": True})
+
         return True
     except Exception as e:
-        bt.logging.info(f"Error killing container {e}")
+        bt.logging.info(f"Error killing container: {e}")
         return False
 
 # Run a new docker container with the given docker_name, image_name and device information
@@ -228,7 +220,9 @@ def check_container():
     try:
         client, containers = get_docker()
         for container in containers:
-            if container_name in container.name and container.status == "running":
+            if container.name == container_name_test and container.status == "running":
+                return True
+            if container.name == container_name and container.status == "running":
                 return True
         return False
     except Exception as e:
