@@ -783,7 +783,7 @@ class RegisterAPI:
                 },
             }
         )
-        async def check_miner_status(hotkey_list: List[str]) -> JSONResponse:
+        async def check_miner_status(hotkey_list: List[str], query_version: bool = False) -> JSONResponse:
             checking_list = []
             for hotkey in hotkey_list:
                 checking_result = {
@@ -793,16 +793,20 @@ class RegisterAPI:
                 for axon in self.metagraph.axons:
                     if axon.hotkey == hotkey:
                         try:
-                            register_response = await run_in_threadpool(self.dendrite.query,
-                                                                        axon, Allocate(timeline=1, checking=True, ),
-                                                                        timeout=60)
-                            if register_response:
-                                if register_response["status"] is True:
-                                    checking_result = {"hotkey": hotkey, "status": "Docker OFFLINE"}
-                                else:
-                                    checking_result = {"hotkey": hotkey, "status": "Docker ONLINE"}
+                            if query_version:
+                                checking_result = {"hotkey": hotkey, "version": axon.version}
                             else:
-                                checking_result = {"hotkey": hotkey, "status": "Miner NO_RESPONSE"}
+                                register_response = await run_in_threadpool(self.dendrite.query,
+                                                                            axon, Allocate(timeline=1, checking=True, ),
+                                                                            timeout=10)
+                                await asyncio.sleep(0.1)
+                                if register_response:
+                                    if register_response["status"] is True:
+                                        checking_result = {"hotkey": hotkey, "status": "Docker OFFLINE"}
+                                    else:
+                                        checking_result = {"hotkey": hotkey, "status": "Docker ONLINE"}
+                                else:
+                                    checking_result = {"hotkey": hotkey, "status": "Miner NO_RESPONSE"}
                         except Exception as e:
                             bt.logging.error(
                                 f"API: An error occur during the : {e}"
