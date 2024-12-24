@@ -432,7 +432,7 @@ def unpause_container():
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str, key_type: str):
+def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
     try:
         client, containers = get_docker()
         running_container = None
