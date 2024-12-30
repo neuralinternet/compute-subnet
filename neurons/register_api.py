@@ -1819,7 +1819,7 @@ class RegisterAPI:
                 for hotkey, details in specs_details.items():
 
                     miner_older_than = self.miner_is_older_than(db, 48, hotkey)
-                    miner_pog_ok = self.miner_pog_ok((db, 48, hotkey))
+                    miner_pog_ok = self.miner_pog_ok(db, 48, hotkey)
 
                     if hotkey in running_hotkey and miner_pog_ok:
                         if details:  # Check if details are not empty
@@ -3061,7 +3061,7 @@ class RegisterAPI:
             cursor.close()
 
     def miner_pog_ok(self, db: ComputeDb, hours: int, ss58_address: str) -> bool:
-        gpu_specs = get_pog_specs(self.db, ss58_address)
+        gpu_specs = get_pog_specs(db, ss58_address)
         if gpu_specs is not None:
             return True
         else:
