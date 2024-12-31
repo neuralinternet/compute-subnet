@@ -236,9 +236,9 @@ class Validator:
         :return: bool
         """
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = self.subtensor.serve_prometheus(
+        success = self._subtensor.serve_prometheus(
             wallet=self.wallet,
-            port=bt.defaults.axon.port,
+            port=bt.core.settings.DEFAULTS.axon.port,
             netuid=self.config.netuid,
             force_update=force_update,
         )
