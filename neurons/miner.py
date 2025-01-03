@@ -438,7 +438,8 @@ class Miner:
                 if docker_action["action"] == "exchange_key":
                     public_key = synapse.public_key
                     new_ssh_key = docker_action["ssh_key"]
-                    result = exchange_key_container(new_ssh_key)
+                    key_type = docker_action["key_type"]
+                    result = exchange_key_container(new_ssh_key, key_type)
                     synapse.output = result
                 elif docker_action["action"] == "restart":
                     public_key = synapse.public_key

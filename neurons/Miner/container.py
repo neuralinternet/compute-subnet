@@ -432,7 +432,7 @@ def unpause_container():
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str):
+def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
     try:
         client, containers = get_docker()
         running_container = None
@@ -443,7 +443,22 @@ def exchange_key_container(new_ssh_key: str):
         if running_container:
             # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
             if running_container.status == "running":
-                running_container.exec_run(cmd=f"bash -c \"echo '{new_ssh_key}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
+                exist_key = running_container.exec_run(cmd="cat /root/.ssh/authorized_keys")
+                exist_key = exist_key.output.decode("utf-8").split("\n")
+                user_key = exist_key[0]
+                terminal_key = ""
+                if len(exist_key) > 1:
+                    terminal_key = exist_key[1]
+                if key_type == "terminal":
+                    terminal_key = new_ssh_key
+                elif key_type == "user":
+                    user_key = new_ssh_key
+                else:
+                    bt.logging.debug("Invalid key type to swap the SSH key")
+                    return {"status": False}
+                key_list = user_key + "\n" + terminal_key
+                bt.logging.debug(f"New SSH key: {key_list}")
+                running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
                 running_container.restart()
