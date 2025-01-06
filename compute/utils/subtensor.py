@@ -20,7 +20,7 @@ import bittensor as bt
 
 from compute.utils.cache import ttl_cache
 
-bt_blocktime = bt.__blocktime__
+bt_blocktime = bt.BLOCKTIME
 
 
 @ttl_cache(maxsize=1, ttl=bt_blocktime)
