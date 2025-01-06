@@ -246,7 +246,9 @@ class Validator:
         """
         Register the prometheus information on metagraph.
         :return: bool
-        """ extrinsic
+        """ 
+        # extrinsic prometheus is removed at 8.2.1
+        
         bt.logging.info("Extrinsic prometheus information on metagraph.")
         success = # prometheus extrinsic. removed at 8.2.1 
         # TODO : remove all the related code from the code base
