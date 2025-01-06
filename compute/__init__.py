@@ -18,9 +18,9 @@
 import string
 
 # Define the version of the template module.
-__version__ = "1.5.3"
-__minimal_miner_version__ = "1.5.1"
-__minimal_validator_version__ = "1.5.2"
+__version__ = "1.7.0"
+__minimal_miner_version__ = "1.7.0"
+__minimal_validator_version__ = "1.7.0"
 
 version_split = __version__.split(".")
 __version_as_int__ = (100 * int(version_split[0])) + (10 * int(version_split[1])) + (1 * int(version_split[2]))
@@ -33,6 +33,11 @@ weights_rate_limit = 100
 # Validators static vars
 # Time before the specs requests will time out. time unit = seconds
 specs_timeout = 60
+
+# Proof of GPU settings
+pog_retry_limit = 30
+pog_retry_interval = 80  # seconds
+
 # Time before the proof of work requests will time out. time unit = seconds
 pow_timeout = 30
 # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.
