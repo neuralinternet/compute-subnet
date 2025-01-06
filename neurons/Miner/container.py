@@ -22,6 +22,7 @@ import os
 import secrets
 import string
 import subprocess
+import psutil
 
 import docker
 from io import BytesIO
@@ -37,6 +38,7 @@ import bittensor as bt
 
 image_name = "ssh-image"  # Docker image name
 container_name = "ssh-container"  # Docker container name
+container_name_test = "ssh-test-container"
 volume_name = "ssh-volume"  # Docker volumne name
 volume_path = "/tmp"  # Path inside the container where the volume will be mounted
 ssh_port = 4444  # Port to map SSH service on the host
@@ -53,28 +55,45 @@ def get_docker():
 def kill_container():
     try:
         client, containers = get_docker()
+        running_container_test = None
         running_container = None
+
+        # Check for container_name_test first
         for container in containers:
-            if container_name in container.name:
-                running_container = container
+            if container.name == container_name_test:
+                running_container_test = container
                 break
-        if running_container:
-            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+
+        # If container_name_test is not found, check for container_name
+        if not running_container_test:
+            for container in containers:
+                if container.name == container_name:
+                    running_container = container
+                    break
+
+        # Kill and remove the appropriate container
+        if running_container_test:
+            if running_container_test.status == "running":
+                running_container_test.exec_run(cmd="kill -15 1")
+                running_container_test.wait()
+            running_container_test.remove()
+            bt.logging.info(f"Container '{container_name_test}' was killed successfully")
+        elif running_container:
             if running_container.status == "running":
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
-                # running_container.stop()
             running_container.remove()
-            # Remove all dangling images
-            client.images.prune(filters={"dangling": True})
-            bt.logging.info("Container was killed successfully")
+            bt.logging.info(f"Container '{container_name}' was killed successfully")
         else:
-           bt.logging.info("Unable to find container")
+            bt.logging.info("No running container found.")
+
+        # Remove all dangling images
+        client.images.prune(filters={"dangling": True})
+
         return True
     except Exception as e:
-        bt.logging.info(f"Error killing container {e}")
+        bt.logging.info(f"Error killing container: {e}")
         return False
-
 
 # Run a new docker container with the given docker_name, image_name and device information
 def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict):
@@ -93,24 +112,46 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         docker_ssh_port = docker_requirement.get("ssh_port")
         docker_appendix = docker_requirement.get("dockerfile")
 
+        bt.logging.info(f"Image: {docker_image}")
+
         if docker_appendix is None or docker_appendix == "":
             docker_appendix = "echo 'Hello World!'"
 
-        # Step 1: Build the Docker image with an SSH server
-        dockerfile_content = (
-            """
-            FROM {}
-            RUN apt-get update && apt-get install -y openssh-server
-            RUN mkdir -p /run/sshd && echo 'root:'{}'' | chpasswd
-            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-            RUN {} 
-            RUN mkdir -p /root/.ssh/ && echo '{}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
-            CMD ["/usr/sbin/sshd", "-D"]
-            """.format(docker_image, password, docker_appendix, docker_ssh_key)
-        )
+        # Calculate 90% of free memory for shm_size
+        available_memory = psutil.virtual_memory().available
+        shm_size_gb = int(0.9 * available_memory / (1024**3))  # Convert to GB
+        bt.logging.trace(f"Allocating {shm_size_gb}GB to /dev/shm")
+
+        dockerfile_content = f"""
+        FROM {docker_image}
+
+        # Install OpenSSH Server
+        RUN apt-get update && apt-get install -y openssh-server
+
+        # Create SSH directory and set root password
+        RUN mkdir -p /var/run/sshd && echo 'root:{password}' | chpasswd
+
+        # Configure SSHD to allow root login and password authentication
+        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+
+        # Run additional Docker appendix commands
+        RUN {docker_appendix}
+
+        # Setup SSH authorized keys
+        RUN mkdir -p /root/.ssh/ && echo '{docker_ssh_key}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+
+        # Activate Conda environment on shell startup
+        RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
+
+        # Ensure PATH includes Conda binaries
+        ENV PATH=/opt/conda/bin:$PATH
+
+        # Start SSHD
+        CMD ["/usr/sbin/sshd", "-D"]
+        """
 
         # Ensure the tmp directory exists within the current directory
         tmp_dir_path = os.path.join('.', 'tmp')
@@ -127,18 +168,23 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Create the Docker volume with the specified size
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
+        # Determine container name based on ssh key
+        container_to_run = container_name if docker_ssh_key else container_name_test
+
+
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
         # if gpu_usage["capacity"] == 0:
         #    device_requests = []
         container = client.containers.run(
             image=image_name,
-            name=container_name,
+            name=container_to_run,
             detach=True,
             device_requests=device_requests,
             environment=["NVIDIA_VISIBLE_DEVICES=all"],
             ports={22: docker_ssh_port},
             init=True,
+            shm_size=f"{shm_size_gb}g",  # Set the shared memory size to 2GB
             restart_policy={"Name": "on-failure", "MaximumRetryCount": 3},
 #            volumes={ docker_volume: {'bind': '/root/workspace/', 'mode': 'rw'}},
         )
@@ -174,7 +220,9 @@ def check_container():
     try:
         client, containers = get_docker()
         for container in containers:
-            if container_name in container.name and container.status == "running":
+            if container.name == container_name_test and container.status == "running":
+                return True
+            if container.name == container_name and container.status == "running":
                 return True
         return False
     except Exception as e:
@@ -202,30 +250,41 @@ def password_generator(length):
     random_str = "".join(secrets.choice(alphabet) for _ in range(length))
     return random_str
 
-
 def build_check_container(image_name: str, container_name: str):
-    client = docker.from_env()
-    dockerfile = '''
-    FROM alpine:latest
-    CMD echo "compute-subnet"
-    '''
     try:
+        client = docker.from_env()
+        dockerfile = '''
+        FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+        CMD echo "compute-subnet"
+        '''
+
         # Create a file-like object from the Dockerfile
         f = BytesIO(dockerfile.encode('utf-8'))
 
         # Build the Docker image
+        bt.logging.info("Building the Docker image... this may take a few minutes during the initial installation.")
         image, _ = client.images.build(fileobj=f, tag=image_name)
+        bt.logging.trace(f"Docker image '{image_name}' built successfully.")
 
         # Create the container from the built image
         container = client.containers.create(image_name, name=container_name)
+        bt.logging.trace(f"Container '{container_name}' created successfully.")
         return container
-    except docker.errors.BuildError:
-        pass
-    except docker.errors.APIError:
-        pass
-    finally:
-        client.close()
 
+    except docker.errors.BuildError as e:
+        pass
+    except docker.errors.APIError as e:
+        pass
+    except Exception as e:
+        bt.logging.error(
+            "Insufficient permissions to execute Docker commands. Please ensure the current user is added to the 'docker' group "
+            "and has the necessary privileges. Run 'sudo usermod -aG docker $USER' and restart your session."
+        )
+    finally:
+        try:
+            client.close()
+        except Exception as close_error:
+            bt.logging.warning(f"Error closing the Docker client: {close_error}")
 
 def build_sample_container():
     """
@@ -244,19 +303,46 @@ def build_sample_container():
         password = password_generator(10)
 
         # Step 1: Build the Docker image with an SSH server
-        dockerfile_content = (
-            """
-            FROM ubuntu
-            RUN apt-get update && apt-get install -y openssh-server
-            RUN mkdir -p /run/sshd && echo 'root:'{}'' | chpasswd
-            RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
-                sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
-            RUN mkdir -p /root/.ssh/ && echo '{}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
-            CMD ["/usr/sbin/sshd", "-D"]
-            """.format(password, "")
-        )
+        # Step 1: Build the Docker image with SSH server and install numpy
+        dockerfile_content = f"""
+        FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+        # Prevent interactive prompts during package installation
+        ENV DEBIAN_FRONTEND=noninteractive
+
+        # Install SSH server and necessary packages
+        RUN apt-get update && \\
+            apt-get install -y --no-install-recommends openssh-server python3-pip build-essential && \\
+            mkdir /var/run/sshd && \\
+            echo 'root:{password}' | chpasswd && \\
+            sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+        RUN mkdir -p /root/.ssh/ && echo '{""}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+
+        # Install numpy
+        RUN pip3 install --upgrade pip && \\
+            pip3 install numpy==1.24.3 && \\
+            apt-get clean && \\
+            rm -rf /var/lib/apt/lists/*
+
+        # Start SSH daemon
+        CMD ["/usr/sbin/sshd", "-D"]
+        """
+        # dockerfile_content = (
+        #     """
+        #     FROM ubuntu
+        #     RUN apt-get update && apt-get install -y openssh-server
+        #     RUN mkdir -p /run/sshd && echo 'root:'{}'' | chpasswd
+        #     RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+        #         sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+        #         sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \
+        #         sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+        #     RUN mkdir -p /root/.ssh/ && echo '{}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+        #     CMD ["/usr/sbin/sshd", "-D"]
+        #     """.format(password, "")
+        # )
 
         # Ensure the tmp directory exists within the current directory
         tmp_dir_path = os.path.join('.', 'tmp')
@@ -296,10 +382,10 @@ def restart_container():
                 running_container.restart()
             return {"status": True}
         else:
-            bt.logging.info("Unable to find container")
+            bt.logging.info("No running container.")
             return {"status": False}
     except Exception as e:
-        bt.logging.info(f"Error restart container {e}")
+        bt.logging.info(f"Error restart container: {e}")
         return {"status": False}
 
 def pause_container():

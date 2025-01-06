@@ -29,110 +29,34 @@ from compute.utils.math import percent, percent_yield
 def normalize(val, min_value, max_value):
     return (val - min_value) / (max_value - min_value)
 
-
 def prevent_none(val):
     return 0 if not val else val
 
-
-# Calculate score based on the performance information
-def calc_score(response, hotkey, allocated_hotkeys, penalized_hotkeys, validator_hotkeys, mock=False):
-    """
-    Method to calculate the score attributed to this miner dual uid - hotkey
-    :param response:
-    {
-        'challenge_attempts': 7,
-        'challenge_successes': 6,
-        'challenge_failed': 0,
-        'challenge_elapsed_time_avg': 5.804196675618489,
-        'challenge_difficulty_avg': 2.0,
-        'has_docker': True,
-    }
-    challenge_failed is batched over the last 10 challenges only
-    :param hotkey:
-    :param mock: During testing phase
-    :return:
-    """
+def calc_score_pog(gpu_specs, hotkey, allocated_hotkeys, config_data, mock=False):
     try:
-        challenge_attempts = prevent_none(response.get("challenge_attempts",1))
-        challenge_successes = prevent_none(response.get("challenge_successes",0))
-        last_20_challenge_failed = prevent_none(response.get("last_20_challenge_failed",0))
-        challenge_elapsed_time_avg = prevent_none(response.get("challenge_elapsed_time_avg", compute.pow_timeout))
-        challenge_difficulty_avg = prevent_none(response.get("last_20_difficulty_avg", compute.pow_min_difficulty))
-        has_docker = response.get("has_docker", False)
+        gpu_data = config_data["gpu_performance"]
+        gpu_scores = gpu_data.get("gpu_scores", {})
+        # Get the GPU with the maximum score
+        max_gpu = max(gpu_scores, key=gpu_scores.get)
+        max_score = gpu_scores[max_gpu]*8
+        score_factor = 50/max_score
 
-        # Define base weights for the PoW
-        success_weight = 1
-        difficulty_weight = 1
-        time_elapsed_weight = 0.3
-        failed_penalty_weight = 0.4
-        allocation_weight = 0.21
+        gpu_name = gpu_specs.get("gpu_name")
+        num_gpus = min(gpu_specs.get("num_gpus"), 8)
 
-        # Just in case but in theory, it is not possible to fake the difficulty as it is sent by the validator
-        # Same occurs for the time, it's calculated by the validator so miners cannot fake it
-        
-        # Difficulty, score range: [0,100] * difficulty_weight
-        difficulty_val = max(min(challenge_difficulty_avg, compute.pow_max_difficulty),compute.pow_min_difficulty)
-        difficulty_modifier = percent(difficulty_val,compute.pow_max_difficulty)
+        # Get GPU score
+        score = gpu_scores.get(gpu_name) * num_gpus * score_factor
 
-        difficulty = difficulty_modifier * difficulty_weight
+        # Add allocation score, multiplier = 2
+        if hotkey in allocated_hotkeys:
+            score = score * 2
 
-        # Success ratio, score range: [0,100] * success_weight
-        successes_ratio = percent(challenge_successes, challenge_attempts)
-        successes = successes_ratio * success_weight
-
-        # Time elapsed, score range: [0,100] * time_elapsed_weight
-        # Modifier for elapsed time effect
-        time_elapsed_modifier = percent_yield(challenge_elapsed_time_avg, compute.pow_timeout)
-        time_elapsed = time_elapsed_modifier * time_elapsed_weight
-
-        # Failed penalty, score range [0,100] * failed_penalty_weight
-        # Failed penalty has exponential weigt, the higher the failure rate, the higher the penalty
-        failed_penalty_exp = 1.5
-        last_20_challenge_failed_modifier = percent(last_20_challenge_failed, 20) #Normalize with defined limits (0,100)
-        failed_penalty = failed_penalty_weight * (last_20_challenge_failed_modifier/100)**failed_penalty_exp*100
-
-        # Allocation, score range [0, 100] * allocation_weight
-        # The score for allocation is proportional to the average difficulty reached before allocation
-        allocation_score = difficulty_modifier * allocation_weight
-        allocation_status = hotkey in allocated_hotkeys
-
-        # Calculate the score
-        max_score_challenge = 100 * (success_weight + difficulty_weight + time_elapsed_weight)
-        max_score_allocation = 100 * allocation_weight
-        max_score = max_score_challenge + max_score_allocation
-        final_score = difficulty + successes + time_elapsed - failed_penalty
-
-        # Docker and specs penalty
-        penalty = not(has_docker)
-
-        if allocation_status:
-            final_score = max_score_challenge * (1-allocation_weight) + allocation_score
-        else:
-            final_score = difficulty + successes + time_elapsed - failed_penalty
-            if penalty:
-                final_score = final_score/2
-
-        if (last_20_challenge_failed >= 19 or challenge_successes == 0) and not allocation_status:
-            return 0
-
-        # Penalize miners if their hotkey is in the penalized_hotkeys list
-        if hotkey in penalized_hotkeys:
-            # Calculate the penalty factor based on the proportion of penalized hotkeys
-            penalty_count = penalized_hotkeys.count(hotkey)
-            half_validators = len(validator_hotkeys) / 2
-
-            # If penalty count equals or exceeds half of the validators, set score to 0
-            if penalty_count >= half_validators:
-                final_score = 0
-            else:
-                penalty_multiplier = max(1 - (penalty_count / half_validators), 0)
-                final_score *= penalty_multiplier
-
-        # Final score is > 0
-        final_score = max(0, final_score)
+        # Logging score
+        bt.logging.info(f"Score - {hotkey}: {score:.2f}/100")
 
         # Normalize the score
-        normalized_score = normalize(final_score, 0, max_score)
+        normalized_score = normalize(score, 0, 100)
+
         return normalized_score
     except Exception as e:
         bt.logging.error(f"An error occurred while calculating score for the following hotkey - {hotkey}: {e}")

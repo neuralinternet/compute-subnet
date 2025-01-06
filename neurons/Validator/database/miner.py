@@ -79,6 +79,10 @@ def purge_miner_entries(db: ComputeDb, uid: int, hotkey: str):
             "DELETE FROM challenge_details WHERE uid = ? AND ss58_address = ?",
             (uid, hotkey),
         )
+        cursor.execute(
+            "DELETE FROM miner_details WHERE hotkey = ?",
+            (hotkey,),
+        )
         db.conn.commit()
 
         if cursor.rowcount > 0:

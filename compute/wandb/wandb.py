@@ -205,9 +205,9 @@ class ComputeWandb:
                 penalized_hotkeys_data = json.load(file)
                 penalized_hotkeys = [entry["hotkey"] for entry in penalized_hotkeys_data]  # Extract hotkeys
         except FileNotFoundError:
-            bt.logging.error("Penalized hotkeys file not found.")
+            bt.logging.trace("Penalized hotkeys file not found.")
         except json.JSONDecodeError:
-            bt.logging.error("Error decoding JSON from penalized hotkeys file.")
+            bt.logging.trace("Error decoding JSON from penalized hotkeys file.")
 
         # Update the configuration with the new keys
         # update_dict = {
@@ -491,18 +491,6 @@ class ComputeWandb:
                 bt.logging.info(f"Error verifying signature for Run ID: {run_id_str}, Name: {run.name}: {e}")
 
         return False
-
-    def sync_allocated(self, hotkey):
-        """
-        This function syncs the allocated status of the miner with the wandb run.
-        """
-        # Fetch allocated hotkeys
-        allocated_hotkeys = self.get_allocated_hotkeys([], False)
-
-        if hotkey in allocated_hotkeys:
-            return True
-        else:
-            return False
 
     def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
         """ This function gets penalized hotkeys checklist from your validator run """

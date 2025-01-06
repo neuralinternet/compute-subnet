@@ -38,6 +38,11 @@ specs_timeout = 60
 pog_retry_limit = 30
 pog_retry_interval = 80  # seconds
 
+
+# Proof of GPU settings
+pog_retry_limit = 30
+pog_retry_interval = 80  # seconds
+
 # Time before the proof of work requests will time out. time unit = seconds
 pow_timeout = 30
 # Initial and minimal proof of work difficulty. Needs benchmark and adjustment.

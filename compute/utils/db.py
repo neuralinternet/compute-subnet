@@ -41,6 +41,18 @@ class ComputeDb:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
             cursor.execute("CREATE TABLE IF NOT EXISTS wandb_runs (hotkey TEXT PRIMARY KEY, run_id TEXT NOT NULL)")
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS pog_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hotkey TEXT,
+                    gpu_name TEXT,
+                    num_gpus INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (hotkey) REFERENCES miner_details (hotkey) ON DELETE CASCADE
+                )
+            """
+            )
 
             self.conn.commit()
         except Exception as e:
