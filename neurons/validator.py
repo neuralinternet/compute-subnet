@@ -250,7 +250,7 @@ class Validator:
         # extrinsic prometheus is removed at 8.2.1
         
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = # prometheus extrinsic. removed at 8.2.1 
+        success = True
         # TODO : remove all the related code from the code base
         # self._subtensor.serve_prometheus(
         #     wallet=self.wallet,
