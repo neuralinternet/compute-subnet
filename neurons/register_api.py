@@ -39,6 +39,9 @@ from neurons.Validator.database.pog import get_pog_specs
 urllib3.disable_warnings(InsecureRequestWarning)
 from dotenv import load_dotenv
 import math
+import threading
+import random
+from concurrent.futures import ThreadPoolExecutor
 from ipwhois import IPWhois
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -78,7 +81,7 @@ ALLOCATE_CHECK_PERIOD = 180  # timeout check period
 ALLOCATE_CHECK_COUNT = 20     # maximum timeout count
 MAX_NOTIFY_RETRY = 3         # maximum notify count
 NOTIFY_RETRY_PERIOD = 15     # notify retry interval
-MAX_ALLOCATION_RETRY = 8
+MAX_ALLOCATION_RETRY = 5     # maximum allocation retry
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
@@ -219,7 +222,9 @@ class RegisterAPI:
 
             # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
             self.dendrite = bt.dendrite(wallet=self.wallet)
+            self.dendrite_check = bt.dendrite(wallet=self.wallet)
             bt.logging.info(f"Dendrite: {self.dendrite}")
+            bt.logging.info(f"Dendrite_check: {self.dendrite_check}")
 
             # The metagraph holds the state of the network, letting us know about other miners.
             self.metagraph = self.subtensor.metagraph(self.config.netuid)
@@ -272,7 +277,23 @@ class RegisterAPI:
         self.checking_allocated = []
         self.notify_retry_table = []
         self.deallocation_notify_url = os.getenv("DEALLOCATION_NOTIFY_URL")
-        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")        
+        self.status_notify_url = os.getenv("STATUS_NOTIFY_URL")
+
+        # Initialize a global lock for allocation
+        self.allocation_lock = threading.Lock()
+        # Optional: Initialize per-hotkey locks if necessary
+        self.hotkey_locks = {}
+        self.hotkey_locks_lock = threading.Lock()
+
+        # Initialize executor for the limited thread execution
+        cpu_cores = os.cpu_count() or 1
+        configured_max_workers = 32
+        safe_max_workers = min((cpu_cores + 4) * 4, configured_max_workers)
+        self.executor = ThreadPoolExecutor(max_workers=safe_max_workers)
+
+        # Setup the limit of the threading pool executor for run_in_threadpool
+        self.loop = asyncio.get_event_loop()
+        self.loop.set_default_executor(self.executor)
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -524,16 +545,16 @@ class RegisterAPI:
                 uuid_key = str(uuid.uuid1())
 
                 private_key, public_key = rsa.generate_key_pair()
-                if ssh_key:
-                    if docker_requirement is None:
-                        docker_requirement = DockerRequirement()
-                        docker_requirement.ssh_key = ssh_key
-                    else:
-                        docker_requirement.ssh_key = ssh_key
+                if docker_requirement is None:
+                    docker_requirement = DockerRequirement()
+                if ssh_key is None:
+                    docker_requirement.ssh_key = ""
+                else:
+                    docker_requirement.ssh_key = ssh_key
 
                 run_start = time.time()
-                result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey,
-                                                 requirements.timeline, public_key, docker_requirement.dict())
+                result = await self._allocate_container_hotkey(requirements, hotkey, requirements.timeline, public_key,
+                                                               docker_requirement.dict())
                 if result["status"] is False:
                     bt.logging.error(f"API: Allocation {hotkey} Failed : {result['msg']}")
                     return JSONResponse(
@@ -680,9 +701,7 @@ class RegisterAPI:
 
                             while retry_count < MAX_NOTIFY_RETRY:
                                 allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
-                                deregister_response = await run_in_threadpool(
-                                    self.dendrite.query, axon, allocate_class, timeout=60
-                                )
+                                deregister_response = self.dendrite.query(axon, allocate_class, timeout=60)
                                 run_end = time.time()
                                 time_eval = run_end - run_start
                                 # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -1142,7 +1161,7 @@ class RegisterAPI:
                                "description": "An error occurred while exchanging docker key.",
                            },
                        })
-        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str, key_type: str = "user") -> JSONResponse:
+        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1170,7 +1189,6 @@ class RegisterAPI:
                     docker_action = {
                         "action": "exchange_key",
                         "ssh_key": ssh_key,
-                        "key_type": key_type,
                     }
 
                     if uuid_key_db == uuid_key:
@@ -1808,8 +1826,8 @@ class RegisterAPI:
 
             # Get the allocated hotkeys from wandb
             allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, TRUSTED_VALIDATORS_HOTKEYS, True)
-            bt.logging.info(f"Allocated hotkeys: {allocated_hotkeys}")
-            bt.logging.info(f"Number of allocated hotkeys: {len(allocated_hotkeys)}")
+            bt.logging.info(f"API: Allocated hotkeys: {allocated_hotkeys}")
+            bt.logging.info(f"API: Number of allocated hotkeys: {len(allocated_hotkeys)}")
 
             db = ComputeDb()
 
@@ -1957,8 +1975,8 @@ class RegisterAPI:
                         },
                     )
                 else:
-                    bt.logging.info(f"Number of resources returned: {len(resource_list)}")
-                    bt.logging.trace("Resource List Contents:")
+                    bt.logging.info(f"API: Number of resources returned: {len(resource_list)}")
+                    bt.logging.trace("API: Resource List Contents:")
                     for resource in resource_list:
                         bt.logging.trace(vars(resource))
                     if page_number:
@@ -2745,7 +2763,7 @@ class RegisterAPI:
 
         return {"status": False, "msg": "Requested resource is not available."}
 
-    def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key, docker_requirement: dict):
+    async def _allocate_container_hotkey(self, requirements, hotkey, timeline, public_key, docker_requirement: dict):
         """
         Allocate the container with the given hotkey. <br>
         Generate ssh connection for given device requirements and timeline. <br>
@@ -2758,13 +2776,13 @@ class RegisterAPI:
 
         # Start of allocation process
         bt.logging.info(f"API: Starting container allocation with hotkey: {hotkey}")
-
         bt.logging.trace(f"Docker Requirement: {docker_requirement}")
 
         # Instantiate the connection to the db
         for axon in self.metagraph.axons:
             if axon.hotkey == hotkey:
                 attempt = 0
+                check_allocation = {}
                 # Retry allocation up to max_retries times
 
                 while attempt < MAX_ALLOCATION_RETRY:
@@ -2780,12 +2798,17 @@ class RegisterAPI:
                     )
 
                     if not check_allocation or check_allocation.get("status") is not True:
-                        bt.logging.warning(f"API: Allocation check failed for hotkey: {hotkey}")
+                        bt.logging.warning(
+                            f"API: Allocation check failed for hotkey: {hotkey} result: {check_allocation}, axon: {axon.ip}:{axon.port}")
+                        await asyncio.sleep(3)
                         continue  # Move to the next axon if allocation check failed
+                    else:
+                        bt.logging.info(f"API: Allocation check passed for hotkey: {hotkey}")
+                        break
 
-                    bt.logging.info(f"API: Allocation check passed for hotkey: {hotkey}")
-
-                    if check_allocation and check_allocation["status"] is True:
+                if check_allocation and check_allocation["status"] is True:
+                    try:
+                        bt.logging.info(f"API: Allocation started for hotkey: {hotkey}")
                         register_response = self.dendrite.query(
                             axon,
                             Allocate(
@@ -2797,16 +2820,24 @@ class RegisterAPI:
                             ),
                             timeout=60,
                         )
-                        if register_response and register_response["status"] is True:
-                            register_response["ip"] = axon.ip
-                            register_response["hotkey"] = axon.hotkey
-                            return register_response
+                    except Exception as e:
+                        bt.logging.error(f"Exception during registration for hotkey {hotkey}: {e}")
+                        await asyncio.sleep(1)
+                        return {"status": False, "msg": "Requested resource is not available."}
 
-                    # Log or print retry attempt (optional)
-                    bt.logging.trace(f"Attempt {attempt} failed for hotkey {hotkey}, retrying...") if attempt < MAX_ALLOCATION_RETRY else None
-                    time.sleep(10)  # Sleep before the next retry attempt
+                    if register_response and register_response["status"] is True:
+                        register_response["ip"] = axon.ip
+                        register_response["hotkey"] = axon.hotkey
+                        return register_response
+                    else:
+                        bt.logging.warning(
+                            f"API: Allocation failed for hotkey: {hotkey}, response: {register_response} axon: {axon.ip}:{axon.port}")
+                        return {"status": False, "msg": "Requested resource is not available."}
+                else:
+                    bt.logging.warning(
+                        f"API: Allocation check attempt timeout for hotkey: {hotkey}, response: {check_allocation} axon: {axon.ip}:{axon.port}")
+                    return {"status": False, "msg": "Requested resource is not available."}
 
-        return {"status": False, "msg": "Requested resource is not available."}
 
     async def _update_allocation_wandb(self, ):
         """
@@ -2923,6 +2954,7 @@ class RegisterAPI:
         Check the allocation by resync_period. <br>
         """
         while True:
+            bt.logging.info(f"API: Allocation checking process was started")
             db = ComputeDb()
             cursor = db.get_cursor()
             try:
@@ -2933,32 +2965,31 @@ class RegisterAPI:
                     id, hotkey, details = row
                     info = json.loads(details)
                     uuid_key = info.get("uuid")
+                    delay = random.uniform(0.1, 1)
 
                     # Check if hotkey exists in self.metagraph.hotkeys and uuid_key is valid
                     if hotkey in self.metagraph.hotkeys and uuid_key:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
 
-                        register_response = await run_in_threadpool(self.dendrite.query, axon,
-                                                          Allocate(timeline=1, checking=True, ), timeout=60)
+                        register_response = await self.loop.run_in_executor(self.executor, self.dendrite_check.query, axon,
+                                                                           Allocate(timeline=1, checking=True, ), 30)
+                        deallocated_at = datetime.now(timezone.utc)
                         if register_response and register_response["status"] is False:
-
+                            response = await self._notify_allocation_status(
+                                event_time=deallocated_at,
+                                hotkey=hotkey,
+                                uuid=uuid_key,
+                                event="ONLINE",
+                                details=f"GPU Resume for {ALLOCATE_CHECK_PERIOD} seconds"
+                            )
                             if hotkey in self.checking_allocated:
-                                response = await self._notify_allocation_status(
-                                    event_time=deallocated_at,
-                                    hotkey=hotkey,
-                                    uuid=uuid_key,
-                                    event="ONLINE",
-                                    details=f"GPU Resume for {ALLOCATE_CHECK_PERIOD} seconds"
-                                )
-                                bt.logging.info(f"API: Allocation ONLINE notification for hotkey: {hotkey}")
-                            self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
-
+                                self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
+                            bt.logging.info(f"API: Allocation ONLINE notification for hotkey: {hotkey}")
                         else:
                             # handle the case when no response is received or the docker is not running
                             self.checking_allocated.append(hotkey)
                             # bt.logging.info(f"API: No response timeout is triggered for hotkey: {hotkey}")
-                            deallocated_at = datetime.now(timezone.utc)
                             response = await self._notify_allocation_status(
                                 event_time=deallocated_at,
                                 hotkey=hotkey,
@@ -2986,12 +3017,14 @@ class RegisterAPI:
                                             f"is timeout for {ALLOCATE_CHECK_COUNT} times")
 
                             # remove the hotkey from checking table
+                            self.checking_allocated = [x for x in self.checking_allocated if x != hotkey]
                             if not response:
                                 self.notify_retry_table.append({"event_time": deallocated_at,
                                                                 "hotkey": hotkey,
                                                                 "uuid": uuid_key,
                                                                 "event": "DEALLOCATION",
                                                                 "details": "Retry deallocation notify event triggered"})
+                    await asyncio.sleep(delay)
 
                 for entry in self.notify_retry_table:
                     response = await self._notify_allocation_status(event_time=entry["event_time"],
@@ -3008,7 +3041,7 @@ class RegisterAPI:
             except Exception as e:
                 bt.logging.error(f"API: Error occurred while checking allocation: {e}")
             finally:
-                # bt.logging.info(f"API: Allocation checking triggered")
+                bt.logging.info(f"API: Allocation checking process was finished.  Wait for next round in {ALLOCATE_CHECK_PERIOD} seconds")
                 await asyncio.sleep(ALLOCATE_CHECK_PERIOD)
 
     @staticmethod
@@ -3067,6 +3100,13 @@ class RegisterAPI:
             return True
         else:
             return False
+
+    def get_hotkey_lock(self, hotkey):
+        with self.hotkey_locks_lock:
+            if hotkey not in self.hotkey_locks:
+                self.hotkey_locks[hotkey] = threading.Lock()
+                return self.hotkey_locks[hotkey]
+
 
     def run(self):
         """
