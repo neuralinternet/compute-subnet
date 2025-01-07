@@ -143,11 +143,14 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Setup SSH authorized keys
         RUN mkdir -p /root/.ssh/ && echo '{docker_ssh_key}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
 
-        # Activate Conda environment on shell startup
+        # Activate Conda environment on shell startup (for interactive shells)
         RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
 
         # Ensure PATH includes Conda binaries
         ENV PATH=/opt/conda/bin:$PATH
+
+        # Force "python3" to be the conda Python
+        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
 
         # Start SSHD
         CMD ["/usr/sbin/sshd", "-D"]
@@ -170,7 +173,6 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
 
         # Determine container name based on ssh key
         container_to_run = container_name if docker_ssh_key else container_name_test
-
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
@@ -320,6 +322,12 @@ def build_sample_container():
             sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
             sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
         RUN mkdir -p /root/.ssh/ && echo '{""}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+
+        # Ensure PATH includes Conda binaries
+        ENV PATH="/opt/conda/bin:$PATH"
+
+        # Force "python3" -> conda Python
+        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
 
         # Install numpy
         RUN pip3 install --upgrade pip && \\
