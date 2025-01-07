@@ -130,7 +130,7 @@ class UserInfo(BaseModel):
     jwt_token: str = ""  # jwt token
 
 
-class ResourceGPU(BaseModel):f
+class ResourceGPU(BaseModel):
     gpu_name: str = ""
     gpu_capacity: int = 0
     gpu_count: int = 1
