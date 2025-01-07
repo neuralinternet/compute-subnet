@@ -457,7 +457,7 @@ def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
                     bt.logging.debug("Invalid key type to swap the SSH key")
                     return {"status": False}
                 key_list = user_key + "\n" + terminal_key
-                bt.logging.debug(f"New SSH key: {key_list}")
+                # bt.logging.debug(f"New SSH key: {key_list}")
                 running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
