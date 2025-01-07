@@ -71,7 +71,7 @@ from typing import Optional, Union, List
 from compute import (TRUSTED_VALIDATORS_HOTKEYS)
 
 # Constants
-DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 180  # timeout check period
@@ -130,7 +130,7 @@ class UserInfo(BaseModel):
     jwt_token: str = ""  # jwt token
 
 
-class ResourceGPU(BaseModel):
+class ResourceGPU(BaseModel):f
     gpu_name: str = ""
     gpu_capacity: int = 0
     gpu_count: int = 1
@@ -1825,7 +1825,7 @@ class RegisterAPI:
             db = ComputeDb()
 
             # penalized_hotkeys = await run_in_threadpool(self.get_penalized_hotkeys_checklist, valid_validator_hotkeys=[], flag=False)
-
+            bt.logging.info(f"Specs Details: {specs_details}")
             if specs_details:
                 # Iterate through the miner specs details and print the table
                 for hotkey, details in specs_details.items():
