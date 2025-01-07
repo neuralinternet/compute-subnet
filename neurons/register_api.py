@@ -71,7 +71,7 @@ from typing import Optional, Union, List
 from compute import (TRUSTED_VALIDATORS_HOTKEYS)
 
 # Constants
-DEFAULT_SSL_MODE = 1         # 1 for client CERT optional, 2 for client CERT_REQUIRED
+DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
 ALLOCATE_CHECK_PERIOD = 180  # timeout check period
@@ -1567,16 +1567,28 @@ class RegisterAPI:
             """
             Map axon IPs to the list of resources based on hotkeys.
             """
+            bt.logging.info("Mapping axon IPs to resources started.")
             for resource in resources:
                 hotkey = resource.hotkey
                 if hotkey:
-                    for axon in self.metagraph.axons:
-                        if axon.hotkey == hotkey:
-                            resource.ip = axon.ip
-                            obj = IPWhois(resource.ip)
-                            result = obj.lookup_rdap()
-                            resource.geo = result.get("asn_country_code","Unknown")
-                            break
+                    try:
+                        for axon in self.metagraph.axons:
+                            if axon.hotkey == hotkey:
+                                resource.ip = axon.ip
+                                try:
+                                    obj = IPWhois(resource.ip)
+                                    result = obj.lookup_rdap()
+                                    resource.geo = result.get("asn_country_code", "Unknown")
+                                    bt.logging.debug(f"Mapped IP {resource.ip} to geo {resource.geo} for hotkey {hotkey}.")
+                                except Exception as e:
+                                    bt.logging.error(f"Failed to lookup RDAP for IP {resource.ip}: {e}")
+                                    resource.geo = "Unknown"
+                                break
+                        else:
+                            bt.logging.warning(f"No matching axon found for hotkey: {hotkey}.")
+                    except Exception as e:
+                        bt.logging.error(f"Error processing resource with hotkey {hotkey}: {e}")
+            bt.logging.info("Mapping axon IPs to resources completed.")
             return resources
         async def get_wandb_running_miners():
             """
