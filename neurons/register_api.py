@@ -1832,7 +1832,7 @@ class RegisterAPI:
 
                     miner_older_than = self.miner_is_older_than(db, 48, hotkey)
                     miner_pog_ok = self.miner_pog_ok(db, 48, hotkey)
-
+                    bt.logging.info(f"miner_pog_ok for hotkey {hotkey}: {miner_pog_ok}")
                     if hotkey in running_hotkey and miner_pog_ok:
                         if details:  # Check if details are not empty
                             resource = Resource()
@@ -1898,7 +1898,6 @@ class RegisterAPI:
                         add_resource = False
                         # Print the row with column separators
                         resource.hotkey = hotkey
-
                         try:
                             if gpu_name != "Invalid details" and gpu_name != "No details available":
                                 if query is None or query == {}:
