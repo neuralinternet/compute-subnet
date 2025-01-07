@@ -3073,6 +3073,7 @@ class RegisterAPI:
 
     def miner_pog_ok(self, db: ComputeDb, hours: int, ss58_address: str) -> bool:
         gpu_specs = get_pog_specs(db, ss58_address)
+        bt.logging.info(f"GPU specs for ss58_address {ss58_address}: {gpu_specs}")
         if gpu_specs is not None:
             return True
         else:
