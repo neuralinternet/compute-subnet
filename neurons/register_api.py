@@ -545,22 +545,12 @@ class RegisterAPI:
                 uuid_key = str(uuid.uuid1())
 
                 private_key, public_key = rsa.generate_key_pair()
-                if ssh_key:
-                    if docker_requirement is None:
-                        docker_requirement = DockerRequirement()
-                        docker_requirement.ssh_key = ssh_key
-                    else:
-                        docker_requirement.ssh_key = ssh_key
+                if docker_requirement is None:
+                    docker_requirement = DockerRequirement()
+                if ssh_key is None:
+                    docker_requirement.ssh_key = ""
                 else:
-                    bt.logging.error(f"API: Allocation {hotkey} Failed : No ssh key")
-                    return JSONResponse(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            content={
-                                "success": False,
-                                "message": "Fail to allocate resource",
-                                "err_detail": "No ssh key",
-                                },
-                            )
+                    docker_requirement.ssh_key = ssh_key
 
                 run_start = time.time()
                 result = await self._allocate_container_hotkey(requirements, hotkey, requirements.timeline, public_key,
