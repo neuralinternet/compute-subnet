@@ -122,12 +122,33 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         shm_size_gb = int(0.9 * available_memory / (1024**3))  # Convert to GB
         bt.logging.trace(f"Allocating {shm_size_gb}GB to /dev/shm")
 
+        # ──────────────────────────────────────────────────────────────────
+        # Construction of the Dockerfile with conditional password logic
+        # ──────────────────────────────────────────────────────────────────
+        # If there is an ssh_key => it is a real allocation => no password + PasswordAuthentication no
+        # If there is no ssh_key => test => yes password + PasswordAuthentication yes
         dockerfile_content = f"""
         FROM {docker_image}
 
         # Install OpenSSH Server
         RUN apt-get update && apt-get install -y openssh-server
 
+        # Create SSH directory
+        RUN mkdir -p /var/run/sshd
+        """
+
+        if docker_ssh_key:
+            # Real allocation: no password, password authentication disabled
+            dockerfile_content += f"""
+        # Configure SSHD to allow root login but disable password authentication
+        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            """
+        else:
+            # Test container: set password and enable password authentication
+            dockerfile_content += f"""
         # Create SSH directory and set root password
         RUN mkdir -p /var/run/sshd && echo 'root:{password}' | chpasswd
 
@@ -136,7 +157,9 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
             sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
             sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+            """
 
+        dockerfile_content += f"""
         # Run additional Docker appendix commands
         RUN {docker_appendix}
 
