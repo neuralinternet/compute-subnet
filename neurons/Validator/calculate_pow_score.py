@@ -47,7 +47,7 @@ def calc_score_pog(gpu_specs, hotkey, allocated_hotkeys, config_data, mock=False
         # Get GPU score
         score = gpu_scores.get(gpu_name) * num_gpus * score_factor
 
-        # Allocation multiplier = 1 (no allocation bonus)
+        # Allocation score multiplier = 1 (no allocation bonus)
         if hotkey in allocated_hotkeys:
             score = score * 1
 
