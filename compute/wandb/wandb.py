@@ -8,7 +8,7 @@ from collections import Counter
 
 from dotenv import load_dotenv
 from compute.utils.db import ComputeDb
-from neurons.Validator.database.pog import retrieve_stats
+from neurons.Validator.database.pog import retrieve_stats, write_stats
 from neurons.Validator.script import get_perf_info
 
 PUBLIC_WANDB_NAME = "opencompute"
@@ -195,29 +195,37 @@ class ComputeWandb:
 
     def update_allocated_hotkeys(self, hotkey_list):
         """
-        This function updates the allocated hotkeys on validator side.
-        It's useless to alter this information as it needs to be signed by a valid validator hotkey.
+        This function updates the allocated hotkeys on the validator side and syncs the allocation with the database.
         """
         self.api.flush()
 
-        # Update the configuration with the new keys
-        # update_dict = {
-        #         "allocated_hotkeys": hotkey_list
-        #     }
-
+        # Retrieve current stats from the database
         stats = retrieve_stats(self.db)
 
+        # Update the `allocated` field in stats based on `hotkey_list`
+        for uid, data in stats.items():
+            hotkey = data.get("hotkey")
+            if hotkey in hotkey_list:
+                data["allocated"] = True  # Mark as allocated if the hotkey is in the list
+            else:
+                data["allocated"] = False  # Mark as not allocated if the hotkey is not in the list
+
+        # Write the updated stats back to the database
+        write_stats(self.db, stats)
+
+        # Prepare the update dictionary for the configuration
         update_dict = {
-                "allocated_hotkeys": hotkey_list, # Update allocated hotkeys
-                "stats": stats  # Add hotkey stats
-                }
+            "allocated_hotkeys": hotkey_list,  # Update allocated hotkeys
+            "stats": stats  # Updated stats with allocation status
+        }
         self.run.config.update(update_dict, allow_val_change=True)
 
-        # Track allocated hotkeys over time
+        # Log the allocated hotkeys for tracking
         self.run.log({"allocated_hotkeys": self.run.config["allocated_hotkeys"]})
 
         # Sign the run
         self.sign_run()
+
 
     def update_penalized_hotkeys_checklist(self, hotkey_list):
         """
