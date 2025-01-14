@@ -199,25 +199,27 @@ class ComputeWandb:
         self.api.flush()
 
         # Step 1: Read penalized hotkeys from the file (penalized_hotkeys.json in the root directory)
-        penalized_hotkeys = []
-        try:
-            with open("penalized_hotkeys.json", 'r') as file:
-                penalized_hotkeys_data = json.load(file)
-                penalized_hotkeys = [entry["hotkey"] for entry in penalized_hotkeys_data]  # Extract hotkeys
-        except FileNotFoundError:
-            bt.logging.trace("Penalized hotkeys file not found.")
-        except json.JSONDecodeError:
-            bt.logging.trace("Error decoding JSON from penalized hotkeys file.")
+        # penalized_hotkeys = []
+        # try:
+        #    with open("penalized_hotkeys.json", 'r') as file:
+        #        penalized_hotkeys_data = json.load(file)
+        #        penalized_hotkeys = [entry["hotkey"] for entry in penalized_hotkeys_data]  # Extract hotkeys
+        # except FileNotFoundError:
+        #    bt.logging.error("Penalized hotkeys file not found.")
+        # except json.JSONDecodeError:
+        #     bt.logging.error("Error decoding JSON from penalized hotkeys file.")
+        
 
         # Update the configuration with the new keys
-        # update_dict = {
-        #         "allocated_hotkeys": hotkey_list
-        #     }
-
         update_dict = {
-                "allocated_hotkeys": hotkey_list,               # Update allocated hotkeys
-                "penalized_hotkeys_checklist": penalized_hotkeys  # Add penalized hotkeys to the config
-                }
+                 "allocated_hotkeys": hotkey_list
+                 }
+
+        # update_dict = {
+        #        "allocated_hotkeys": hotkey_list,               # Update allocated hotkeys
+        #        "penalized_hotkeys_checklist": penalized_hotkeys  # Add penalized hotkeys to the config
+        #        }
+
         self.run.config.update(update_dict, allow_val_change=True)
 
         # Track allocated hotkeys over time
@@ -492,16 +494,33 @@ class ComputeWandb:
 
         return False
 
-    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
-        """ This function gets penalized hotkeys checklist from your validator run """
-        if self.run:
-            try:
-                run_config = self.run.config
-                penalized_hotkeys_checklist = run_config.get('penalized_hotkeys_checklist')
-                return penalized_hotkeys_checklist
-            except Exception as e:
-                bt.logging.info(f"Run ID: {self.run.id}, Name: {self.run.name}, Error: {e}")
-                return []
+    def sync_allocated(self, hotkey):
+        """
+        This function syncs the allocated status of the miner with the wandb run.
+        """
+        # Fetch allocated hotkeys
+        allocated_hotkeys = self.get_allocated_hotkeys([], False)
+
+        if hotkey in allocated_hotkeys:
+            return True
         else:
-            bt.logging.info(f"No run info found")
+            return False
+
+    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag): 
+        """ This function gets penalized hotkeys checklist from a specific hardcoded validator. """
+        # Hardcoded run ID
+        run_id = "neuralinternet/opencompute/0djlnjjs"
+        # Fetch the specific run by its ID
+        self.api.flush()
+        run = self.api.run(run_id) 
+        if not run: 
+            bt.logging.info(f"No run info found for ID {run_id}.") 
+            return []
+        # Access the run's configuration
+        try: 
+            run_config = run.config  
+            penalized_hotkeys_checklist = run_config.get('penalized_hotkeys_checklist')
+            return penalized_hotkeys_checklist 
+        except Exception as e: 
+            bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}") 
             return []
