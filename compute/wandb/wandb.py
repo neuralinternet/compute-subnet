@@ -2,11 +2,13 @@ import bittensor as bt
 import wandb
 import pathlib
 import os
-import json
 import hashlib
+import json
+from collections import Counter
 
 from dotenv import load_dotenv
 from compute.utils.db import ComputeDb
+from neurons.Validator.database.pog import retrieve_stats
 from neurons.Validator.script import get_perf_info
 
 PUBLIC_WANDB_NAME = "opencompute"
@@ -198,28 +200,17 @@ class ComputeWandb:
         """
         self.api.flush()
 
-        # Step 1: Read penalized hotkeys from the file (penalized_hotkeys.json in the root directory)
-        # penalized_hotkeys = []
-        # try:
-        #    with open("penalized_hotkeys.json", 'r') as file:
-        #        penalized_hotkeys_data = json.load(file)
-        #        penalized_hotkeys = [entry["hotkey"] for entry in penalized_hotkeys_data]  # Extract hotkeys
-        # except FileNotFoundError:
-        #    bt.logging.error("Penalized hotkeys file not found.")
-        # except json.JSONDecodeError:
-        #     bt.logging.error("Error decoding JSON from penalized hotkeys file.")
-        
-
         # Update the configuration with the new keys
-        update_dict = {
-                 "allocated_hotkeys": hotkey_list
-                 }
-
         # update_dict = {
-        #        "allocated_hotkeys": hotkey_list,               # Update allocated hotkeys
-        #        "penalized_hotkeys_checklist": penalized_hotkeys  # Add penalized hotkeys to the config
-        #        }
+        #         "allocated_hotkeys": hotkey_list
+        #     }
 
+        stats = retrieve_stats(self.db)
+
+        update_dict = {
+                "allocated_hotkeys": hotkey_list, # Update allocated hotkeys
+                "stats": stats  # Add hotkey stats
+                }
         self.run.config.update(update_dict, allow_val_change=True)
 
         # Track allocated hotkeys over time
@@ -329,7 +320,119 @@ class ComputeWandb:
                 bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
 
         return allocated_keys_list
-    
+
+    def get_stats_allocated(self, valid_validator_hotkeys, flag):
+        """
+        Aggregates stats from all validator runs on wandb, returning a dict keyed by UID.
+        Only includes entries where 'own_score' == True (and optionally 'allocated' == True).
+        Then picks one 'dominant' entry per UID and preserves all fields (e.g., allocated).
+        """
+
+        # Query all validator runs
+        self.api.flush()
+        validator_runs = self.api.runs(
+            path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+            filters={
+                "$and": [
+                    {"config.role": "validator"},
+                    {"config.config.netuid": self.config.netuid},
+                    {"config.stats": {"$exists": True}},
+                ]
+            }
+        )
+
+        if not validator_runs:
+            bt.logging.info("No validator info found in the project opencompute.")
+            return {}
+
+        # aggregator[uid] = list of dicts
+        aggregator = {}
+
+        for run in validator_runs:
+            try:
+                run_config = run.config
+                hotkey = run_config.get("hotkey")
+                stats_data = run_config.get("stats", {})
+
+                valid_validator_hotkey = (hotkey in valid_validator_hotkeys)
+                # If flag == False, allow *all* runs for data retrieval
+                if not flag:
+                    valid_validator_hotkey = True
+
+                # Only accept data if run verified, we have stats, and hotkey is valid
+                if self.verify_run(run) and stats_data and valid_validator_hotkey:
+                    # Iterate over the stats in that run
+                    for uid, data in stats_data.items():
+                        # If you also want allocated == True, re-enable that check:
+                        # if data.get("own_score") is True and data.get("allocated") is True:
+                        if data.get("own_score") is True:
+                            aggregator.setdefault(uid, []).append(data)
+
+            except Exception as e:
+                bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
+
+        # Helper function: pick the single "dominant" dict from valid_entries
+        def pick_dominant_dict(valid_entries):
+            """
+            Groups by (gpu_name, num_gpus, score), finds the combo that appears most often.
+            In case of tie, picks the highest score. Returns the original dict.
+            """
+            combos = []
+            for d in valid_entries:
+                specs = d.get("gpu_specs", {})
+                combo_key = (specs.get("gpu_name"), specs.get("num_gpus"), d.get("score", 0))
+                combos.append(combo_key)
+
+            c = Counter(combos)
+            if not c:
+                # Fallback if everything is zero or something else is wrong
+                return max(valid_entries, key=lambda x: x.get('score', 0))
+
+            # Find the top combo
+            top_combo, top_count = c.most_common(1)[0][0], c.most_common(1)[0][1]
+
+            # Check for ties and resolve
+            all_top_combos = [combo for combo, count in c.items() if count == top_count]
+            if len(all_top_combos) == 1:
+                chosen_combo = all_top_combos[0]
+            else:
+                # Tie: pick the one with the highest score
+                chosen_combo = max(all_top_combos, key=lambda x: x[2])  # Index 2 is the score
+
+            # Find the original dict in valid_entries matching the chosen combo
+            for d in valid_entries:
+                specs = d.get("gpu_specs", {})
+                triple = (specs.get("gpu_name"), specs.get("num_gpus"), d.get("score", 0))
+                if triple == chosen_combo:
+                    # Do not overwrite "allocated", keep it as is
+                    d["own_score"] = True  # Mark as chosen
+                    return d
+
+        final_stats = {}
+
+        for uid, entries in aggregator.items():
+            # Filter out zero-score entries if you want
+            valid_entries = [d for d in entries if d.get('score', 0) != 0]
+            if not valid_entries:
+                continue
+
+            # If there's exactly one valid entry, pick it
+            if len(valid_entries) == 1:
+                valid_entries[0]["own_score"] = True  # Mark as chosen
+                final_stats[uid] = valid_entries[0]
+            else:
+                # Otherwise pick a single "dominant" dict
+                chosen_dict = pick_dominant_dict(valid_entries)
+                final_stats[uid] = chosen_dict
+
+        # Convert string UIDs to int if needed
+        final_stats_int_keys = {}
+        for uid_str, data in final_stats.items():
+            uid_int = int(uid_str)
+            final_stats_int_keys[uid_int] = data
+
+        return final_stats_int_keys
+
     def get_penalized_hotkeys(self, valid_validator_hotkeys, flag):
         """
         This function gets all allocated hotkeys from all validators.
@@ -338,12 +441,12 @@ class ComputeWandb:
         # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
         validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                                       filters={"$and": [{"config.role": "validator"},
-                                                         {"config.config.netuid": self.config.netuid},
-                                                         {"config.penalized_hotkeys": {"$exists": True}},]
+                                    filters={"$and": [{"config.role": "validator"},
+                                                        {"config.config.netuid": self.config.netuid},
+                                                        {"config.penalized_hotkeys": {"$exists": True}},]
                                                 })
 
-         # Check if the runs list is empty
+        # Check if the runs list is empty
         if not validator_runs:
             bt.logging.info("No validator info found in the project opencompute.")
             return []

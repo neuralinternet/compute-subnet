@@ -53,6 +53,21 @@ class ComputeDb:
                 )
             """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS stats (
+                    uid INTEGER PRIMARY KEY,
+                    hotkey TEXT NOT NULL,
+                    gpu_specs TEXT,
+                    score REAL,
+                    allocated BOOLEAN,
+                    own_score BOOLEAN,
+                    reliability_score REAL,  -- Optional reliability score
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (hotkey) REFERENCES miner_details (hotkey) ON DELETE CASCADE
+                )
+                """
+            )
 
             self.conn.commit()
         except Exception as e:
