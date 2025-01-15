@@ -250,3 +250,6 @@ test_speed_file.dat
 
 # cert
 cert/
+
+# wandb
+wandb/
