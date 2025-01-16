@@ -377,9 +377,9 @@ class Validator:
 
         self.update_allocation_wandb()
 
-        bt.logging.info("-" * 180)
-        bt.logging.info("MINER STATS SUMMARY".center(180))
-        bt.logging.info("-" * 180)
+        bt.logging.info("-" * 190)
+        bt.logging.info("MINER STATS SUMMARY".center(190))
+        bt.logging.info("-" * 190)
 
         for uid, data in self.stats.items():
             hotkey_str = str(data.get("hotkey", "unknown"))
@@ -404,14 +404,14 @@ class Validator:
 
             # Format the log with fixed-width fields
             log_entry = (
-                f"| UID: {uid:<4} | Hotkey: {hotkey_str:<45} | GPU: {gpu_str:<26} | "
+                f"| UID: {uid:<4} | Hotkey: {hotkey_str:<45} | GPU: {gpu_str:<36} | "
                 f"Score: {score_str:7} | Allocated: {allocated:<5} | "
                 f"RelScore: {reliability_score:<5} | Source: {source:<9} |"
             )
             bt.logging.info(log_entry)
 
         # Add a closing dashed line
-        bt.logging.info("-" * 180)
+        bt.logging.info("-" * 190)
 
         bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
 
