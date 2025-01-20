@@ -1020,7 +1020,7 @@ class Validator:
             version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
-        if isinstance(result, bool) and result or isinstance(result, tuple) and result[0]:
+        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:
