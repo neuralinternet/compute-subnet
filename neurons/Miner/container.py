@@ -143,11 +143,14 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Setup SSH authorized keys
         RUN mkdir -p /root/.ssh/ && echo '{docker_ssh_key}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
 
-        # Activate Conda environment on shell startup
+        # Activate Conda environment on shell startup (for interactive shells)
         RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
 
         # Ensure PATH includes Conda binaries
         ENV PATH=/opt/conda/bin:$PATH
+
+        # Force "python3" to be the conda Python
+        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
 
         # Start SSHD
         CMD ["/usr/sbin/sshd", "-D"]
@@ -170,7 +173,6 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
 
         # Determine container name based on ssh key
         container_to_run = container_name if docker_ssh_key else container_name_test
-
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
@@ -321,6 +323,12 @@ def build_sample_container():
             sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
         RUN mkdir -p /root/.ssh/ && echo '{""}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
 
+        # Ensure PATH includes Conda binaries
+        ENV PATH="/opt/conda/bin:$PATH"
+
+        # Force "python3" -> conda Python
+        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
+
         # Install numpy
         RUN pip3 install --upgrade pip && \\
             pip3 install numpy==1.24.3 && \\
@@ -424,7 +432,7 @@ def unpause_container():
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str):
+def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
     try:
         client, containers = get_docker()
         running_container = None
@@ -435,7 +443,22 @@ def exchange_key_container(new_ssh_key: str):
         if running_container:
             # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
             if running_container.status == "running":
-                running_container.exec_run(cmd=f"bash -c \"echo '{new_ssh_key}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
+                exist_key = running_container.exec_run(cmd="cat /root/.ssh/authorized_keys")
+                exist_key = exist_key.output.decode("utf-8").split("\n")
+                user_key = exist_key[0]
+                terminal_key = ""
+                if len(exist_key) > 1:
+                    terminal_key = exist_key[1]
+                if key_type == "terminal":
+                    terminal_key = new_ssh_key
+                elif key_type == "user":
+                    user_key = new_ssh_key
+                else:
+                    bt.logging.debug("Invalid key type to swap the SSH key")
+                    return {"status": False}
+                key_list = user_key + "\n" + terminal_key
+                # bt.logging.debug(f"New SSH key: {key_list}")
+                running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
                 running_container.restart()

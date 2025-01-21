@@ -142,7 +142,7 @@ async def sync_data_periodically():
             hardware_specs_cache = await loop.run_in_executor(executor, fetch_hardware_specs, api, hotkeys)
             allocated_hotkeys_cache = await loop.run_in_executor(executor, get_allocated_hotkeys, api)
             #penalized_hotkeys_cache = await loop.run_in_executor(executor, get_penalized_hotkeys, api)
-            penalized_hotkeys_cache = await loop.run_in_executor(executor, get_penalized_hotkeys_id, api, "neuralinternet/opencompute/dvgtj3dr")
+            penalized_hotkeys_cache = await loop.run_in_executor(executor, get_penalized_hotkeys_id, api, "neuralinternet/opencompute/0djlnjjs")
 
         except Exception as e:
             print(f"An error occurred during periodic sync: {e}")

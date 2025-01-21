@@ -41,7 +41,6 @@ import torch
 from cryptography.fernet import Fernet
 from torch._C._te import Tensor # type: ignore
 import RSAEncryption as rsa
-from neurons.Validator.database.pog import get_pog_specs, update_pog_stats
 import concurrent.futures
 from collections import defaultdict
 
@@ -66,7 +65,7 @@ from neurons.Validator.database.allocate import update_miner_details, select_has
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 from neurons.Validator.pog import adjust_matrix_size, compute_script_hash, execute_script_on_miner, get_random_seeds, load_yaml_config, parse_merkle_output, receive_responses, send_challenge_indices, send_script_and_request_hash, parse_benchmark_output, identify_gpu, send_seeds, verify_merkle_proof_row, get_remote_gpu_info, verify_responses
-
+from neurons.Validator.database.pog import get_pog_specs, retrieve_stats, update_pog_stats, write_stats
 
 class Validator:
     blocks_done: set = set()
@@ -321,23 +320,15 @@ class Validator:
 
     def sync_scores(self):
         # Fetch scoring stats
-        self.stats = select_challenge_stats(self.db)
+        self.stats = retrieve_stats(self.db)
 
         valid_validator_hotkeys = self.get_valid_validator_hotkeys()
 
         self.update_allocation_wandb()
 
-        # Fetch allocated hotkeys
+        # Fetch allocated hotkeys and stats
         self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
-        # bt.logging.info(f"Allocated hotkeys: {self.allocated_hotkeys}")
-
-        # Fetch penalized hotkeys
-        self.penalized_hotkeys = self.wandb.get_penalized_hotkeys(valid_validator_hotkeys, True)
-
-        # Fetch docker requirement
-        has_docker_hotkeys = select_has_docker_miners_hotkey(self.db)
-
-        self.pretty_print_dict_values(self.stats)
+        self.stats_allocated = self.wandb.get_stats_allocated(valid_validator_hotkeys, True)
 
         self._queryable_uids = self.get_queryable()
 
@@ -348,23 +339,36 @@ class Validator:
                 hotkey = axon.hotkey
 
                 if uid not in self.stats:
-                    self.stats[uid] = {}  # Initialize empty dictionary for this UID
+                    self.stats[uid] = {}
 
-                if hotkey in has_docker_hotkeys:
-                    self.stats[uid]["has_docker"] = True
-                elif not self.finalized_specs_once:
-                    self.stats[uid]["has_docker"] = True
-                else:
-                    self.stats[uid]["has_docker"] = False
+                self.stats[uid]["hotkey"] = hotkey
 
+                # Mark whether this hotkey is in the allocated list
+                self.stats[uid]["allocated"] = hotkey in self.allocated_hotkeys
+
+                # Check GPU specs in our PoG DB
                 gpu_specs = get_pog_specs(self.db, hotkey)
 
+                # If found in our local database
                 if gpu_specs is not None:
                     score = calc_score_pog(gpu_specs, hotkey, self.allocated_hotkeys, self.config_data)
+                    self.stats[uid]["own_score"] = True  # or "yes" if you prefer a string
                 else:
-                    score = 0
+                    # If not found locally, try fallback from stats_allocated
+                    if uid in self.stats_allocated:
+                        score = self.stats_allocated[uid].get("score", 0)/100
+                        gpu_specs = self.stats_allocated[uid].get("gpu_specs", None)
+                        self.stats[uid]["own_score"] = False  # or "no"
+                    else:
+                        score = 0
+                        self.stats[uid]["own_score"] = True  # or "no"
 
-                self.stats[uid]["score"] = score
+                self.stats[uid]["score"] = score*100
+                self.stats[uid]["gpu_specs"] = gpu_specs
+
+                # Keep or override reliability_score if you want
+                if "reliability_score" not in self.stats[uid]:
+                    self.stats[uid]["reliability_score"] = 0
 
             except KeyError as e:
                 bt.logging.trace(f"KeyError occurred for UID {uid}: {str(e)}")
@@ -373,10 +377,48 @@ class Validator:
                 bt.logging.trace(f"An unexpected exception occurred for UID {uid}: {str(e)}")
                 score = 0
 
+            # Keep a simple reference of scores
             self.scores[uid] = score
 
-        # Update stats in wandb
-        self.wandb.update_stats(self.stats)
+        write_stats(self.db, self.stats)
+
+        self.update_allocation_wandb()
+
+        bt.logging.info("-" * 190)
+        bt.logging.info("MINER STATS SUMMARY".center(190))
+        bt.logging.info("-" * 190)
+
+        for uid, data in self.stats.items():
+            hotkey_str = str(data.get("hotkey", "unknown"))
+
+            # Parse GPU specs into a human-readable format
+            gpu_specs = data.get("gpu_specs")
+            if isinstance(gpu_specs, dict):
+                gpu_name = gpu_specs.get("gpu_name", "Unknown GPU")
+                num_gpus = gpu_specs.get("num_gpus", 0)
+                gpu_str = f"{num_gpus} x {gpu_name}" if num_gpus > 0 else "No GPUs"
+            else:
+                gpu_str = "N/A"  # Fallback if gpu_specs is not a dict
+
+            # Format score as a float with 2 decimal digits
+            raw_score = float(data.get("score", 0))
+            score_str = f"{raw_score:.2f}"
+
+            # Retrieve additional fields
+            allocated = "yes" if data.get("allocated", False) else "no"
+            reliability_score = data.get("reliability_score", 0)
+            source = "Local" if data.get("own_score", False) else "External"
+
+            # Format the log with fixed-width fields
+            log_entry = (
+                f"| UID: {uid:<4} | Hotkey: {hotkey_str:<45} | GPU: {gpu_str:<36} | "
+                f"Score: {score_str:7} | Allocated: {allocated:<5} | "
+                f"RelScore: {reliability_score:<5} | Source: {source:<9} |"
+            )
+            bt.logging.info(log_entry)
+
+        # Add a closing dashed line
+        bt.logging.info("-" * 190)
 
         bt.logging.info(f"🔢 Synced scores : {self.scores.tolist()}")
 
@@ -586,16 +628,16 @@ class Validator:
         update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
 
         # Log the hotkey and specs
-        bt.logging.info(f"✅ GPU specs per hotkey (Wandb):")
-        for hotkey, specs in specs_dict.values():
-            gpu_info = specs.get("gpu", {})
-            gpu_details = gpu_info.get("details", [])
-            if gpu_details:
-                gpu_name = gpu_details[0].get("name", "Unknown GPU")
-                gpu_count = gpu_info.get("count", 1)  # Assuming 'count' reflects the number of GPUs
-                bt.logging.info(f"{hotkey}: {gpu_name} x {gpu_count}")
-            else:
-                bt.logging.info(f"{hotkey}: No GPU details available")
+        # bt.logging.info(f"✅ GPU specs per hotkey (Wandb):")
+        # for hotkey, specs in specs_dict.values():
+        #     gpu_info = specs.get("gpu", {})
+        #     gpu_details = gpu_info.get("details", [])
+        #     if gpu_details:
+        #         gpu_name = gpu_details[0].get("name", "Unknown GPU")
+        #         gpu_count = gpu_info.get("count", 1)  # Assuming 'count' reflects the number of GPUs
+        #         bt.logging.info(f"{hotkey}: {gpu_name} x {gpu_count}")
+        #     else:
+        #         bt.logging.info(f"{hotkey}: No GPU details available")
 
         self.finalized_specs_once = True
 
@@ -605,7 +647,10 @@ class Validator:
         Uses asyncio with ThreadPoolExecutor to test miners in parallel.
         """
         try:
+            # Init miners to be tested
             self._queryable_uids = self.get_queryable()
+            valid_validator_hotkeys = self.get_valid_validator_hotkeys()
+            self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
 
             # Settings
             merkle_proof = self.config_data["merkle_proof"]
