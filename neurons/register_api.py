@@ -524,12 +524,12 @@ class RegisterAPI:
                 uuid_key = str(uuid.uuid1())
 
                 private_key, public_key = rsa.generate_key_pair()
-                if ssh_key:
-                    if docker_requirement is None:
-                        docker_requirement = DockerRequirement()
-                        docker_requirement.ssh_key = ssh_key
-                    else:
-                        docker_requirement.ssh_key = ssh_key
+                if docker_requirement is None:
+                    docker_requirement = DockerRequirement()
+                if ssh_key is None:
+                    docker_requirement.ssh_key = ""
+                else:
+                    docker_requirement.ssh_key = ssh_key
 
                 run_start = time.time()
                 result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey,
@@ -1142,7 +1142,7 @@ class RegisterAPI:
                                "description": "An error occurred while exchanging docker key.",
                            },
                        })
-        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
+        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str, key_type: str = "user") -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1170,13 +1170,14 @@ class RegisterAPI:
                     docker_action = {
                         "action": "exchange_key",
                         "ssh_key": ssh_key,
+                        "key_type": key_type,
                     }
 
                     if uuid_key_db == uuid_key:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
                         run_start = time.time()
-                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                        allocate_class = Allocate(timeline=1, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
                         response = await run_in_threadpool(
                             self.dendrite.query, axon, allocate_class, timeout=60
