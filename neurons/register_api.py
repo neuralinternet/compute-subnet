@@ -56,7 +56,7 @@ from neurons.Validator.database.allocate import (
 # Import FastAPI Libraries
 import uvicorn
 from fastapi import (
-    FastAPI,
+    FastAPI, HTTPException,
     status,
     Request,
     WebSocket,
@@ -67,10 +67,17 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.status import HTTP_403_FORBIDDEN
+from dotenv import load_dotenv
 from typing import Optional, Union, List
 from compute import (TRUSTED_VALIDATORS_HOTKEYS)
 
+# Loads the .env file
+load_dotenv()
+
 # Constants
+ENABLE_WHITELIST_IPS = False # False for disabling, True for enabling
 DEFAULT_SSL_MODE = 2         # 1 for client CERT optional, 2 for client CERT_REQUIRED
 DEFAULT_API_PORT = 8903      # default port for the API
 DATA_SYNC_PERIOD = 600       # metagraph resync time
@@ -82,6 +89,22 @@ MAX_ALLOCATION_RETRY = 8
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
 
+# IP Whitelist middleware
+class IPWhitelistMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: FastAPI):
+        super().__init__(app)
+        self.whitelisted_ips = set(os.getenv("WHITELISTED_IPS", "").split(","))
+
+    async def dispatch(self, request: Request, call_next):
+        # Extracts the client's IP address
+        client_ip = request.client.host
+        if client_ip not in self.whitelisted_ips:
+            bt.logging.info(f"Access attempt from IP: {client_ip}")
+            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Access forbidden: IP not whitelisted")
+        
+        # Process the request and get the response
+        response = await call_next(request)
+        return response
 
 class UserConfig(BaseModel):
     netuid: str = Field(default="15")
@@ -266,6 +289,8 @@ class RegisterAPI:
 
         load_dotenv()
         self._setup_routes()
+        if ENABLE_WHITELIST_IPS:
+            self.app.add_middleware(IPWhitelistMiddleware)
         self.process = None
         self.websocket_connection = None
         self.allocation_table = []
@@ -524,12 +549,12 @@ class RegisterAPI:
                 uuid_key = str(uuid.uuid1())
 
                 private_key, public_key = rsa.generate_key_pair()
-                if ssh_key:
-                    if docker_requirement is None:
-                        docker_requirement = DockerRequirement()
-                        docker_requirement.ssh_key = ssh_key
-                    else:
-                        docker_requirement.ssh_key = ssh_key
+                if docker_requirement is None:
+                    docker_requirement = DockerRequirement()
+                if ssh_key is None:
+                    docker_requirement.ssh_key = ""
+                else:
+                    docker_requirement.ssh_key = ssh_key
 
                 run_start = time.time()
                 result = await run_in_threadpool(self._allocate_container_hotkey, requirements, hotkey,
@@ -783,7 +808,7 @@ class RegisterAPI:
                 },
             }
         )
-        async def check_miner_status(hotkey_list: List[str]) -> JSONResponse:
+        async def check_miner_status(hotkey_list: List[str], query_version: bool = False) -> JSONResponse:
             checking_list = []
             for hotkey in hotkey_list:
                 checking_result = {
@@ -793,16 +818,20 @@ class RegisterAPI:
                 for axon in self.metagraph.axons:
                     if axon.hotkey == hotkey:
                         try:
-                            register_response = await run_in_threadpool(self.dendrite.query,
-                                                                        axon, Allocate(timeline=1, checking=True, ),
-                                                                        timeout=60)
-                            if register_response:
-                                if register_response["status"] is True:
-                                    checking_result = {"hotkey": hotkey, "status": "Docker OFFLINE"}
-                                else:
-                                    checking_result = {"hotkey": hotkey, "status": "Docker ONLINE"}
+                            if query_version:
+                                checking_result = {"hotkey": hotkey, "version": axon.version}
                             else:
-                                checking_result = {"hotkey": hotkey, "status": "Miner NO_RESPONSE"}
+                                register_response = await run_in_threadpool(self.dendrite.query,
+                                                                            axon, Allocate(timeline=1, checking=True, ),
+                                                                            timeout=10)
+                                await asyncio.sleep(0.1)
+                                if register_response:
+                                    if register_response["status"] is True:
+                                        checking_result = {"hotkey": hotkey, "status": "Docker OFFLINE"}
+                                    else:
+                                        checking_result = {"hotkey": hotkey, "status": "Docker ONLINE"}
+                                else:
+                                    checking_result = {"hotkey": hotkey, "status": "Miner NO_RESPONSE"}
                         except Exception as e:
                             bt.logging.error(
                                 f"API: An error occur during the : {e}"
@@ -1142,7 +1171,7 @@ class RegisterAPI:
                                "description": "An error occurred while exchanging docker key.",
                            },
                        })
-        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
+        async def exchange_docker_key(hotkey: str, uuid_key: str, ssh_key: str, key_type: str = "user") -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1170,13 +1199,14 @@ class RegisterAPI:
                     docker_action = {
                         "action": "exchange_key",
                         "ssh_key": ssh_key,
+                        "key_type": key_type,
                     }
 
                     if uuid_key_db == uuid_key:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
                         run_start = time.time()
-                        allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
+                        allocate_class = Allocate(timeline=1, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
                         response = await run_in_threadpool(
                             self.dendrite.query, axon, allocate_class, timeout=60
