@@ -385,11 +385,14 @@ def retrieve_allocation_key():
         return allocation_key
     except Exception as e:
         bt.logging.info(f"Error retrieving allocation key.")
-        return ""
+        return None
 
 def restart_container(public_key:str):
     try:
         allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
         # compare public_key to the local saved allocation key for security
         if allocation_key.strip() == public_key.strip():
             client, containers = get_docker()
@@ -418,6 +421,9 @@ def restart_container(public_key:str):
 def pause_container(public_key:str):
     try:
         allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
         # compare public_key to the local saved allocation key for security
         if allocation_key.strip() == public_key.strip():
             client, containers = get_docker()
@@ -442,6 +448,9 @@ def pause_container(public_key:str):
 def unpause_container(public_key:str):
     try:
         allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
         # compare public_key to the local saved allocation key for security
         if allocation_key.strip() == public_key.strip():
             client, containers = get_docker()
@@ -466,6 +475,9 @@ def unpause_container(public_key:str):
 def exchange_key_container(new_ssh_key: str, public_key: str, key_type: str = "user" ):
     try:
         allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
         # compare public_key to the local saved allocation key for security
         if allocation_key.strip() == public_key.strip():
             client, containers = get_docker()
