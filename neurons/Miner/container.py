@@ -410,6 +410,7 @@ def restart_container(public_key:str):
                 return {"status": False}
         else:
             bt.logging.info(f"Permission denied.")
+            return {"status":False}
     except Exception as e:
         bt.logging.info(f"Error restart container: {e}")
         return {"status": False}
@@ -433,6 +434,7 @@ def pause_container(public_key:str):
                 return {"status": False}
         else:
             bt.logging.info(f"Permission denied.")
+            return {"status:": False}
     except Exception as e:
         bt.logging.info(f"Error pausing container {e}")
         return {"status": False}
@@ -456,6 +458,7 @@ def unpause_container(public_key:str):
                 return {"status": False}
         else:
             bt.logging.info(f"Permission denied.")
+            return {"status": False}
     except Exception as e:
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
@@ -499,6 +502,7 @@ def exchange_key_container(new_ssh_key: str, public_key: str, key_type: str = "u
                 return {"status": False}
         else:
             bt.logging.info(f"Permission denied.")
+            return {"status": False}
     except Exception as e:
         bt.logging.info(f"Error changing SSH key on container {e}")
         return {"status": False}
