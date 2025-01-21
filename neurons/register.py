@@ -200,6 +200,10 @@ def allocate_container_hotkey(config, hotkey, timeline, public_key):
     device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
     device_requirement["gpu"] = {"count": 1, "capacity": config.gpu_size, "type": config.gpu_type}
 
+    docker_requirement = {
+            "base_image": "pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime",
+            }
+
     # Instantiate the connection to the db
     axon_candidate = []
     for axon in metagraph.axons:
@@ -212,7 +216,7 @@ def allocate_container_hotkey(config, hotkey, timeline, public_key):
             if check_allocation  and check_allocation ["status"] is True:
                 register_response = dendrite.query(
                     axon,
-                    Allocate(timeline=timeline, device_requirement=device_requirement, checking=False, public_key=public_key),
+                    Allocate(timeline=timeline, device_requirement=device_requirement, checking=False, public_key=public_key, docker_requirement=docker_requirement),
                     timeout=60,
                     )
                 if register_response and register_response["status"] is True:
