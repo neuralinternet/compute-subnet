@@ -253,3 +253,6 @@ cert/
 
 # wandb
 wandb/
+
+# neural internet register api 
+neurons/register-api/
