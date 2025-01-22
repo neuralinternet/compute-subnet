@@ -1733,12 +1733,8 @@ class RegisterAPI:
                     # Iterate through the miner specs details and print the table
                     for hotkey, details in specs_details.items():
                         if details :
-                            gpu_miner = details["gpu"]
-                            gpu_capacity = "{:.2f}".format(
-                                (gpu_miner["capacity"] / 1024)
-                            )
-                            gpu_name = str(gpu_miner["details"][0]["name"]).lower()
-                            gpu_count = gpu_miner["count"]
+                            gpu_miner = details.get("gpu", "")
+                            gpu_count = gpu_miner.get("count", 0)
                             GPU_COUNTS += gpu_count
                     bt.logging.info(f"API: List resources successfully")
                 return JSONResponse(
