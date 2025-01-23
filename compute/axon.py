@@ -27,7 +27,7 @@ import bittensor
 import bittensor.utils.networking as net
 import time
 import uvicorn
-from bittensor import axon
+from bittensor.core.axon import Axon as axon
 from bittensor.core.subtensor import Subtensor as subtensor
 
 from bittensor.core.axon import FastAPIThreadedServer, AxonMiddleware
@@ -230,11 +230,11 @@ class ComputeSubnetAxon(axon):
         external_ip: Optional[str] = None,
         external_port: Optional[int] = None,
         max_workers: Optional[int] = None,
-    ) -> "bittensor.axon":
-        r"""Creates a new bittensor.Axon object from passed arguments.
+    ) -> "bittensor.core.axon":
+        r"""Creates a new bittensor.core.axon object from passed arguments.
         Args:
             config (:obj:`Optional[bittensor.config]`, `optional`):
-                bittensor.axon.config()
+                bittensor.core.axon.config()
             wallet (:obj:`Optional[bittensor.wallet]`, `optional`):
                 bittensor wallet with hotkey and coldkeypub.
             port (:type:`Optional[int]`, `optional`):
@@ -291,7 +291,7 @@ class ComputeSubnetAxon(axon):
             max_workers=self.config.axon.max_workers
         )
         self.nonces = {}
-
+        self.middleware_cls = ComputeSubnetAxonMiddleware
         # Request default functions.
         self.forward_class_types = {}
         self.blacklist_fns = {}
@@ -366,7 +366,7 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
         """
         super().__init__(app, axon=axon)
 
-    async def preprocess(self, request: Request) -> bittensor.Synapse:
+    async def preprocess(self, request: Request) -> bittensor.core.synapse.Synapse:
         """
         Performs the initial processing of the incoming request. This method is responsible for
         extracting relevant information from the request and setting up the Synapse object, which
@@ -402,7 +402,7 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
             {
                 "version": __version_as_int__,
                 "uuid": str(self.axon.uuid),
-                "nonce": f"{time.monotonic_ns()}",
+                "nonce": time.monotonic_ns(),
                 "status_message": "Success",
                 "status_code": "100",
                 "placeholder1": 1,
@@ -412,7 +412,7 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
 
         # Fills the dendrite information into the synapse.
         synapse.dendrite.__dict__.update(
-            {"port": str(request.client.port), "ip": str(request.client.host)}
+            {"port": int(request.client.port), "ip": str(request.client.host)}
         )
 
         # Signs the synapse from the axon side using the wallet hotkey.
