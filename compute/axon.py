@@ -27,6 +27,10 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 # Third-party
 import uvicorn
+from bittensor.core.axon import Axon as axon
+from bittensor.core.subtensor import Subtensor as subtensor
+
+from bittensor.core.axon import FastAPIThreadedServer, AxonMiddleware
 from fastapi import FastAPI, APIRouter
 from starlette.requests import Request
 
@@ -176,17 +180,23 @@ class ComputeSubnetAxon(axon):
         external_ip: Optional[str] = None,
         external_port: Optional[int] = None,
         max_workers: Optional[int] = None,
-    ):
-        """Creates a new bittensor.Axon object from passed arguments.
-
+    ) -> "bittensor.core.axon":
+        r"""Creates a new bittensor.core.axon object from passed arguments.
         Args:
-            config (:obj:`Optional[bittensor.core.config.Config]`): bittensor.Axon.config()
-            wallet (:obj:`Optional[bittensor_wallet.Wallet]`): bittensor wallet with hotkey and coldkeypub.
-            port (:type:`Optional[int]`): Binding port.
-            ip (:type:`Optional[str]`): Binding ip.
-            external_ip (:type:`Optional[str]`): The external ip of the server to broadcast to the network.
-            external_port (:type:`Optional[int]`): The external port of the server to broadcast to the network.
-            max_workers (:type:`Optional[int]`): Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
+            config (:obj:`Optional[bittensor.config]`, `optional`):
+                bittensor.core.axon.config()
+            wallet (:obj:`Optional[bittensor.wallet]`, `optional`):
+                bittensor wallet with hotkey and coldkeypub.
+            port (:type:`Optional[int]`, `optional`):
+                Binding port.
+            ip (:type:`Optional[str]`, `optional`):
+                Binding ip.
+            external_ip (:type:`Optional[str]`, `optional`):
+                The external ip of the server to broadcast to the network.
+            external_port (:type:`Optional[int]`, `optional`):
+                The external port of the server to broadcast to the network.
+            max_workers (:type:`Optional[int]`, `optional`):
+                Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
         """
 
         # Build and check config.
@@ -225,8 +235,8 @@ class ComputeSubnetAxon(axon):
         self.thread_pool = PriorityThreadPoolExecutor(
             max_workers=self.config.axon.max_workers  # type: ignore
         )
-        self.nonces: dict[str, int] = {}
-
+        self.nonces = {}
+        self.middleware_cls = ComputeSubnetAxonMiddleware
         # Request default functions.
         self.forward_class_types: dict[str, list[Signature]] = {}
         self.blacklist_fns: dict[str, Callable | None] = {}
