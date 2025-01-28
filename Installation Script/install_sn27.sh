@@ -39,9 +39,6 @@ fi
 
 WANDB_ENV="${WANDB_KEY:-}"
 
-COLDKEY_SEED="${COLDKEY_SEED:-}"
-
-HOTKEY_SEED="${HOTKEY_SEED:-}"
 ask_user_for_wandb_key() {
   read -rp "Enter WANDB_API_KEY (leave blank if none): " WANDB_ENV
 }
@@ -111,6 +108,12 @@ linux_install_pre() {
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     exit_on_error $? "docker-installation"
+
+    # 4. Add the 'ubuntu' user to the 'docker' group, so they can run Docker without sudo
+    sudo usermod -aG docker ubuntu
+
+    ohai "Docker installation complete. 'ubuntu' user added to 'docker' group."
+    ohai "IMPORTANT: A new shell session (or reboot) is required for 'ubuntu' to see the new group membership."
 }
 
 ################################################################################
@@ -360,72 +363,6 @@ linux_increase_ulimit(){
     fi
 }
 
-regen_bittensor_wallet() {
-  if [[ "$AUTOMATED" == "true" ]]; then
-    ohai "Running wallet regeneration in AUTOMATED mode."
-    
-    if [[ -z "$COLDKEY_SEED" || -z "$HOTKEY_SEED" ]]; then
-      ohai "No COLDKEY_SEED/HOTKEY_SEED found in environment. Skipping wallet regen."
-      return
-    else
-      ohai "Regenerating coldkey with COLDKEY_SEED from env..."
-      btcli wallet regen_coldkey --name "default_cold" --mnemonic $COLDKEY_SEED
-      exit_on_error $? "regen_coldkey"
-
-      ohai "Regenerating hotkey with HOTKEY_SEED from env..."
-      btcli wallet regen_hotkey --name "default_hot" --mnemonic $HOTKEY_SEED
-      exit_on_error $? "regen_hotkey"
-
-      ohai "Wallet regeneration completed in AUTOMATED mode."
-    fi
-
-  else
-    ohai "Do you want to regenerate (create) a Bittensor wallet? [y/N]"
-    read -r wallet_choice
-    wallet_choice="${wallet_choice,,}"  # a minúsculas
-
-    if [[ "$wallet_choice" == "y" || "$wallet_choice" == "yes" ]]; then
-      echo "Do you want to use test seeds or enter your own? [test/custom]"
-      read -r seed_choice
-      seed_choice="${seed_choice,,}"
-
-      if [[ "$seed_choice" == "test" ]]; then
-        local cold_test_seed="example_cold_seed_for_testing_only"
-        local hot_test_seed="example_hot_seed_for_testing_only"
-
-        ohai "Regenerating coldkey with test seed..."
-        btcli wallet regen_coldkey --name "default" --seed "$cold_test_seed" --overwrite
-        exit_on_error $? "regen_coldkey"
-
-        ohai "Regenerating hotkey with test seed..."
-        btcli wallet regen_hotkey --name "default" --seed "$hot_test_seed" --overwrite
-        exit_on_error $? "regen_hotkey"
-
-        ohai "Test wallet regeneration completed."
-
-      else
-        echo "Enter your COLDKEY seed (NOT recommended in plaintext, but for example only):"
-        read -r user_cold_seed
-
-        echo "Enter your HOTKEY seed:"
-        read -r user_hot_seed
-
-        ohai "Regenerating your custom coldkey..."
-        btcli wallet regen_coldkey --name "default" --seed "$user_cold_seed" --overwrite
-        exit_on_error $? "regen_coldkey"
-
-        ohai "Regenerating your custom hotkey..."
-        btcli wallet regen_hotkey --name "default" --seed "$user_hot_seed" --overwrite
-        exit_on_error $? "regen_hotkey"
-
-        ohai "Custom wallet regeneration completed."
-      fi
-
-    else
-      ohai "Skipping wallet regeneration in manual mode."
-    fi
-  fi
-}
 
 ################################################################################
 # MAIN INSTALL
@@ -498,7 +435,8 @@ if [[ "$OS" == "Linux" ]]; then
 
     # ulimit
     linux_increase_ulimit
-    # Solicitar WANDB key sólo en modo manual
+
+    #wandb_key
     if [[ "$AUTOMATED" == "false" ]]; then
       ohai "Enter your wandb api key..."
       ask_user_for_wandb_key
