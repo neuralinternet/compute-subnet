@@ -43,7 +43,7 @@ import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 
-from neurons.Validator.database.pog import get_pog_specs
+from neurons.Validator.database.pog import get_pog_specs, hotkey_hw_change_exists
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -580,16 +580,29 @@ class RegisterAPI:
             """
 
             if hotkey in MINER_BLACKLIST:
-                bt.logging.warning(f"Allocation request by blacklisted hotkey: {hotkey}")
-                bt.logging.error(f"API: Allocation {hotkey} Failed : blacklisted")
+                bt.logging.warning(f"Allocation request by blacklisted hotkey (hw change): {hotkey}")
+                bt.logging.error(f"API: Allocation {hotkey} Failed : blacklisted (hw change)")
                 return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={
                             "success": False,
-                            "message": "Fail to allocate resource, blacklisted",
-                            "err_detail": "blacklisted",
+                            "message": "Fail to allocate resource, blacklisted (hw change)",
+                            "err_detail": "blacklisted (hw change)",
                             },
                         )
+
+            if hotkey_hw_change_exists(hotkey):  # Check if the hotkey exists
+                bt.logging.warning(f"Allocation request by blacklisted hotkey (hw change): {hotkey}")
+                bt.logging.error(f"API: Allocation {hotkey} Failed: blacklisted (hw change)")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Fail to allocate resource, blacklisted (hw change)",
+                        "err_detail": "blacklisted (hw change)",
+                    },
+                )
+
             if hotkey:
                 # client_host = request.client.host
                 requirements = DeviceRequirement()

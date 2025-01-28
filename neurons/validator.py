@@ -65,7 +65,7 @@ from neurons.Validator.database.allocate import update_miner_details, select_has
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
 from neurons.Validator.pog import adjust_matrix_size, compute_script_hash, execute_script_on_miner, get_random_seeds, load_yaml_config, parse_merkle_output, receive_responses, send_challenge_indices, send_script_and_request_hash, parse_benchmark_output, identify_gpu, send_seeds, verify_merkle_proof_row, get_remote_gpu_info, verify_responses
-from neurons.Validator.database.pog import get_pog_specs, retrieve_stats, update_pog_stats, write_stats
+from neurons.Validator.database.pog import add_or_update_hotkey_hw_change, delete_old_hotkey_hw_change, get_pog_specs, retrieve_stats, update_pog_stats, write_stats
 
 class Validator:
     blocks_done: set = set()
@@ -622,10 +622,14 @@ class Validator:
                         bt.logging.info(f"GPU specs changed for allocated hotkey {hotkey}:")
                         bt.logging.info(f"Old count: {current_count}, Old name: {current_name}")
                         bt.logging.info(f"New count: {new_count}, New name: {new_name}")
-                        await self.deallocate_miner(axon, None)
+                        add_or_update_hotkey_hw_change(self.db, hotkey)
+                        self.deallocate_miner(axon, None)
 
         # Update the local db with the new data from Wandb
         update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
+
+        # Delete blacklisted hotkeys due to hw change after 4 hours
+        delete_old_hotkey_hw_change(self.db, hours=4)
 
         # Log the hotkey and specs
         # bt.logging.info(f"✅ GPU specs per hotkey (Wandb):")
