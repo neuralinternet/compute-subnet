@@ -91,7 +91,7 @@ class MinerChecker:
         allocation_status = False 
         private_key, public_key = rsa.generate_key_pair() 
 
-        device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+        device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824},"testing": True}
 
         try:
             check_allocation = dendrite.query(axon, Allocate(timeline=30, device_requirement=device_requirement, checking=True,), timeout=30)
