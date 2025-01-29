@@ -245,16 +245,23 @@ class Validator:
         """
         Register the prometheus information on metagraph.
         :return: bool
-        """
+        """ 
+        # extrinsic prometheus is removed at 8.2.1
+        
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = self.subtensor.serve_prometheus(
-            wallet=self.wallet,
-            port=bt.defaults.axon.port,
-            netuid=self.config.netuid,
-            force_update=force_update,
-        )
+        success = True
+        # TODO : remove all the related code from the code base
+        # self._subtensor.serve_prometheus(
+        #     wallet=self.wallet,
+        #     port=bt.core.settings.DEFAULTS.axon.port,
+        #     netuid=self.config.netuid,
+        #     force_update=force_update,
+        # )
         if success:
-            bt.logging.success(prefix="Prometheus served", sufix=f"<blue>Current version: {get_local_version()}</blue>")
+            bt.logging.success(
+                prefix="Prometheus served",
+                suffix=f"<blue>Current version: {get_local_version()}</blue>"  # Corrected keyword
+            )
         else:
             bt.logging.error("Prometheus initialization failed")
         return success
@@ -1058,7 +1065,7 @@ class Validator:
             version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
-        if isinstance(result, bool) and result or isinstance(result, tuple) and result[0]:
+        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:

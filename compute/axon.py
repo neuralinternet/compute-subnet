@@ -27,8 +27,10 @@ import bittensor
 import bittensor.utils.networking as net
 import time
 import uvicorn
-from bittensor import axon, subtensor
-from bittensor.axon import FastAPIThreadedServer, AxonMiddleware
+from bittensor import axon
+from bittensor.core.subtensor import Subtensor as subtensor
+
+from bittensor.core.axon import FastAPIThreadedServer, AxonMiddleware
 from fastapi import FastAPI, APIRouter
 from rich.prompt import Confirm
 from starlette.requests import Request
@@ -39,7 +41,7 @@ from compute.utils.version import get_local_version
 
 
 def serve_extrinsic(
-    subtensor: "bittensor.subtensor",
+    subtensor: "bittensor.core.subtensor",
     wallet: "bittensor.wallet",
     ip: str,
     port: int,
@@ -250,16 +252,16 @@ class ComputeSubnetAxon(axon):
         if config is None:
             config = axon.config()
         config = copy.deepcopy(config)
-        config.axon.ip = ip or config.axon.get("ip", bittensor.defaults.axon.ip)
-        config.axon.port = port or config.axon.get("port", bittensor.defaults.axon.port)
+        config.axon.ip = ip or config.axon.get("ip", bittensor.core.settings.DEFAULTS.axon.ip)
+        config.axon.port = port or config.axon.get("port", bittensor.core.settings.DEFAULTS.axon.port)
         config.axon.external_ip = external_ip or config.axon.get(
-            "external_ip", bittensor.defaults.axon.external_ip
+            "external_ip", bittensor.core.settings.DEFAULTS.axon.external_ip
         )
         config.axon.external_port = external_port or config.axon.get(
-            "external_port", bittensor.defaults.axon.external_port
+            "external_port", bittensor.core.settings.DEFAULTS.axon.external_port
         )
         config.axon.max_workers = max_workers or config.axon.get(
-            "max_workers", bittensor.defaults.axon.max_workers
+            "max_workers", bittensor.core.settings.DEFAULTS.axon.max_workers
         )
         axon.check_config(config)
         self.config = config
