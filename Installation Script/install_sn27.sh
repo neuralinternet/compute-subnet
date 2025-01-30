@@ -307,7 +307,6 @@ linux_install_nvidia_cuda() {
 linux_configure_ufw() {
     sudo apt-get update && sudo apt-get install -y ufw
     
-    # Always allow port 22 for SSH first
     ohai "Allowing SSH (port 22) through UFW..."
     sudo ufw allow 22/tcp
 
@@ -315,13 +314,15 @@ linux_configure_ufw() {
         local default_range="2000-5000"
         ohai "AUTOMATED mode: enabling UFW for port range $default_range"
         sudo ufw allow "${default_range}/tcp"
+        ohai "Opening ports 8091 and 4444 for verifiers..."
+        sudo ufw allow 8091/tcp
+        sudo ufw allow 4444/tcp
         sudo ufw enable
-        ohai "UFW configured automatically for port range $default_range (and SSH is open)."
+        ohai "UFW configured automatically for port range $default_range (SSH is open, plus 8091 & 4444)."
     else
         echo "Please enter the port range for UFW (e.g., 2000-5000):"
         read -p "Enter port range (start-end): " port_range
 
-        # Validate "start-end" format
         if [[ "$port_range" =~ ^[0-9]+-[0-9]+$ ]]; then
             start_port=$(echo "$port_range" | cut -d'-' -f1)
             end_port=$(echo "$port_range" | cut -d'-' -f2)
@@ -329,8 +330,11 @@ linux_configure_ufw() {
             if [[ $start_port -lt $end_port ]]; then
                 ohai "Enabling UFW for port range $start_port-$end_port"
                 sudo ufw allow "${start_port}:${end_port}/tcp"
+                ohai "Opening ports 8091 and 4444 for verifiers..."
+                sudo ufw allow 8091/tcp
+                sudo ufw allow 4444/tcp
                 sudo ufw enable
-                ohai "UFW configured successfully with port range $port_range (SSH is also open)."
+                ohai "UFW configured successfully with port range $port_range (SSH is open, plus 8091 & 4444)."
             else
                 echo "Invalid port range. The start port should be less than the end port."
                 exit 1
@@ -341,6 +345,7 @@ linux_configure_ufw() {
         fi
     fi
 }
+
 
 
 ################################################################################
