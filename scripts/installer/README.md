@@ -97,7 +97,7 @@ Build cuda_12.3.r12.3/compiler.33492891_0
 
 ### Step 1: Download and Prepare Installer
 ```bash
-curl -sL https://raw.githubusercontent.com/neuralinternet/compute-subnet/main/Installation%20Script/install_sn27.sh
+curl -sL https://raw.githubusercontent.com/neuralinternet/compute-subnet/main/scripts/installer/install_sn27.sh
  -o SN27_installer.sh
 chmod +x SN27_installer.sh
 ```
@@ -115,6 +115,11 @@ The installer will:
 - Install Bittensor dependencies
 
 ## Post-Installation Verification
+
+### Reboot your machine
+```bash
+sudo reboot
+```
 
 ### Enter Virtual Environment
 ```bash
