@@ -21,10 +21,11 @@ import bittensor
 import bittensor.utils.networking as net
 
 import compute
+import inspect
 
 
 def prometheus_extrinsic(
-    subtensor: "bittensor.subtensor",
+    subtensor: "bittensor.core.subtensor.Subtensor.MockSubtensor",
     wallet: "bittensor.wallet",
     port: int,
     netuid: int,
@@ -99,9 +100,8 @@ def prometheus_extrinsic(
 
     # Add netuid, not in prometheus_info
     call_params["netuid"] = netuid
-
     bittensor.logging.info("Serving prometheus on: {}:{} ...".format(subtensor.network, netuid))
-    success, err = subtensor._do_serve_prometheus(
+    success, err = subtensor.do_serve_prometheus(
         wallet=wallet,
         call_params=call_params,
         wait_for_finalization=wait_for_finalization,

@@ -87,6 +87,7 @@ class Allocate(bt.Synapse):
     docker_action: dict = {
         "action": "",
         "ssh_key": "",
+        "key_type": "",
     }
 
     def deserialize(self) -> dict:
