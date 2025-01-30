@@ -1,78 +1,182 @@
-# Bittensor/Compute Subnet Installer Script
-This repository contains an installation script for setting up a Bittensor miner with the necessary dependencies and configurations for SN27 (Subnet 27) of the Bittensor network. This installation process requires Ubuntu 22.04. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior. 
+# Bittensor and Compute-Subnet Setup Guide
 
+## Overview
+This guide provides comprehensive instructions for setting up Bittensor and Compute-Subnet on a Linux system. Follow these steps to prepare your machine for mining and earning rewards.
 
-## Features
+## Prerequisites
 
-- Installs Bittensor and its dependencies
-- Installs Docker for containerization
-- Installs NVIDIA docker support for optimized GPU functionality
-- Installs Subtensor and Starts a Lite Node on Mainnet
-- Installs PM2 for process management
-- Clones and installs the Compute-Subnet repository and its dependencies
-- Starts the Docker service within Compute Subnet
-- Installs Hashcat for computational tasks
-- Installs NVIDIA drivers and CUDA toolkit for GPU functionality
-- Installs UFW and configures ports for miners
-- Provides a convenient one-line command for easy installation
+### Required Items
+- **Weights & Biases (WANDB) API Key**
+  - Generate from WANDB Account Settings
+  - Required for logging mining statistics
+  
+- **Bittensor Wallets**
+  - Coldkey and Hotkey required
+  - Must be registered on Bittensor network
+  - Can be created using `btcli new_coldkey` and `btcli new_hotkey`
+  
+- **GPU Drivers**
+  - Ubuntu 22.04: Automatic NVIDIA driver installation
+  - Other distributions: Manual CUDA driver installation required
+  - Verify installation with `nvidia-smi` and `nvcc --version`
 
-## Usage
+## CUDA Installation
+Visit NVIDIA's official CUDA download page to get the latest version:
+https://developer.nvidia.com/cuda-downloads
 
-This installation process requires Ubuntu 22.04.
+For Ubuntu 22.04 (update version numbers as needed):
 
-Use a Virtual Environment
-
-When working with Bittensor miners across various Subnets, it's highly recommended to use a virtual environment (venv) to isolate the dependencies and avoid potential conflicts. Each subnet may have different requirements, and using a separate virtual environment ensures that the dependencies are managed independently.
-
-To create and activate a virtual environment, follow these steps:
-
-1. Open a terminal and navigate to the directory where you want to create the virtual environment.
-
-2. Run the following command to create a new virtual environment:
-```
-python3 -m venv myenv
+1. Download CUDA repository package:
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
 ```
 
-Replace `myenv` with your desired name for the virtual environment.
-
-3. Activate the virtual environment:
-- For Linux or macOS:
-  ```
-  source myenv/bin/activate
-  ```
-- For Windows:
-  ```
-  myenv\Scripts\activate
-  ```
-
-4. Once the virtual environment is activated, you'll see the name of the environment in your terminal prompt, indicating that you're now working within the isolated environment.
-
-5. Proceed with installing the required dependencies and running the Bittensor miner specific to the Subnet you're working on.
-
-6. To deactivate the virtual environment when you're done, simply run:
+2. Install repository package:
+```bash
+sudo dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
 ```
-deactivate
+
+3. Copy keyring:
+```bash
+sudo cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
 ```
-Using a virtual environment ensures that the dependencies and requirements are isolated and avoids potential conflicts.
 
-Please remember to activate the appropriate virtual environment when you switch between Subnets or working on a different miner/project.
-
-To install Bittensor with SN27 dependencies, simply run the following command in your terminal:
+4. Update and install CUDA:
+```bash
+sudo apt-get update
+sudo apt-get -y install cuda-toolkit-12-3
+sudo apt-get -y install -y cuda-drivers
 ```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/cisterciansis/Bittensor-Compute-Subnet-Installer-Script/main/install_sn27.sh)"
+
+5. Set up environment variables:
+```bash
+export CUDA_VERSION=cuda-12.3
+export PATH=$PATH:/usr/local/$CUDA_VERSION/bin
+export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
 ```
-The script will guide you through the installation process and set up the necessary components for running a Bittensor miner on SN27.
 
-Please note that this script is designed for Linux systems with the apt package manager. If you're using a different Linux distribution or package manager, you may need to modify the script accordingly.
+6. Add to bashrc:
+```bash
+echo "">>~/.bashrc
+echo "PATH=$PATH">>~/.bashrc
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH">>~/.bashrc
+source ~/.bashrc
+```
 
-## Disclaimer
+7. Reboot system:
+```bash
+sudo reboot
+```
 
-This script is provided as-is and without warranty. Use it at your own risk. Make sure to review the script and understand its actions before running it on your system.
+### Verify CUDA Installation
+Run `nvidia-smi`. Expected output should look like:
+```
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 545.29.06              Driver Version: 545.29.06    CUDA Version: 12.3     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA RTX                     Off | 00000000:05:00.0 Off |                  Off |
+| 30%   34C    P0              70W / 300W |  400MiB / 4914000MiB |      4%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+```
 
-## Contributions
+Run `nvcc --version`. Expected output:
+```
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2023 NVIDIA Corporation
+Built on Fri_Nov__3_17:16:49_PDT_2023
+Cuda compilation tools, release 12.3, V12.3.103
+Build cuda_12.3.r12.3/compiler.33492891_0
+```
 
-Contributions to improve the script or add support for other platforms are welcome! Please feel free to open issues or submit pull requests.
+## Bittensor Installation
 
-## License
+### Step 1: Download and Prepare Installer
+```bash
+curl -sL https://raw.githubusercontent.com/neuralinternet/compute-subnet/main/Installation%20Script/install_sn27.sh
+ -o SN27_installer.sh
+chmod +x SN27_installer.sh
+```
 
-This script is released under the [MIT License](https://opensource.org/licenses/MIT).
+### Step 2: Run Installation Script
+```bash
+./SN27_installer.sh
+```
+
+The installer will:
+- Set up Docker with NVIDIA support
+- Configure PM2 and NodeJS
+- Create Python 3.10 virtual environment
+- Clone and set up Compute-Subnet repository
+- Install Bittensor dependencies
+
+## Post-Installation Verification
+
+### Enter Virtual Environment
+```bash
+source /home/ubuntu/venv/bin/activate
+```
+
+### Docker Verification
+```bash
+docker --version
+```
+
+### Bittensor CLI Verification
+```bash
+btcli --version
+```
+
+### Directory Check
+```bash
+cd /home/ubuntu/Compute-Subnet
+ls
+```
+
+## Running a Miner
+
+### Basic Miner Command
+```bash
+cd /home/ubuntu/Compute-Subnet
+pm2 start ./neurons/miner.py --name MINER --interpreter python3 -- \
+  --netuid 15 \
+  --subtensor.network test \
+  --wallet.name default \
+  --wallet.hotkey default \
+  --axon.port 8091 \
+  --logging.debug \
+  --miner.blacklist.force_validator_permit \
+  --auto_update yes
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+1. **Missing WANDB Key**
+   - Edit `/home/ubuntu/Compute-Subnet/.env`
+   - Add your WANDB API key
+
+2. **Unregistered Wallet**
+   - Register your coldkey on Bittensor network first
+   - Use `btcli register` command
+
+3. **Docker Permissions**
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+   Requires system relogin
+
+4. **Driver Issues**
+   - Manual installation required for non-Ubuntu 22.04 systems
+   - Verify with `nvidia-smi`
+   - Follow CUDA installation steps above if needed
+
+## Additional Resources
+- [Weights & Biases Documentation](https://docs.wandb.ai/)
+- [Bittensor Documentation](https://docs.bittensor.com/)
+- [Compute-Subnet Documentation](https://docs.neuralinternet.ai)
+- [NVIDIA CUDA Downloads](https://developer.nvidia.com/cuda-downloads)
