@@ -310,15 +310,39 @@ linux_configure_ufw() {
     ohai "Allowing SSH (port 22) through UFW..."
     sudo ufw allow 22/tcp
 
-    ohai "Opening ports 8091 and 4444 for verifiers..."
-    sudo ufw allow 8091/tcp
-    sudo ufw allow 4444/tcp
+    # If AUTOMATED mode is true, skip user input and use defaults:
+    if [[ "$AUTOMATED" == "true" ]]; then
+        port_4444=4444
+        port_8091=8091
+
+        ohai "AUTOMATED mode detected."
+        ohai "Opening port $port_4444 (validators/dashboard) and port $port_8091 (Axon)..."
+        sudo ufw allow "${port_4444}/tcp"
+        sudo ufw allow "${port_8091}/tcp"
+    else
+        # Otherwise, ask the user which ports to open:
+        echo "Enter the port number for validators/dashboard (Default: 4444)."
+        echo "    4444 is used by validators and dashboard to allocate the machine via SSH."
+        read -p "Port for validators/dashboard [4444]: " port_4444
+        port_4444="${port_4444:-4444}"  # If empty, default to 4444
+
+        echo "Enter the port number for Axon (Default: 8091)."
+        echo "    8091 is the typical port for Axon."
+        read -p "Port for Axon [8091]: " port_8091
+        port_8091="${port_8091:-8091}"  # If empty, default to 8091
+
+        ohai "Opening port $port_4444 (validators/dashboard) and port $port_8091 (Axon)..."
+        sudo ufw allow "${port_4444}/tcp"
+        sudo ufw allow "${port_8091}/tcp"
+    fi
 
     ohai "Enabling UFW..."
     sudo ufw --force enable
     
-    ohai "UFW configured. Open ports: 22 (SSH), 8091, 4444."
+    ohai "UFW configured. Open ports: 22 (SSH), $port_4444, $port_8091."
 }
+
+
 
 
 
