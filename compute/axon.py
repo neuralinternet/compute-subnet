@@ -191,14 +191,14 @@ class ComputeSubnetAxon(axon):
         
         # Build and check config.
         if config is None:
-            config = Axon.config()
+            config = axon.config()
         config = copy.deepcopy(config)
         config.axon.ip = ip or config.axon.ip
         config.axon.port = port or config.axon.port
         config.axon.external_ip = external_ip or config.axon.external_ip
         config.axon.external_port = external_port or config.axon.external_port
         config.axon.max_workers = max_workers or config.axon.max_workers
-        Axon.check_config(config)
+        axon.check_config(config)
         self.config = config  # type: ignore
 
         # Get wallet or use default.
