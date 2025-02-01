@@ -1,7 +1,6 @@
-```markdown
-# Bittensor NI Compute Subnet (Subnet 27)
+# NI Compute Subnet (Subnet 27)
 
-Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as **Subnet 27** or **SN27**). This subnet powers a decentralized compute market, enabling **miners** to contribute GPU resources for machine-intelligence tasks and earn rewards in return. **Validators** measure the performance of these miners and allocate GPU resources accordingly, ensuring an efficient, trustless, and permissionless compute market.
+Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a decentralized compute market, enabling **miners** to contribute GPU resources and earn rewards in return. **Validators** measure the performance of these miners and allocate GPU resources accordingly, ensuring an efficient, trustless, and permissionless compute market.
 
 ---
 
@@ -10,7 +9,7 @@ Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as *
 1. [Introduction](#introduction)
    - [Decentralizing Compute](#decentralizing-compute)
    - [Subnet 27 and Bittensor](#subnet-27-and-bittensor)
-2. [Key Repos and Resources](#key-repos-and-resources)
+2. [Key Resources](#key-resources)
 3. [Miner vs. Validator Overview](#miner-vs-validator-overview)
 4. [Installation and Prerequisites](#installation-and-prerequisites)
    - [System Requirements](#system-requirements)
@@ -43,21 +42,23 @@ Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as *
 **NI Compute** decentralizes GPU resources by weaving siloed pools of compute into a **trustless** market. This allows for scalable, on-demand GPU power, free from the constraints of centralized providers. Miners add GPU instances to the network, and validators ensure the reliability and performance of these resources.
 
 ### Subnet 27 and Bittensor
-**Subnet 27 (SN27)** is powered by the **Bittensor** network. Bittensor is a blockchain that incentivizes resource providers (miners) who contribute machine intelligence services. In SN27, the resource is **GPU-based compute**, which is crucial for training and running machine learning workloads.
+**NI Compute** is powered by the **Bittensor** network. Bittensor is a blockchain that incentivizes resource providers (miners) who contribute machine intelligence services. In SN27, the resource is **GPU-based compute**, which is crucial for training and running machine learning workloads.
 
 ---
 
-## Key Repos and Resources
+## Key Resources
 
+- **NI Compute App (Rent GPUs)**  
+  [Cloud Platform](https://app.neuralinternet.ai/)
+  
 - **Subnet 27 (This Repo)**  
   [GitHub: neuralinternet/compute-subnet](https://github.com/neuralinternet/compute-subnet)
 
 - **Bittensor**  
   [Bittensor Documentation](https://docs.bittensor.com/)  
-  [Installation Script](https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)
 
 - **Compute Subnet Discord Channel**  
-  [Join Discord](https://discord.gg/t7BMee4w)
+  [Join Discord](https://discord.gg/ZpaGVXfaCF)
 
 - **Real-Time Compute Subnet Metrics**  
   [OpenCompute Dashboard](https://opencompute.streamlit.app/)
@@ -65,7 +66,7 @@ Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as *
 - **Reward Program for Valuable Contributions**  
   [CONTRIBUTING.md](https://github.com/neuralinternet/compute-subnet/blob/main/CONTRIBUTING.md)
 
-> **Note**: We do **not** support container-based GPU platforms such as Runpod, VastAI, or Lambda. We strongly encourage providing your own hardware. If you cannot supply hardware in-house, recommended GPU providers include:
+> **Note**: We do **not** support container-based (dockerized) GPU platforms such as Runpod, VastAI, or Lambda. We strongly encourage providing your own hardware. If you cannot supply hardware in-house, recommended GPU providers include:
 > - Oracle
 > - Coreweave
 > - FluidStack
@@ -75,24 +76,25 @@ Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as *
 ---
 
 ## Miner vs. Validator Overview
+![Miner Overview Diagram](docs/sn27_miner_overview1.png)
 
 ### Miner
-- **Role**: Contribute processing resources (GPU instances) to the network.  
+- **Role**: Contribute resources (GPU instances) to the network.  
 - **Rewards**: Performance-based. Higher-performance devices with more GPUs receive higher rewards.  
 - **Key Requirements**:  
   - GPU(s) with up-to-date drivers.  
-  - Properly opened ports (default 4444) for validator allocations.  
+  - Properly opened ports. E.g. 4444 for validator allocations, 8091 for serving the axon.  
   - A registered wallet hotkey on the correct Bittensor subnet (netuid 27 for main, or netuid 15 for test).
 
 ### Validator
-- **Role**: Verifies the miners' computational integrity and assigns performance scores.  
+- **Role**: Verifies the miners' computational integrity, assigns performance scores, and dynamically allocates resources to clients.  
 - **Actions**:  
   - Requests performance data (e.g., GPU type, memory) from miners.  
   - Benchmarks or runs tasks to confirm advertised hardware.  
-  - Updates on-chain scores that determine miners’ reward weights.  
+  - Updates scores that determine miners’ reward weights.  
 - **Key Requirements**:  
-  - Sufficient stake (if required by the network rules).  
-  - Up-to-date code to ensure accurate scoring.  
+  - A registered wallet hotkey on the correct Bittensor subnet (netuid 27 for main, or netuid 15 for test).
+  - Up-to-date code to ensure accurate scoring.
 
 ---
 
@@ -101,21 +103,16 @@ Welcome to the **Bittensor NI Compute Subnet** repository (also referred to as *
 ### System Requirements
 - **Operating System**: Ubuntu 22.04 (recommended).
 - **Python**: 3.8 or higher.
-- **GPU**: NVIDIA GPU with installed drivers and the latest CUDA Toolkit (recommended).
+- **GPU**: NVIDIA GPU (recommended).
 
-> **Important**: Each wallet hotkey is limited to **one external IP**. Automatic blacklisting occurs for anomalous behavior.
+> **Important**: Each UID is limited to **one external IP**. **Port 4444 is to be opened** for your miner to be allocated properly. Automatic blacklisting occurs for anomalous behavior.
 
 ### Install Docker
 A Docker environment is required for miner resource allocation:
 
 1. **Install Docker** on Ubuntu:  
-   [Official Docs](https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository)
-   ```bash
-   sudo apt update
-   sudo apt install docker.io -y
-   sudo apt install docker-compose -y
-   sudo systemctl start docker
-   ```
+   [Official Docs](https://docs.docker.com/engine/install/ubuntu)
+
 2. **Verify Docker**:
    ```bash
    docker run hello-world
@@ -135,19 +132,44 @@ A Docker environment is required for miner resource allocation:
    ```bash
    export PATH=$PATH:$(python3 -m site --user-base)/bin
    ```
+which will give you an output similar to below:
+```
+usage: btcli <command> <command args>
+
+bittensor cli v6.9.4
+
+positional arguments:
+  {subnets,s,subnet,root,r,roots,wallet,w,wallets,stake,st,stakes,sudo,su,sudos,legacy,l,info,i}
+    subnets (s, subnet)
+                        Commands for managing and viewing subnetworks.
+    root (r, roots)     Commands for managing and viewing the root network.
+    wallet (w, wallets)
+                        Commands for managing and viewing wallets.
+    stake (st, stakes)  Commands for staking and removing stake from hotkey accounts.
+    sudo (su, sudos)    Commands for subnet management
+    legacy (l)          Miscellaneous commands.
+    info (i)            Instructions for enabling autocompletion for the CLI.
+
+options:
+  -h, --help            show this help message and exit
+  --print-completion {bash,zsh,tcsh}
+                        Print shell tab completion script
+```                       
+See Bittensor’s documentation for alternative installation instructions.
+[Bittensor Documentation](https://docs.bittensor.com/)  
 
 ### Create or Regenerate Keys
-1. **Create new coldkey** (stores main funds):
+1. **Create new coldkey** (stores funds):
    ```bash
    btcli w new_coldkey
    ```
-2. **Create new hotkey** (used for daily operations):
+2. **Create new hotkey** (used for daily operations e.g. mining/validating/registration):
    ```bash
    btcli w new_hotkey
    ```
 3. **Regenerate existing keys** if needed (to import them on this machine):
    ```bash
-   btcli w regen_coldkeypub
+   btcli w regen_coldkeypub #see below
    btcli w regen_coldkey
    btcli w regen_hotkey
    ```
@@ -158,7 +180,7 @@ A Docker environment is required for miner resource allocation:
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/neuralinternet/compute-subnet.git
-   cd compute-subnet
+   cd Compute-Subnet
    ```
 2. **Install dependencies**:
    ```bash
@@ -166,10 +188,15 @@ A Docker environment is required for miner resource allocation:
    python3 -m pip install --no-deps -r requirements-compute.txt
    python3 -m pip install -e .
    ```
+3. **In case you have missing requirements**:
+```
+sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
+```
 
 ### CUDA Toolkit and GPU Drivers
+> **Tip**: If Nvidia toolkit and drivers are already installed on your machine, scroll down to step 5 to verify then move on to the docker CUDA support.
 1. **Download** the latest CUDA from [NVIDIA's official page](https://developer.nvidia.com/cuda-downloads).  
-2. **Install** (example for Ubuntu 22.04):
+2. **Install** (example for Ubuntu 22.04 (Dec. 2024)):
    ```bash
    wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
    sudo dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
@@ -197,6 +224,35 @@ A Docker environment is required for miner resource allocation:
    nvidia-smi
    nvcc --version
    ```
+The output of which should look something like:
+```
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 545.29.06              Driver Version: 545.29.06    CUDA Version: 12.3     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA RTX                     Off | 00000000:05:00.0 Off |                  Off |
+| 30%   34C    P0              70W / 300W |  400MiB / 4914000MiB |      4%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+```
+```
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2023 NVIDIA Corporation
+Built on Fri_Nov__3_17:16:49_PDT_2023
+Cuda compilation tools, release 12.3, V12.3.103
+Build cuda_12.3.r12.3/compiler.33492891_0
+```
 
 ### NVIDIA Docker Support
 Enable GPU functionality within Docker containers:
@@ -215,14 +271,14 @@ sudo apt install -y nvidia-docker2
 1. **Create a free WandB account**: [wandb.ai](https://wandb.ai/)  
 2. **Obtain an API Key** and place it into your `.env` file:
    ```bash
-   cd compute-subnet
-   cp .env.example .env
+   cd Compute-Subnet
+   mv .env.example .env
    # Replace the placeholder with your actual API key
    ```
 3. **Monitor stats** at [WandB: neuralinternet/opencompute](https://wandb.ai/neuralinternet/opencompute)
 
 ### PM2 Setup
-**PM2** helps keep your miner or validator running persistently, even across crashes or reboots.
+**PM2** Proccess manager is great for monitoring the operation and helps keep your miner or validator running persistently.
 
 ```bash
 sudo apt update
@@ -270,7 +326,7 @@ You need **$TAO** tokens in your coldkey to register the hotkey on the chosen ne
   ```
 
 > If you get the error `too many registrations this interval`, wait for the next interval and retry.  
-> **Registration cost** can be checked in Bittensor docs or relevant explorers.
+> **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration).
 
 ---
 
@@ -284,16 +340,17 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
   --subtensor.network finney \
   --wallet.name <COLDKEY_NAME> \
   --wallet.hotkey <HOTKEY_NAME> \
-  --axon.port 4444 \
+  --axon.port <xxxx> \
   --logging.debug
 ```
 
 - **`--netuid`**: Subnet ID (27 for main, 15 for test).
 - **`--subtensor.network`**: Your Bittensor chain endpoint.  
-  - **Main**: `finney`  
-  - Or use a custom endpoint, e.g. `subvortex.info:9944`
+  - **Main**: `finney`
+  - **Test**: `test`  
+  - Or use a custom endpoint, e.g. `subvortex.info:9944` (recommended)
 - **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created.
-- **`--axon.port`**: The port opened (e.g., 4444).
+- **`--axon.port`**: A port opened in your custom range as instructed above (e.g., 8091).
 
 ### Miner Options
 - `--miner.whitelist.not.enough.stake`: Whitelist validators lacking sufficient stake (default: False).
@@ -368,6 +425,7 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
 ```
 
 ---
+![Network Overview Diagram](docs/sn27_networkoverview1.png)
 
 ## Troubleshooting
 - **No requests received (no ‘Challenge’ or ‘Specs’ events)**:
