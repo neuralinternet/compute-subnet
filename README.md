@@ -273,7 +273,7 @@ sudo apt install -y nvidia-docker2
    ```bash
    cd Compute-Subnet
    mv .env.example .env
-   # Replace the placeholder with your actual API key
+   # Use VIM or another text aditor to replace the placeholder with your actual API key
    ```
 3. **Monitor stats** at [WandB: neuralinternet/opencompute](https://wandb.ai/neuralinternet/opencompute)
 
