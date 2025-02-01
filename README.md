@@ -1,4 +1,4 @@
-# Compute Subnet
+# NI Compute
 
 [![Discord Chat](https://img.shields.io/discord/308323056592486420.svg)](https://discord.gg/bittensor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -9,7 +9,7 @@
 
 [Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Research](https://bittensor.com/whitepaper)
 
-This repository contains all the necessary files and functions to define Bittensor's Compute Subnet. It enables running miners on netuid 15 in Bittensor's test network or netuid 27 in Bittensor's main network.
+This repository contains all the necessary files and functions to define NI's Compute Subnet. It enables running miners on netuid 15 in Bittensor's test network or netuid 27 in Bittensor's main network.
 
 ## Introduction
 
