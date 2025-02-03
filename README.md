@@ -186,6 +186,7 @@ python -m validator.py
     --wallet.hotkey <your validator hotkey> # hotkey name of your wallet
     --logging.debug # Run in debug mode, alternatively --logging.trace for trace mode
 ```
+**Note**: Validators are required to operate on a local Subtensor instance, as using Finney may result in rate limitations.
 
 ## Understanding the Score Calculation Process
 
@@ -299,6 +300,8 @@ Flags that you can use with the validator script.
 - `--validator.specs.batch.size <size>`: (Optional) Batch size that perform the specs queries - For lower hardware specifications you might want to use a different batch_size than default. Keep in mind the lower is the batch_size the longer it will take to perform all challenge queries. Default: 64.
 - `--validator.force.update.prometheus`: (Optional) Force the try-update of prometheus version. Default: False.
 - `--validator.whitelist.updated.threshold`: (Optional) Total quorum before starting the whitelist. Default: 60. (%)
+
+**Note**: Validators are required to operate on a local Subtensor instance, as using Finney may result in rate limitations.
 
 ## Miners options
 
