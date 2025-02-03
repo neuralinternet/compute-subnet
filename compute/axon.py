@@ -18,31 +18,44 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# Standard library
 import copy
-import json
-import uuid
-from typing import Optional
-
-import bittensor
-import bittensor.utils.networking as net
 import time
-import uvicorn
-from bittensor.core.axon import Axon as axon
-from bittensor.core.subtensor import Subtensor as subtensor
+import uuid
+from inspect import Signature
+from typing import TYPE_CHECKING, Callable, Optional
 
-from bittensor.core.axon import FastAPIThreadedServer, AxonMiddleware
+# Third-party
+import uvicorn
 from fastapi import FastAPI, APIRouter
-from rich.prompt import Confirm
 from starlette.requests import Request
 
+# Bittensor
+import bittensor
+from bittensor.core.axon import Axon as axon
+from bittensor.core.axon import FastAPIThreadedServer, AxonMiddleware
+from bittensor.core.subtensor import Subtensor as subtensor
+from bittensor.core.config import Config
+from bittensor.core.threadpool import PriorityThreadPoolExecutor
+from bittensor.core.extrinsics.serving import do_serve_axon
+from bittensor.utils.btlogging import logging
+from bittensor.utils import format_error_message, networking as net
+from bittensor.utils import ( format_error_message, networking as net, unlock_key, Certificate )
+
+# Local
 from compute import __version_as_int__
-from compute.prometheus import prometheus_extrinsic
 from compute.utils.version import get_local_version
 
-
-def serve_extrinsic(
-    subtensor: "bittensor.core.subtensor",
-    wallet: "bittensor.wallet",
+if TYPE_CHECKING:
+    from bittensor.core.axon import Axon
+    from bittensor.core.subtensor import Subtensor
+    from bittensor.core.types import AxonServeCallParams
+    from bittensor_wallet import Wallet
+    from bittensor.core.subtensor import Subtensor
+    
+def custom_serve_extrinsic(
+    subtensor: "Subtensor",
+    wallet: "Wallet",
     ip: str,
     port: int,
     protocol: int,
@@ -50,43 +63,32 @@ def serve_extrinsic(
     placeholder1: int = 0,
     placeholder2: int = 0,
     wait_for_inclusion: bool = False,
-    wait_for_finalization=True,
-    prompt: bool = False,
+    wait_for_finalization: bool = True,
+    certificate: Certificate | None = None,
 ) -> bool:
-    r"""Subscribes a bittensor endpoint to the subtensor chain.
+    """Subscribes a Bittensor endpoint to the subtensor chain.
+
     Args:
-        wallet (bittensor.wallet):
-            bittensor wallet object.
-        ip (str):
-            endpoint host port i.e. 192.122.31.4
-        port (int):
-            endpoint port number i.e. 9221
-        protocol (int):
-            int representation of the protocol
-        netuid (int):
-            network uid to serve on.
-        placeholder1 (int):
-            placeholder for future use.
-        placeholder2 (int):
-            placeholder for future use.
-        wait_for_inclusion (bool):
-            if set, waits for the extrinsic to enter a block before returning true,
-            or returns false if the extrinsic fails to enter the block within the timeout.
-        wait_for_finalization (bool):
-            if set, waits for the extrinsic to be finalized on the chain before returning true,
-            or returns false if the extrinsic fails to be finalized within the timeout.
-        prompt (bool):
-            If true, the call waits for confirmation from the user before proceeding.
+        subtensor (bittensor.core.subtensor.Subtensor): Subtensor instance object.
+        wallet (bittensor_wallet.Wallet): Bittensor wallet object.
+        ip (str): Endpoint host port i.e., ``192.122.31.4``.
+        port (int): Endpoint port number i.e., ``9221``.
+        protocol (int): An ``int`` representation of the protocol.
+        netuid (int): The network uid to serve on.
+        placeholder1 (int): A placeholder for future use.
+        placeholder2 (int): A placeholder for future use.
+        wait_for_inclusion (bool): If set, waits for the extrinsic to enter a block before returning ``true``, or returns ``false`` if the extrinsic fails to enter the block within the timeout.
+        wait_for_finalization (bool): If set, waits for the extrinsic to be finalized on the chain before returning ``true``, or returns ``false`` if the extrinsic fails to be finalized within the timeout.
+        certificate (Certificate | None): An optional certificate object that can be used for secure communication.
     Returns:
-        success (bool):
-            flag is true if extrinsic was finalized or uncluded in the block.
-            If we did not wait for finalization / inclusion, the response is true.
+        success (bool): Flag is ``true`` if extrinsic was finalized or uncluded in the block. If we did not wait for finalization / inclusion, the response is ``true``.
     """
     # Decrypt hotkey
-    wallet.hotkey
-    version = __version_as_int__
+    if not (unlock := unlock_key(wallet, "hotkey")).success:
+        logging.error(unlock.message)
+        return False
     params: "AxonServeCallParams" = {
-        "version": version,
+        "version": __version_as_int__,
         "ip": net.ip_to_int(ip),
         "port": port,
         "ip_type": net.ip_version(ip),
@@ -96,13 +98,14 @@ def serve_extrinsic(
         "protocol": protocol,
         "placeholder1": placeholder1,
         "placeholder2": placeholder2,
+        "certificate": certificate,
     }
-    bittensor.logging.debug("Checking axon ...")
+    logging.debug("Checking axon ...")
     neuron = subtensor.get_neuron_for_pubkey_and_subnet(
         wallet.hotkey.ss58_address, netuid=netuid
     )
     neuron_up_to_date = not neuron.is_null and params == {
-        "version": neuron.axon_info.version,
+        "version": __version_as_int__,
         "ip": net.ip_to_int(neuron.axon_info.ip),
         "port": neuron.axon_info.port,
         "ip_type": neuron.axon_info.ip_type,
@@ -117,26 +120,16 @@ def serve_extrinsic(
     output["coldkey"] = wallet.coldkeypub.ss58_address
     output["hotkey"] = wallet.hotkey.ss58_address
     if neuron_up_to_date:
-        bittensor.logging.debug(
+        logging.debug(
             f"Axon already served on: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) "
         )
         return True
 
-    if prompt:
-        output = params.copy()
-        output["coldkey"] = wallet.coldkeypub.ss58_address
-        output["hotkey"] = wallet.hotkey.ss58_address
-        if not Confirm.ask(
-            "Do you want to serve axon:\n  [bold white]{}[/bold white]".format(
-                json.dumps(output, indent=4, sort_keys=True)
-            )
-        ):
-            return False
-
-    bittensor.logging.debug(
-        f"Serving axon with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) -> {subtensor.network}:{netuid}:{version}"
+    logging.debug(
+        f"Serving axon with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) -> {subtensor.network}:{netuid}"
     )
-    success, error_message = subtensor._do_serve_axon(
+    success, error_message = do_serve_axon(
+        self=subtensor,
         wallet=wallet,
         call_params=params,
         wait_for_finalization=wait_for_finalization,
@@ -144,17 +137,18 @@ def serve_extrinsic(
     )
 
     if wait_for_inclusion or wait_for_finalization:
-        if success == True:
-            bittensor.logging.debug(f"Axon served.")
+        if success is True:
+            logging.debug(
+                f"Axon served with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) on {subtensor.network}:{netuid} "
+            )
             return True
         else:
-            bittensor.logging.debug(
-                f"Axon failed to served with error: {error_message} "
-            )
+            logging.error(f"Failed: {format_error_message(error_message)}")
             return False
     else:
         return True
 
+bittensor.core.extrinsics.serving.serve_extrinsic = custom_serve_extrinsic
 
 class ComputeSubnetSubtensor(subtensor):
     def __init__(
@@ -171,138 +165,79 @@ class ComputeSubnetSubtensor(subtensor):
             log_verbose=log_verbose,
         )
 
-    #################
-    #### Serving ####
-    #################
-    def serve(
-        self,
-        wallet: "bittensor.wallet",
-        ip: str,
-        port: int,
-        protocol: int,
-        netuid: int,
-        placeholder1: int = __version_as_int__,
-        placeholder2: int = 0,
-        wait_for_inclusion: bool = False,
-        wait_for_finalization=True,
-        prompt: bool = False,
-    ) -> bool:
-        serve_extrinsic(
-            self,
-            wallet,
-            ip,
-            port,
-            protocol,
-            netuid,
-            placeholder1,
-            placeholder2,
-            wait_for_inclusion,
-            wait_for_finalization,
-        )
-
-    def serve_prometheus(
-        self,
-        wallet: "bittensor.wallet",
-        port: int,
-        netuid: int,
-        wait_for_inclusion: bool = False,
-        wait_for_finalization: bool = True,
-        force_update: bool = False,
-    ) -> bool:
-        return prometheus_extrinsic(
-            self,
-            wallet=wallet,
-            port=port,
-            netuid=netuid,
-            wait_for_inclusion=wait_for_inclusion,
-            wait_for_finalization=wait_for_finalization,
-            force_update=force_update,
-        )
-
 
 class ComputeSubnetAxon(axon):
     def __init__(
         self,
-        wallet: "bittensor.wallet" = None,
-        config: Optional["bittensor.config"] = None,
+        wallet: Optional["Wallet"] = None,
+        config: Optional["Config"] = None,
         port: Optional[int] = None,
         ip: Optional[str] = None,
         external_ip: Optional[str] = None,
         external_port: Optional[int] = None,
         max_workers: Optional[int] = None,
-    ) -> "bittensor.core.axon":
-        r"""Creates a new bittensor.core.axon object from passed arguments.
+    ):
+        """Creates a new bittensor.Axon object from passed arguments.
+
         Args:
-            config (:obj:`Optional[bittensor.config]`, `optional`):
-                bittensor.core.axon.config()
-            wallet (:obj:`Optional[bittensor.wallet]`, `optional`):
-                bittensor wallet with hotkey and coldkeypub.
-            port (:type:`Optional[int]`, `optional`):
-                Binding port.
-            ip (:type:`Optional[str]`, `optional`):
-                Binding ip.
-            external_ip (:type:`Optional[str]`, `optional`):
-                The external ip of the server to broadcast to the network.
-            external_port (:type:`Optional[int]`, `optional`):
-                The external port of the server to broadcast to the network.
-            max_workers (:type:`Optional[int]`, `optional`):
-                Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
+            config (:obj:`Optional[bittensor.core.config.Config]`): bittensor.Axon.config()
+            wallet (:obj:`Optional[bittensor_wallet.Wallet]`): bittensor wallet with hotkey and coldkeypub.
+            port (:type:`Optional[int]`): Binding port.
+            ip (:type:`Optional[str]`): Binding ip.
+            external_ip (:type:`Optional[str]`): The external ip of the server to broadcast to the network.
+            external_port (:type:`Optional[int]`): The external port of the server to broadcast to the network.
+            max_workers (:type:`Optional[int]`): Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
         """
+        
         # Build and check config.
         if config is None:
             config = axon.config()
         config = copy.deepcopy(config)
-        config.axon.ip = ip or config.axon.get("ip", bittensor.core.settings.DEFAULTS.axon.ip)
-        config.axon.port = port or config.axon.get("port", bittensor.core.settings.DEFAULTS.axon.port)
-        config.axon.external_ip = external_ip or config.axon.get(
-            "external_ip", bittensor.core.settings.DEFAULTS.axon.external_ip
-        )
-        config.axon.external_port = external_port or config.axon.get(
-            "external_port", bittensor.core.settings.DEFAULTS.axon.external_port
-        )
-        config.axon.max_workers = max_workers or config.axon.get(
-            "max_workers", bittensor.core.settings.DEFAULTS.axon.max_workers
-        )
+        config.axon.ip = ip or config.axon.ip
+        config.axon.port = port or config.axon.port
+        config.axon.external_ip = external_ip or config.axon.external_ip
+        config.axon.external_port = external_port or config.axon.external_port
+        config.axon.max_workers = max_workers or config.axon.max_workers
         axon.check_config(config)
-        self.config = config
+        self.config = config  # type: ignore
 
         # Get wallet or use default.
-        self.wallet = wallet or bittensor.wallet()
+        self.wallet = wallet or Wallet(config=self.config)
 
         # Build axon objects.
         self.uuid = str(uuid.uuid1())
-        self.ip = self.config.axon.ip
-        self.port = self.config.axon.port
+        self.ip = self.config.axon.ip  # type: ignore
+        self.port = self.config.axon.port  # type: ignore
         self.external_ip = (
-            self.config.axon.external_ip
-            if self.config.axon.external_ip != None
-            else bittensor.utils.networking.get_external_ip()
+            self.config.axon.external_ip  # type: ignore
+            if self.config.axon.external_ip is not None  # type: ignore
+            else net.get_external_ip()
         )
         self.external_port = (
-            self.config.axon.external_port
-            if self.config.axon.external_port != None
-            else self.config.axon.port
+            self.config.axon.external_port  # type: ignore
+            if self.config.axon.external_port is not None  # type: ignore
+            else self.config.axon.port  # type: ignore
         )
-        self.full_address = str(self.config.axon.ip) + ":" + str(self.config.axon.port)
+        self.full_address = str(self.config.axon.ip) + ":" + str(self.config.axon.port)  # type: ignore
         self.started = False
-
+        
         # Build middleware
-        self.thread_pool = bittensor.PriorityThreadPoolExecutor(
-            max_workers=self.config.axon.max_workers
+        self.thread_pool = PriorityThreadPoolExecutor(
+            max_workers=self.config.axon.max_workers  # type: ignore
         )
-        self.nonces = {}
-        self.middleware_cls = ComputeSubnetAxonMiddleware
+        self.nonces: dict[str, int] = {}
+        
         # Request default functions.
-        self.forward_class_types = {}
-        self.blacklist_fns = {}
-        self.priority_fns = {}
-        self.forward_fns = {}
-        self.verify_fns = {}
-        self.required_hash_fields = {}
+        self.forward_class_types: dict[str, list[Signature]] = {}
+        self.blacklist_fns: dict[str, Callable | None] = {}
+        self.priority_fns: dict[str, Callable | None] = {}
+        self.forward_fns: dict[str, Callable | None] = {}
+        self.verify_fns: dict[str, Callable | None] = {}
+
 
         # Instantiate FastAPI
         self.app = FastAPI()
-        log_level = "trace" if bittensor.logging.__trace_on__ else "critical"
+        log_level = "trace" if logging.__trace_on__ else "critical"
         self.fast_config = uvicorn.Config(
             self.app, host="0.0.0.0", port=self.config.axon.port, log_level=log_level
         )
@@ -311,7 +246,8 @@ class ComputeSubnetAxon(axon):
         self.app.include_router(self.router)
 
         # Build ourselves as the middleware.
-        self.app.add_middleware(ComputeSubnetAxonMiddleware, axon=self)
+        self.middleware_cls = ComputeSubnetAxonMiddleware
+        self.app.add_middleware(self.middleware_cls, axon=self)
 
         # Attach default forward.
         def ping(r: bittensor.Synapse) -> bittensor.Synapse:
