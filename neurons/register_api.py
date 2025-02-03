@@ -916,7 +916,7 @@ class RegisterAPI:
                                "description": "An error occurred while restarting docker.",
                            },
                        })
-        async def restart_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+        async def restart_docker(hotkey: str, uuid_key: str, ssh_key:str) -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -943,7 +943,7 @@ class RegisterAPI:
 
                     docker_action = {
                         "action": "restart",
-                        "ssh_key": "",
+                        "ssh_key": ssh_key,
                     }
 
                     if uuid_key_db == uuid_key:
@@ -1019,7 +1019,7 @@ class RegisterAPI:
                                  "description": "An error occurred while pausing docker.",
                             },
                           })
-        async def pause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+        async def pause_docker(hotkey: str, uuid_key: str, ssh_key:str) -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1046,7 +1046,7 @@ class RegisterAPI:
 
                     docker_action = {
                         "action": "pause",
-                        "ssh_key": "",
+                        "ssh_key": ssh_key,
                     }
 
                     if uuid_key_db == uuid_key:
@@ -1123,7 +1123,7 @@ class RegisterAPI:
                                     "description": "An error occurred while unpausing docker.",
                                 },
                             })
-        async def unpause_docker(hotkey: str, uuid_key: str) -> JSONResponse:
+        async def unpause_docker(hotkey: str, uuid_key: str, ssh_key: str) -> JSONResponse:
             # Instantiate the connection to the db
             db = ComputeDb()
             cursor = db.get_cursor()
@@ -1150,7 +1150,7 @@ class RegisterAPI:
 
                     docker_action = {
                         "action": "unpause",
-                        "ssh_key": "",
+                        "ssh_key": ssh_key,
                     }
 
                     if uuid_key_db == uuid_key:
