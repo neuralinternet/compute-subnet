@@ -272,10 +272,8 @@ sudo apt install -y nvidia-docker2
 1. **Create a free WandB account**: [wandb.ai](https://wandb.ai/)  
 2. **Obtain an API Key** and place it into your `.env` file:
    ```bash
-   cd Compute-Subnet
-   mv .env.example .env
-   # Use VIM or another text aditor to replace the placeholder with your actual API key
-   ```
+   cd compute-subnet
+   read -p "Enter WanDB API key: " wandb_api_key && sed -e s/"your_api_key"/"${wandb_api_key}"/ .env.example > .env
 3. **Monitor stats** at [WandB: neuralinternet/opencompute](https://wandb.ai/neuralinternet/opencompute)
 
 ### PM2 Setup
