@@ -338,7 +338,7 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
   --subtensor.network finney \
   --wallet.name <COLDKEY_NAME> \
   --wallet.hotkey <HOTKEY_NAME> \
-  --axon.port <xxxx> \
+  --axon.port 8091 \
   --logging.debug
 ```
 
