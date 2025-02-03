@@ -28,7 +28,7 @@ import docker
 from io import BytesIO
 import sys
 from docker.types import DeviceRequest
-
+from compute import __version_as_int__
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -194,7 +194,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Check the status to determine if the container ran successfully
         if container.status == "created":
             bt.logging.info("Container was created successfully.")
-            info = {"username": "root", "password": password, "port": docker_ssh_port}
+            info = {"username": "root", "password": password, "port": docker_ssh_port, "version" : __version_as_int__}
             info_str = json.dumps(info)
             public_key = public_key.encode("utf-8")
             encrypted_info = rsa.encrypt_data(public_key, info_str)
