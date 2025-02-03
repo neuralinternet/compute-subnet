@@ -329,7 +329,7 @@ You need **$TAO** tokens in your coldkey to register the hotkey on the chosen ne
   ```
 
 > If you get the error `too many registrations this interval`, wait for the next interval and retry.  
-> **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration). Or check using the CLI w/ `btcli subnet lock-cost`.
+> **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration). Or check using the CLI w/ `btcli s list` (Cost is 'RECYCLE').
 
 ---
 
