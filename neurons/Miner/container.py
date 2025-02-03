@@ -96,7 +96,7 @@ def kill_container():
         return False
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict,testing: bool):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict, testing: bool):
     try:
         client, containers = get_docker()
         # Configuration
