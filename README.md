@@ -131,7 +131,8 @@ A Docker environment is required for miner resource allocation:
    ```
    If you get a command-not-found error, add Bittensor to your PATH:
    ```bash
-   export PATH=$PATH:$(python3 -m site --user-base)/bin
+   echo 'export PATH=$PATH:$(python3 -m site --user-base)/bin' >> ~/.bashrc
+   source ~/.bashrc
    ```
 which will give you an output similar to below:
 ```
@@ -296,12 +297,11 @@ Open necessary ports:
    sudo apt install ufw
    sudo ufw allow 4444
    sudo ufw allow 22/tcp
-   #below is an example axon port
-   #sudo ufw allow 8091/tcp
+   sudo ufw allow 8091/tcp #can be altered to a port of your choice. See below in README.md
    sudo ufw enable
    sudo ufw status
    ```
-> **Tip**: You can open any ports: `sudo ufw allow xxxx/tcp` and use them as your `axon.port` e.g. `sudo ufw allow 8091/tcp` and this port would be specified in your pm2 miner proccess arguments as `--axon.port 8091`. If you are using a cloud server it is a good idea to check with your provider if ports are open by default. If you can create your own network rules make sure these inbound rules are applied to the server. Ask your provider for assitance with this netowrking step. 
+> **Tip**: You can open any ports: `sudo ufw allow xxxx/tcp` and use them as your `axon.port` default e.g. `sudo ufw allow 8091/tcp` and this port would be specified in your pm2 miner proccess arguments as `--axon.port 8091`. If you are using a cloud server it is a good idea to check with your provider if ports are open by default. If you can create your own network rules make sure these inbound rules are applied to the server. Ask your provider for assitance with this netowrking step. 
 
 3. **Add user to docker group** (if not already):
    ```bash
