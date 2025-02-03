@@ -102,8 +102,8 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 ## Installation and Prerequisites
 
 ### System Requirements
-- **Operating System**: Ubuntu 22.04 (recommended).
-- **Python**: 3.8 or higher.
+- **Operating System**: Ubuntu 22.04 (recommended) or higher.
+- **Python**: 3.10 or higher.
 - **GPU**: NVIDIA GPU (recommended).
 
 > **Important**: Each UID is limited to **one external IP**. **Port 4444 is to be opened** for your miner to be allocated properly. Automatic blacklisting occurs for anomalous behavior.
