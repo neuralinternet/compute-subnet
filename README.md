@@ -374,6 +374,8 @@ pm2 monit
 
 ---
 
+**Note**: Validators are required to operate on a local Subtensor instance (subvortex recommended), as using Finney may result in rate limitations.
+
 ## Running a Validator
 Validators measure and score miner performance, adjusting on-chain weights accordingly.
 
@@ -419,7 +421,6 @@ pm2 start ./neurons/validator.py --name <VALIDATOR_NAME> --interpreter python3 -
 
 1. **Base GPU Score**: Tied to the GPU model.  
 2. **Scaling**: Up to 8 GPUs can be recognized. The top theoretical scenario (8 of the highest GPU model) is set to 50 points.  
-3. **Allocation Bonus**: If your miner is actively allocated, your GPU score is **doubled**, up to 100 total.
 
 ---
 

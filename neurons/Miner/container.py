@@ -28,7 +28,6 @@ import docker
 from io import BytesIO
 import sys
 from docker.types import DeviceRequest
-
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -98,7 +97,7 @@ def kill_container():
         return False
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict, testing: bool):
     try:
         client, containers = get_docker()
         # Configuration
@@ -156,7 +155,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
         # Determine container name based on ssh key
-        container_to_run = container_name if docker_ssh_key else container_name_test
+        container_to_run = container_name_test if testing else container_name
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]

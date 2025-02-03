@@ -8,10 +8,11 @@ igpu==0.1.2
 numpy==2.0.2
 psutil==5.9.8
 pyinstaller==6.4.0
-wandb==0.19.1
+wandb==0.19.4
 pyfiglet==1.0.2
 python-dotenv==1.0.1
 requests==2.31.0
 paramiko==3.4.1
 blake3
 ipwhois==1.3.0
+torch==2.5.1
