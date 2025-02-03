@@ -63,7 +63,7 @@ def custom_serve_extrinsic(
     placeholder1: int = 0,
     placeholder2: int = 0,
     wait_for_inclusion: bool = False,
-    wait_for_finalization=True,
+    wait_for_finalization: bool = True,
     certificate: Optional[Certificate] = None,
 ) -> bool:
     """Subscribes a Bittensor endpoint to the subtensor chain.
@@ -79,7 +79,7 @@ def custom_serve_extrinsic(
         placeholder2 (int): A placeholder for future use.
         wait_for_inclusion (bool): If set, waits for the extrinsic to enter a block before returning ``true``, or returns ``false`` if the extrinsic fails to enter the block within the timeout.
         wait_for_finalization (bool): If set, waits for the extrinsic to be finalized on the chain before returning ``true``, or returns ``false`` if the extrinsic fails to be finalized within the timeout.
-
+        certificate (Certificate | None): An optional certificate object that can be used for secure communication.
     Returns:
         success (bool): Flag is ``true`` if extrinsic was finalized or uncluded in the block. If we did not wait for finalization / inclusion, the response is ``true``.
     """
@@ -229,10 +229,10 @@ class ComputeSubnetAxon(axon):
         
         # Request default functions.
         self.forward_class_types: dict[str, list[Signature]] = {}
-        self.blacklist_fns: dict[str, Optional[Callable]] = {}
-        self.priority_fns: dict[str, Optional[Callable]] = {}
-        self.forward_fns: dict[str, Optional[Callable]] = {}
-        self.verify_fns: dict[str, Optional[Callable]] = {}
+        self.blacklist_fns: dict[str, Callable | None] = {}
+        self.priority_fns: dict[str, Callable | None] = {}
+        self.forward_fns: dict[str, Callable | None] = {}
+        self.verify_fns: dict[str, Callable | None] = {}
 
 
         # Instantiate FastAPI
