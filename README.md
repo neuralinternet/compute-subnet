@@ -209,14 +209,11 @@ sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
    ```
 3. **Set environment variables**:
    ```bash
-   export CUDA_VERSION=cuda-12.3
-   export PATH=$PATH:/usr/local/$CUDA_VERSION/bin
-   export LD_LIBRARY_PATH=/usr/local/$CUDA_VERSION/lib64
    echo "" >> ~/.bashrc
-   echo "PATH=$PATH" >> ~/.bashrc
-   echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> ~/.bashrc
+   echo 'export CUDA_VERSION=cuda-12.3' >> ~/.bashrc
+   echo 'export PATH="$PATH:/usr/local/$CUDA_VERSION/bin"' >> ~/.bashrc
+   echo 'export LD_LIBRARY_PATH="/usr/local/$CUDA_VERSION/lib64:$LD_LIBRARY_PATH"' >> ~/.bashrc
    source ~/.bashrc
-   ```
 4. **Reboot** to finalize changes:
    ```bash
    sudo reboot
