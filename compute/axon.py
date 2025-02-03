@@ -83,8 +83,11 @@ def custom_serve_extrinsic(
     wait_for_inclusion: bool = False,
     wait_for_finalization: bool = True,
     certificate: Certificate | None = None,
+<<<<<<< HEAD
     wait_for_finalization: bool = True,
     certificate: Certificate | None = None,
+=======
+>>>>>>> 1df75b2 (fix: update type hint for certificate parameter in custom_serve_extrinsic to support union type)
 ) -> bool:
     """Subscribes a Bittensor endpoint to the subtensor chain.
 
