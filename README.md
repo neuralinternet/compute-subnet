@@ -347,7 +347,7 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
   - **Main**: `finney`
   - **Test**: `test`  
   - Or use a custom endpoint, e.g. `subvortex.info:9944` (recommended)
-- **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created.
+- **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created [above](#create-or-regenerate-keys) and used in registration (btcli's defaults are `default` and `default` but both can be freely customized)
 - **`--axon.port`**: default 8091 can be replaced with any port number allowed by ufw as instructed [above](#networking-and-firewall) to serve your axon. Important for proper functionality and miner<->validator communication.
 - **`--ssh.port`**: A port opened with UFW as instructed [above](#networking-and-firewall) (e.g., 4444) used for allocating your miner via ssh.
 
