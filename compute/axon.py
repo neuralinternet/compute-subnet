@@ -64,7 +64,7 @@ def custom_serve_extrinsic(
     placeholder2: int = 0,
     wait_for_inclusion: bool = False,
     wait_for_finalization: bool = True,
-    certificate: Optional[Certificate] = None,
+    certificate: Certificate | None = None,
 ) -> bool:
     """Subscribes a Bittensor endpoint to the subtensor chain.
 
