@@ -311,7 +311,7 @@ class RegisterAPI:
         if self.config.logging.trace:
             self.app = FastAPI(debug=False)
         else:
-            self.app = FastAPI(debug=False, docs_url=None, redoc_url=None)
+            self.app = FastAPI(debug=False, docs_url="/docs", redoc_url=None)
 
         load_dotenv()
         self._setup_routes()
