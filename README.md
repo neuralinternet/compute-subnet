@@ -182,7 +182,7 @@ See Bittensor’s documentation for alternative installation instructions.
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/neuralinternet/compute-subnet.git
-   cd Compute-Subnet
+   cd compute-subnet
    ```
 2. **Install dependencies**:
    ```bash
