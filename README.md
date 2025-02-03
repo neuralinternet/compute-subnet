@@ -30,9 +30,10 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
    - [Validator Options](#validator-options)
 9. [GPU Scoring](#gpu-scoring)
 10. [Resource Allocation Mechanism](#resource-allocation-mechanism)
-11. [Troubleshooting](#troubleshooting)
-12. [Reward Program for Contributions](#reward-program-for-contributions)
-13. [License](#license)
+11. [Network Overview Diagram](#network-overview-diagram)
+12. [Troubleshooting](#troubleshooting)
+13. [Reward Program for Contributions](#reward-program-for-contributions)
+14. [License](#license)
 
 ---
 
@@ -297,12 +298,14 @@ Open necessary ports:
    sudo apt install ufw
    sudo ufw allow 4444
    sudo ufw allow 22/tcp
+   #below is an example axon port
+   #sudo ufw allow 8091/tcp
    sudo ufw enable
    sudo ufw status
    ```
-   You can open any custom range: `sudo ufw allow XXXX:YYYY/tcp` and use them as your `axon.port`.
+> **Tip**: You can open any ports: `sudo ufw allow xxxx/tcp` and use them as your `axon.port` e.g. `sudo ufw allow 8091/tcp` and this port would be specified in your pm2 miner proccess arguments as `--axon.port 8091`. If you are using a cloud server it is a good idea to check with your provider if ports are open by default. If you can create your own network rules make sure these inbound rules are applied to the server. Ask your provider for assitance with this netowrking step. 
 
-2. **Add user to docker group** (if not already):
+3. **Add user to docker group** (if not already):
    ```bash
    sudo groupadd docker
    sudo usermod -aG docker $USER
@@ -326,7 +329,7 @@ You need **$TAO** tokens in your coldkey to register the hotkey on the chosen ne
   ```
 
 > If you get the error `too many registrations this interval`, wait for the next interval and retry.  
-> **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration).
+> **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration). Or check using the CLI w/ `btcli subnet lock-cost`.
 
 ---
 
@@ -350,7 +353,9 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
   - **Test**: `test`  
   - Or use a custom endpoint, e.g. `subvortex.info:9944` (recommended)
 - **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created.
-- **`--axon.port`**: A port opened in your custom range as instructed above (e.g., 8091).
+- **`--axon.port`**: A port opened with UFW as instructed [above](#networking-and-firewall) (e.g., 8091) to serve your axon. Important for proper functionality and miner<->validator communication.
+- **`--ssh.port`**: A port opened with UFW as instructed [above](#networking-and-firewall) (e.g., 4444) used for allocating your miner via ssh.
+
 
 ### Miner Options
 - `--miner.whitelist.not.enough.stake`: Whitelist validators lacking sufficient stake (default: False).
@@ -425,12 +430,13 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
 ```
 
 ---
+## Network Overview Diagram
 ![Network Overview Diagram](docs/sn27_networkoverview1.png)
 
 ## Troubleshooting
 - **No requests received (no ‘Challenge’ or ‘Specs’ events)**:
-  - Check your open ports (default 4444).
-  - Check your firewall.
+  - Check your open ports (default allocation port: 4444). Check your Axon port is open with your machine or cloud provider. Use `pm2 describe <PROCCESS_NAME>` and `pm2 show <PROCCESS_NAME>` to view the arguments you used to run your miner e.g. `--axon.port` and `--ssh.port` and check with `sudo ufw status` that the right ports are open with UFW as well.
+  - Check your pm2 logs for any errors or tracebacks to help troubleshoot.
   - Ensure the miner is running properly and not blacklisted.
 - **Deregistered unexpectedly**:
   - Competition on the network is high; more powerful devices may outcompete you.
@@ -442,6 +448,7 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
 ## Reward Program for Contributions
 We encourage community involvement in improving **Compute Subnet**. A **bounty program** is in place to reward valuable contributions.  
 See the **[Reward Program for Valuable Contributions](https://github.com/neuralinternet/compute-subnet/blob/main/CONTRIBUTING.md)** for details.
+
 
 ---
 
