@@ -491,7 +491,7 @@ class Validator:
 
         dict_filtered_axons_version = {}
         for uid, axon in dict_filtered_axons.items():
-            if latest_version and latest_version <= axon.version < 600:
+            if latest_version and latest_version <= axon.version:
                 dict_filtered_axons_version[uid] = axon
         return dict_filtered_axons_version
 
@@ -544,7 +544,7 @@ class Validator:
             neuron: bt.NeuronInfoLite = self.metagraph.neurons[uid]
             axon = self.metagraph.axons[uid]
 
-            if neuron.axon_info.ip != "0.0.0.0" and self.metagraph.total_stake[uid] < 1.024e3 and not self.is_blacklisted(neuron=neuron):
+            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
                 valid_queryable.append((uid, axon))
 
         return valid_queryable
