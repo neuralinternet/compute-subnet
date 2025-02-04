@@ -930,7 +930,7 @@ class Validator:
             dendrite = bt.dendrite(wallet=self.wallet)
 
             # Define device requirements (customize as needed)
-            device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+            device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
             device_requirement["gpu"] = {"count": 1, "capacity": 0, "type": ""}
 
             docker_requirement = {
