@@ -245,16 +245,23 @@ class Validator:
         """
         Register the prometheus information on metagraph.
         :return: bool
-        """
+        """ 
+        # extrinsic prometheus is removed at 8.2.1
+        
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = self.subtensor.serve_prometheus(
-            wallet=self.wallet,
-            port=bt.defaults.axon.port,
-            netuid=self.config.netuid,
-            force_update=force_update,
-        )
+        success = True
+        # TODO : remove all the related code from the code base
+        # self._subtensor.serve_prometheus(
+        #     wallet=self.wallet,
+        #     port=bt.core.settings.DEFAULTS.axon.port,
+        #     netuid=self.config.netuid,
+        #     force_update=force_update,
+        # )
         if success:
-            bt.logging.success(prefix="Prometheus served", sufix=f"<blue>Current version: {get_local_version()}</blue>")
+            bt.logging.success(
+                prefix="Prometheus served",
+                suffix=f"<blue>Current version: {get_local_version()}</blue>"  # Corrected keyword
+            )
         else:
             bt.logging.error("Prometheus initialization failed")
         return success
@@ -484,7 +491,7 @@ class Validator:
 
         dict_filtered_axons_version = {}
         for uid, axon in dict_filtered_axons.items():
-            if latest_version and latest_version <= axon.version < 600:
+            if latest_version and latest_version <= axon.version:
                 dict_filtered_axons_version[uid] = axon
         return dict_filtered_axons_version
 
@@ -537,7 +544,7 @@ class Validator:
             neuron: bt.NeuronInfoLite = self.metagraph.neurons[uid]
             axon = self.metagraph.axons[uid]
 
-            if neuron.axon_info.ip != "0.0.0.0" and self.metagraph.total_stake[uid] < 1.024e3 and not self.is_blacklisted(neuron=neuron):
+            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
                 valid_queryable.append((uid, axon))
 
         return valid_queryable
@@ -923,7 +930,7 @@ class Validator:
             dendrite = bt.dendrite(wallet=self.wallet)
 
             # Define device requirements (customize as needed)
-            device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
+            device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
             device_requirement["gpu"] = {"count": 1, "capacity": 0, "type": ""}
 
             docker_requirement = {
@@ -1058,7 +1065,7 @@ class Validator:
             version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
-        if isinstance(result, bool) and result or isinstance(result, tuple) and result[0]:
+        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:

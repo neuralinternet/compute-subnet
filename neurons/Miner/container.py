@@ -28,7 +28,7 @@ import docker
 from io import BytesIO
 import sys
 from docker.types import DeviceRequest
-
+from compute import __version_as_int__
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -96,7 +96,7 @@ def kill_container():
         return False
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict, testing: bool):
     try:
         client, containers = get_docker()
         # Configuration
@@ -172,7 +172,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
         # Determine container name based on ssh key
-        container_to_run = container_name if docker_ssh_key else container_name_test
+        container_to_run = container_name_test if testing else container_name
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
@@ -194,7 +194,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Check the status to determine if the container ran successfully
         if container.status == "created":
             bt.logging.info("Container was created successfully.")
-            info = {"username": "root", "password": password, "port": docker_ssh_port}
+            info = {"username": "root", "password": password, "port": docker_ssh_port, "version" : __version_as_int__}
             info_str = json.dumps(info)
             public_key = public_key.encode("utf-8")
             encrypted_info = rsa.encrypt_data(public_key, info_str)
@@ -432,7 +432,7 @@ def unpause_container():
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str):
+def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
     try:
         client, containers = get_docker()
         running_container = None
@@ -443,7 +443,22 @@ def exchange_key_container(new_ssh_key: str):
         if running_container:
             # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
             if running_container.status == "running":
-                running_container.exec_run(cmd=f"bash -c \"echo '{new_ssh_key}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
+                exist_key = running_container.exec_run(cmd="cat /root/.ssh/authorized_keys")
+                exist_key = exist_key.output.decode("utf-8").split("\n")
+                user_key = exist_key[0]
+                terminal_key = ""
+                if len(exist_key) > 1:
+                    terminal_key = exist_key[1]
+                if key_type == "terminal":
+                    terminal_key = new_ssh_key
+                elif key_type == "user":
+                    user_key = new_ssh_key
+                else:
+                    bt.logging.debug("Invalid key type to swap the SSH key")
+                    return {"status": False}
+                key_list = user_key + "\n" + terminal_key
+                # bt.logging.debug(f"New SSH key: {key_list}")
+                running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
                 running_container.exec_run(cmd="kill -15 1")
                 running_container.wait()
                 running_container.restart()
