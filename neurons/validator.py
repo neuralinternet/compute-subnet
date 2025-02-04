@@ -245,9 +245,9 @@ class Validator:
         """
         Register the prometheus information on metagraph.
         :return: bool
-        """ 
+        """
         # extrinsic prometheus is removed at 8.2.1
-        
+
         bt.logging.info("Extrinsic prometheus information on metagraph.")
         success = True
         # TODO : remove all the related code from the code base
@@ -1086,13 +1086,13 @@ class Validator:
         block_next_pog = 1
         block_next_sync_status = 1
         block_next_set_weights = self.current_block + weights_rate_limit
-        block_next_hardware_info = 1        
+        block_next_hardware_info = 1
         block_next_miner_checking = 1
 
         time_next_pog = None
         time_next_sync_status = None
         time_next_set_weights = None
-        time_next_hardware_info = None        
+        time_next_hardware_info = None
 
         bt.logging.info("Starting validator loop.")
         while True:

@@ -52,7 +52,7 @@ if TYPE_CHECKING:
     from bittensor.core.types import AxonServeCallParams
     from bittensor_wallet import Wallet
     from bittensor.core.subtensor import Subtensor
-    
+
 def custom_serve_extrinsic(
     subtensor: "Subtensor",
     wallet: "Wallet",
@@ -188,7 +188,7 @@ class ComputeSubnetAxon(axon):
             external_port (:type:`Optional[int]`): The external port of the server to broadcast to the network.
             max_workers (:type:`Optional[int]`): Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
         """
-        
+
         # Build and check config.
         if config is None:
             config = axon.config()
@@ -220,13 +220,13 @@ class ComputeSubnetAxon(axon):
         )
         self.full_address = str(self.config.axon.ip) + ":" + str(self.config.axon.port)  # type: ignore
         self.started = False
-        
+
         # Build middleware
         self.thread_pool = PriorityThreadPoolExecutor(
             max_workers=self.config.axon.max_workers  # type: ignore
         )
         self.nonces: dict[str, int] = {}
-        
+
         # Request default functions.
         self.forward_class_types: dict[str, list[Signature]] = {}
         self.blacklist_fns: dict[str, Callable | None] = {}

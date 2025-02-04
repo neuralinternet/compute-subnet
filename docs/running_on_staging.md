@@ -6,7 +6,7 @@ This tutorial will guide you through setting up a local subtensor chain, creatin
 Begin by installing the required dependencies for running a substrate node.
 ```bash
 # Update your system packages
-sudo apt update 
+sudo apt update
 
 # Install additional required libraries and tools
 sudo apt install --assume-yes make build-essential git clang curl libssl-dev llvm libudev-dev protobuf-compiler
@@ -82,23 +82,23 @@ btcli wallet new_hotkey --wallet.name validator --wallet.hotkey default
 ```
 
 ### 9. Mint yourself tokens.
-You will need tokens to initialize the intentive mechanism on the chain as well as registering a network (below). 
+You will need tokens to initialize the intentive mechanism on the chain as well as registering a network (below).
 Run the following command to mint yourself tokens on your chain.
 ```bash
 # Mint tokens for the owner
-btcli wallet faucet --wallet.name owner --subtensor.chain_endpoint ws://127.0.0.1:9946 
+btcli wallet faucet --wallet.name owner --subtensor.chain_endpoint ws://127.0.0.1:9946
 >> Balance: τ0.000000000 ➡ τ100.000000000
 # Mint tokens to your validator.
-btcli wallet faucet --wallet.name validator --subtensor.chain_endpoint ws://127.0.0.1:9946 
+btcli wallet faucet --wallet.name validator --subtensor.chain_endpoint ws://127.0.0.1:9946
 >> Balance: τ0.000000000 ➡ τ100.000000000
 ```
 
 ### 10. Create a Subnetwork
 The commands below establish a new subnetwork on the local chain. The cost will be exactly τ100.000000000 for the first network you create.
 ```bash
-btcli subnet create --wallet.name owner --subtensor.chain_endpoint ws://127.0.0.1:9946 
+btcli subnet create --wallet.name owner --subtensor.chain_endpoint ws://127.0.0.1:9946
 >> Your balance is: τ200.000000000
->> Do you want to register a subnet for τ100.000000000? [y/n]: 
+>> Do you want to register a subnet for τ100.000000000? [y/n]:
 >> Enter password to unlock key: [YOUR_PASSWORD]
 >> ✅ Registered subnetwork with netuid: 1
 ```
@@ -136,24 +136,24 @@ btcli stake add --wallet.name validator --wallet.hotkey default --subtensor.chai
 Ensure both the miner and validator keys are successfully registered.
 ```bash
 btcli subnet list --subtensor.chain_endpoint ws://127.0.0.1:9946
-                        Subnets - finney                             
-NETUID  NEURONS  MAX_N   DIFFICULTY  TEMPO  CON_REQ  EMISSION  BURN(τ)  
-   1        2     256.00   10.00 M    1000    None     0.00%    τ1.00000 
-   2      128    
+                        Subnets - finney
+NETUID  NEURONS  MAX_N   DIFFICULTY  TEMPO  CON_REQ  EMISSION  BURN(τ)
+   1        2     256.00   10.00 M    1000    None     0.00%    τ1.00000
+   2      128
 
 btcli wallet overview --wallet.name validator --subtensor.chain_endpoint ws://127.0.0.1:9946
-Subnet: 1                                                                                                                                                                
-COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58                    
+Subnet: 1
+COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58
 miner    default  0      True   100.00000  0.00000  0.00000    0.00000    0.00000    0.00000            0  0.00000                14  none  5GTFrsEQfvTsh3WjiEVFeKzFTc2xcf…
-1        1        2            τ100.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000                                                         
-                                                                          Wallet balance: τ0.0         
+1        1        2            τ100.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000
+                                                                          Wallet balance: τ0.0
 
 btcli wallet overview --wallet.name miner --subtensor.chain_endpoint ws://127.0.0.1:9946
-Subnet: 1                                                                                                                                                                
-COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58                    
+Subnet: 1
+COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58
 miner    default  1      True   0.00000  0.00000  0.00000    0.00000    0.00000    0.00000            0  0.00000                14  none  5GTFrsEQfvTsh3WjiEVFeKzFTc2xcf…
-1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000                                                         
-                                                                          Wallet balance: τ0.0   
+1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000
+                                                                          Wallet balance: τ0.0
 
 ```
 
