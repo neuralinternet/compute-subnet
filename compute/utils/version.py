@@ -72,7 +72,7 @@ def get_local_version():
         here = path.abspath(path.dirname(__file__))
         parent = here.rsplit("/", 1)[0]
         init_file_path = os.path.join(parent, "__init__.py")
-        
+
         with codecs.open(init_file_path, encoding="utf-8") as init_file:
             content = init_file.read()
             version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", content, re.M)
@@ -123,7 +123,7 @@ def update_repo():
             if stashed:
                 bt.logging.info("Applying stashed changes")
                 repo.git.stash('apply', '--index')
-                
+
                 # Restore the specific file from remote to ensure it is not overwritten by stash
                 repo.git.checkout('origin/main', '--', 'compute/__init__.py')
 

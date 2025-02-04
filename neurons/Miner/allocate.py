@@ -37,6 +37,7 @@ def register_allocation(timeline, device_requirement, public_key, docker_require
             cpu_assignment = "0"
         ram_capacity = device_requirement["ram"]["capacity"]  # e.g 5g
         hard_disk_capacity = device_requirement["hard_disk"]["capacity"]  # e.g 100g
+        testing = device_requirement.get("testing", False)
         if not device_requirement["gpu"]:
             gpu_capacity = 0
         else:
@@ -47,7 +48,7 @@ def register_allocation(timeline, device_requirement, public_key, docker_require
         ram_usage = {"capacity": str(int(ram_capacity / 1073741824)) + "g"}
         hard_disk_usage = {"capacity": str(int(hard_disk_capacity / 1073741824)) + "g"}
 
-        run_status = run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement)
+        run_status = run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement, testing)
 
         if run_status["status"]:
             bt.logging.info("Successfully allocated container.")
@@ -55,7 +56,7 @@ def register_allocation(timeline, device_requirement, public_key, docker_require
         # Kill container when it meets timeline
         start(timeline)
         return run_status
-    
+
     except Exception as e:
         bt.logging.info(f"Error allocating container {e}")
     return {"status": False}
@@ -79,7 +80,7 @@ def deregister_allocation(public_key):
                 # Remove the key from the file after successful deallocation
                 with open(file_path, 'w') as file:
                     file.truncate(0)  # Clear the file
-                
+
                 bt.logging.info("Successfully de-allocated container.")
                 return {"status": True}
             else:

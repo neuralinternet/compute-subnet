@@ -28,7 +28,6 @@ import docker
 from io import BytesIO
 import sys
 from docker.types import DeviceRequest
-
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
@@ -36,7 +35,9 @@ import RSAEncryption as rsa
 
 import bittensor as bt
 
+# XXX: global constants should be capitalized or (better) avoided
 image_name = "ssh-image"  # Docker image name
+image_name_base = "ssh-image-base"  # Docker image name
 container_name = "ssh-container"  # Docker container name
 container_name_test = "ssh-test-container"
 volume_name = "ssh-volume"  # Docker volumne name
@@ -96,7 +97,7 @@ def kill_container():
         return False
 
 # Run a new docker container with the given docker_name, image_name and device information
-def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict):
+def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, docker_requirement: dict, testing: bool):
     try:
         client, containers = get_docker()
         # Configuration
@@ -107,12 +108,17 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         gpu_capacity = gpu_usage["capacity"]  # e.g : all
 
         docker_image = docker_requirement.get("base_image")
+        # XXX: ^^ this is ignored in favor of ssh-image-base
+        # the code needs some cleaning up (out of scope for the hotfix)
         docker_volume = docker_requirement.get("volume_path")
         docker_ssh_key = docker_requirement.get("ssh_key")
         docker_ssh_port = docker_requirement.get("ssh_port")
         docker_appendix = docker_requirement.get("dockerfile")
 
-        bt.logging.info(f"Image: {docker_image}")
+        # ensure base image exists
+        build_sample_container()  # this is a no-op when already built
+
+        bt.logging.info(f"Image: {image_name_base}")
 
         if docker_appendix is None or docker_appendix == "":
             docker_appendix = "echo 'Hello World!'"
@@ -123,19 +129,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         bt.logging.trace(f"Allocating {shm_size_gb}GB to /dev/shm")
 
         dockerfile_content = f"""
-        FROM {docker_image}
-
-        # Install OpenSSH Server
-        RUN apt-get update && apt-get install -y openssh-server
-
-        # Create SSH directory and set root password
-        RUN mkdir -p /var/run/sshd && echo 'root:{password}' | chpasswd
-
-        # Configure SSHD to allow root login and password authentication
-        RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \\
-            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \\
-            sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
-            sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+        FROM {image_name_base}:latest
 
         # Run additional Docker appendix commands
         RUN {docker_appendix}
@@ -143,17 +137,6 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # Setup SSH authorized keys
         RUN mkdir -p /root/.ssh/ && echo '{docker_ssh_key}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
 
-        # Activate Conda environment on shell startup (for interactive shells)
-        RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
-
-        # Ensure PATH includes Conda binaries
-        ENV PATH=/opt/conda/bin:$PATH
-
-        # Force "python3" to be the conda Python
-        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
-
-        # Start SSHD
-        CMD ["/usr/sbin/sshd", "-D"]
         """
 
         # Ensure the tmp directory exists within the current directory
@@ -172,7 +155,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 
         # Determine container name based on ssh key
-        container_to_run = container_name if docker_ssh_key else container_name_test
+        container_to_run = container_name_test if testing else container_name
 
         # Step 2: Run the Docker container
         device_requests = [DeviceRequest(count=-1, capabilities=[["gpu"]])]
@@ -207,7 +190,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             # Open the file in write mode ('w') and write the data
             with open(file_path, 'w') as file:
                 file.write(allocation_key)
-    
+
             return {"status": True, "info": encrypted_info}
         else:
             bt.logging.info(f"Container falied with status : {container.status}")
@@ -291,6 +274,8 @@ def build_check_container(image_name: str, container_name: str):
 def build_sample_container():
     """
     Build a sample container to speed up the process of building the container
+
+    Sample container image is tagged as ssh-image-base:latest
     """
     try:
         client = docker.from_env()
@@ -298,7 +283,7 @@ def build_sample_container():
 
         for image in images:
             if image.tags:
-                if image_name in image.tags[0]:
+                if image_name_base in image.tags[0]:
                     bt.logging.info("Sample container image already exists.")
                     return {"status": True}
 
@@ -326,7 +311,10 @@ def build_sample_container():
         # Ensure PATH includes Conda binaries
         ENV PATH="/opt/conda/bin:$PATH"
 
-        # Force "python3" -> conda Python
+        # Activate Conda environment on shell startup (for interactive shells)
+        RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
+
+        # Force "python3" to be the conda Python
         RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
 
         # Install numpy
@@ -363,7 +351,7 @@ def build_sample_container():
 
         # Build the Docker image and remove the intermediate containers
         client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path),
-                            tag=image_name, rm=True)
+                            tag=image_name_base, rm=True)
         # Create the Docker volume with the specified size
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
 

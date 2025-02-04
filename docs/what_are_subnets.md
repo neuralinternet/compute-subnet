@@ -7,7 +7,7 @@ Bittensor is a library of machine intelligence that continuously grows and share
 
 # What is a subnet?
 
-Bittensor is releasing its own language for creating incentive mechanisms. This allows developers to build incentive systems on Bittensor, tapping into our web of intelligence to develop markets of the developer’s choosings  
+Bittensor is releasing its own language for creating incentive mechanisms. This allows developers to build incentive systems on Bittensor, tapping into our web of intelligence to develop markets of the developer’s choosings
 
 Subnet 1, an incentive system for machine intelligence production, showcases the enormous potential of markets to procure huge amounts of resources. Releasing user-created subnets is set to create a cambrian explosion of additional resources into the Bittensor ecosystem
 
