@@ -23,7 +23,7 @@ This repository serves as a compute-composable subnet, integrating various cloud
 
 ## Installation
 
-This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior. 
+This repository requires python3.8 or higher. To install, simply clone this repository and install the requirements. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior.
 
 ### Bittensor
 
@@ -143,7 +143,7 @@ If you have more complicated needs, see the [subtensor](https://github.com/opent
 # Running a Miner / Validator
 
 Prior to running a miner or validator, you must [create a wallet](https://github.com/opentensor/docs/blob/main/reference/btcli.md)
-and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md). 
+and [register the wallet to a netuid](https://github.com/opentensor/docs/blob/main/subnetworks/registration.md).
 Once you have done so, you can run the miner and validator with the following commands.
 
 ## Running Miner
@@ -157,7 +157,7 @@ It is important to ensure that port 4444 is open on the host machine or that an 
 ```bash
 # To run the miner
 cd neurons
-python -m miner.py 
+python -m miner.py
     --netuid <your netuid>  # The subnet id you want to connect to
     --subtensor.network <your chain url>  # blockchain endpoint you want to connect
     --wallet.name <your miner wallet> # name of your wallet
@@ -371,8 +371,8 @@ Enter any additional options for hashcat to use. It's recommended to use the ```
 > "I don't receive any request, 'Challenge' or 'Specs' or 'Allocation', what could be the reason ?"
 
 Starting from v1.6.0, hashcat challenge benchmarking is no longer performed.
-Most probably you are running into a **network issue**. 
-- check your ports 
+Most probably you are running into a **network issue**.
+- check your ports
 - check your firewall
 
 > "I have been deregistered, why ?"

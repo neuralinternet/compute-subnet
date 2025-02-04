@@ -1,5 +1,5 @@
 # Bittensor/Compute Subnet Installer Script
-This repository contains an installation script for setting up a Bittensor miner with the necessary dependencies and configurations for SN27 (Subnet 27) of the Bittensor network. This installation process requires Ubuntu 22.04. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior. 
+This repository contains an installation script for setting up a Bittensor miner with the necessary dependencies and configurations for SN27 (Subnet 27) of the Bittensor network. This installation process requires Ubuntu 22.04. You are limited to one external IP per UID. There is automatic blacklisting in place if validators detect anomalous behavior.
 
 
 ## Features

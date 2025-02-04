@@ -126,7 +126,7 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
         if client_ip not in self.whitelisted_ips:
             bt.logging.info(f"Access attempt from IP: {client_ip}")
             raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Access forbidden: IP not whitelisted")
-        
+
         # Process the request and get the response
         response = await call_next(request)
         return response
@@ -330,13 +330,13 @@ class RegisterAPI:
         # Optional: Initialize per-hotkey locks if necessary
         self.hotkey_locks = {}
         self.hotkey_locks_lock = threading.Lock()
-        
+
         # Initialize executor for the thread execution
         cpu_cores = os.cpu_count() or 1
         configured_max_workers = 32
         safe_max_workers = min((cpu_cores + 4)*4, configured_max_workers)
         self.executor = ThreadPoolExecutor(max_workers=safe_max_workers)
-        
+
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -587,7 +587,7 @@ class RegisterAPI:
                             "success": False,
                             "message": "Fail to allocate resource, blacklisted",
                             "err_detail": "blacklisted",
-                            },                                                                                                            
+                            },
                         )
             if hotkey:
                 # client_host = request.client.host
@@ -611,7 +611,7 @@ class RegisterAPI:
                 run_start = time.time()
 
                 result = await self._allocate_container_hotkey(requirements, hotkey,requirements.timeline, public_key, docker_requirement.dict())
-                
+
                 if result["status"] is False:
                     bt.logging.error(f"API: Allocation {hotkey} Failed : {result['msg']}")
                     return JSONResponse(
@@ -1725,8 +1725,8 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
-            GPU_COUNTS = 0 
+            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")
+            GPU_COUNTS = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
                 if specs_details:
@@ -1777,7 +1777,7 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")            
+            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")
             counter = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
@@ -1854,7 +1854,7 @@ class RegisterAPI:
             query: The query parameter to filter the resources. <br>
             """
 
-            bt.logging.info(f"API: List resources(wandb) on compute subnet")            
+            bt.logging.info(f"API: List resources(wandb) on compute subnet")
             self.wandb.api.flush()
 
             specs_details,running_hotkey = await get_wandb_running_miners()
@@ -2847,7 +2847,7 @@ class RegisterAPI:
                         bt.logging.warning(
                             f"API: Allocation check failed for hotkey: {hotkey} result: {check_allocation}, axon: {axon.ip}:{axon.port}")
                         await asyncio.sleep(3)
-                        continue  # Move to the next axon if allocation check failed                                                                    
+                        continue  # Move to the next axon if allocation check failed
                     else:
                         bt.logging.info(f"API: Allocation check passed for hotkey: {hotkey}")
                         break

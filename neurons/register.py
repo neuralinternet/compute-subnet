@@ -86,7 +86,7 @@ def get_config_cli():
     bt.subtensor.add_args(parser)
     bt.logging.add_args(parser)
     bt.wallet.add_args(parser)
-    
+
     # Parse the initial config to check for provided arguments
     config = bt.config(parser)
 
@@ -229,7 +229,7 @@ def allocate_container_hotkey(config, hotkey, timeline, public_key):
 
 def allocate(wandb):
     config = get_config_cli()
-    
+
     device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}}
     if config.gpu_type != "" and config.gpu_size != 0:
         device_requirement["gpu"] = {"count": 1, "capacity": config.gpu_size, "type": config.gpu_type}
@@ -292,7 +292,7 @@ def allocate_hotkey(wandb):
     hotkey = input("Enter the hotkey of the resource to allocate: ")
 
     config = get_config()
-    
+
     timeline = 30
     private_key, public_key = rsa.generate_key_pair()
     result = allocate_container_hotkey(config, hotkey, timeline, public_key)
@@ -528,7 +528,7 @@ def list_allocations_hotkeys(wandb):
         cursor.close()
         db.close()
 
-def list_resources(wandb): 
+def list_resources(wandb):
     db = ComputeDb()
 
     specs_details = get_miner_details(db)
@@ -566,19 +566,19 @@ def list_resources(wandb):
                 gpu_capacity = "{:.2f}".format((gpu_miner['capacity']/1024))
                 gpu_name = str(gpu_miner['details'][0]['name']).lower()
                 gpu_count = gpu_miner['count']
-                
+
                 # Extract CPU details
                 cpu_miner = details['cpu']
                 cpu_count = cpu_miner['count']
-                
+
                 # Extract RAM details
                 ram_miner = details['ram']
                 ram = "{:.2f}".format(ram_miner['available']/1024.0**3)
-                
+
                 # Extract Hard Disk details
                 hard_disk_miner = details['hard_disk']
                 hard_disk = "{:.2f}".format(hard_disk_miner['free']/1024.0**3)
-                
+
                 # Update the GPU instances count
                 gpu_key = (gpu_name, gpu_count)
                 gpu_instances[gpu_key] = gpu_instances.get(gpu_key, 0) + 1
@@ -598,11 +598,11 @@ def list_resources(wandb):
             cpu_count = "N/A"
             ram = "N/A"
             hard_disk = "N/A"
-        
+
         # Allocation status
         status = "N/A"
         allocated_hotkeys =  wandb.get_allocated_hotkeys([], False)
-        
+
         if hotkey in allocated_hotkeys:
             status = "Res."
         else:
@@ -626,7 +626,7 @@ def list_resources(wandb):
         summary_data = [gpu_name, gpu_count, instances_count]
         summary_line = '|'.join(str(d).ljust(w) for d, w in zip(summary_data, [30, 10, 15]))
         print(summary_line)
-        
+
     # Print the summary table for total GPU counts
     print("\nSUMMARY (Total GPU Counts):")
     summary_headers = ['GPU Name', 'Total GPU Count']
@@ -643,7 +643,7 @@ def list_resources(wandb):
 
 def update_allocation_wandb(wandb):
     hotkey_list = []
-    
+
     # Instantiate the connection to the db
     db = ComputeDb()
     cursor = db.get_cursor()
@@ -652,7 +652,7 @@ def update_allocation_wandb(wandb):
         # Retrieve all records from the allocation table
         cursor.execute("SELECT id, hotkey, details FROM allocation")
         rows = cursor.fetchall()
-        
+
         for row in rows:
             id, hotkey, details = row
             hotkey_list.append(hotkey)
@@ -674,7 +674,7 @@ def penalize_hotkey(wandb):
 
     # Split the input by commas and strip any extra whitespace to create a list of hotkeys
     hotkey_list = [hotkey.strip() for hotkey in hotkeys_input.split(',')]
-    
+
     # Instantiate the connection to the db
     db = ComputeDb()
     cursor = db.get_cursor()
@@ -779,7 +779,7 @@ def print_welcome_message():
     print(f"Version: {get_local_version()}\n")
 
 def main():
-    
+
     # Check wandb API-Key
     config = get_config()
     wallet = bt.wallet(config=config)
