@@ -71,7 +71,7 @@ ohai() {
 cd "/usr" || exit 1
 
 linux_install_pre() {
-    sudo apt-get update 
+    sudo apt-get update
     sudo apt-get install --no-install-recommends --no-install-suggests -y apt-utils curl git cmake build-essential ca-certificates
 
     # Add Docker's official GPG key:
@@ -110,10 +110,10 @@ linux_install_python() {
         ohai "Updating python"
         sudo apt-get install --only-upgrade $python
     fi
-    exit_on_error $? 
+    exit_on_error $?
     ohai "Installing python tools"
-    sudo apt-get install --no-install-recommends --no-install-suggests -y $python-pip $python-dev 
-    exit_on_error $? 
+    sudo apt-get install --no-install-recommends --no-install-suggests -y $python-pip $python-dev
+    exit_on_error $?
 }
 
 linux_update_pip() {
@@ -129,7 +129,7 @@ linux_install_bittensor() {
     git clone https://github.com/opentensor/bittensor.git ~/.bittensor/bittensor/ 2> /dev/null || (cd ~/.bittensor/bittensor/ ; git fetch origin master ; git checkout master ; git pull --ff-only ; git reset --hard ; git clean -xdf)
     ohai "Installing bittensor"
     $python -m pip install -e ~/.bittensor/bittensor/
-    exit_on_error $? 
+    exit_on_error $?
 }
 
 linux_increase_ulimit(){
@@ -158,20 +158,20 @@ linux_install_compute_subnet() {
     ohai "Cloning Compute-Subnet into ~/Compute-Subnet"
     mkdir -p ~/Compute-Subnet
     git clone https://github.com/neuralinternet/Compute-Subnet.git ~/Compute-Subnet/ 2> /dev/null || (cd ~/Compute-Subnet/ ; git pull --ff-only ; git reset --hard ; git clean -xdf)
-    
+
     ohai "Installing Compute-Subnet dependencies"
     cd ~/Compute-Subnet
     $python -m pip install -r requirements.txt
     $python -m pip install --no-deps -r requirements-compute.txt
     $python -m pip install -e .
     sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
-    
+
     ohai "Starting Docker service, adding user to docker, and installing 'at' package"
     sudo groupadd docker
     sudo usermod -aG docker $USER
     sudo systemctl start docker
     sudo apt install -y at
-    
+
     cd ~
     exit_on_error $?
 }
@@ -240,15 +240,15 @@ if [[ "$OS" == "Linux" ]]; then
         abort "This linux based install requires apt. To run with other distros (centos, arch, etc), you will need to manually install the requirements"
     fi
     echo """
-    
- ░▒▓███████▓▒░ ░▒▓███████▓▒░        ░▒▓███████▓▒░  ░▒▓████████▓▒░ 
-░▒▓█▓▒░        ░▒▓█▓▒░░▒▓█▓▒░              ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░ 
-░▒▓█▓▒░        ░▒▓█▓▒░░▒▓█▓▒░              ░▒▓█▓▒░        ░▒▓█▓▒░ 
- ░▒▓██████▓▒░  ░▒▓█▓▒░░▒▓█▓▒░        ░▒▓██████▓▒░        ░▒▓█▓▒░  
-       ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░              ░▒▓█▓▒░  
-       ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░             ░▒▓█▓▒░   
-░▒▓███████▓▒░  ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓████████▓▒░      ░▒▓█▓▒░   
-                                                                                                                                                             
+
+ ░▒▓███████▓▒░ ░▒▓███████▓▒░        ░▒▓███████▓▒░  ░▒▓████████▓▒░
+░▒▓█▓▒░        ░▒▓█▓▒░░▒▓█▓▒░              ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░
+░▒▓█▓▒░        ░▒▓█▓▒░░▒▓█▓▒░              ░▒▓█▓▒░        ░▒▓█▓▒░
+ ░▒▓██████▓▒░  ░▒▓█▓▒░░▒▓█▓▒░        ░▒▓██████▓▒░        ░▒▓█▓▒░
+       ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░              ░▒▓█▓▒░
+       ░▒▓█▓▒░ ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓█▓▒░             ░▒▓█▓▒░
+░▒▓███████▓▒░  ░▒▓█▓▒░░▒▓█▓▒░       ░▒▓████████▓▒░      ░▒▓█▓▒░
+
                                                    - Bittensor; Mining a new element.
     """
     ohai "This script will install:"
@@ -297,14 +297,14 @@ if [[ "$OS" == "Linux" ]]; then
 
 elif [[ "$OS" == "Darwin" ]]; then
     echo """
-    
+
 ██████╗░██╗████████╗████████╗███████╗███╗░░██╗░██████╗░█████╗░██████╗░
 ██╔══██╗██║╚══██╔══╝╚══██╔══╝██╔════╝████╗░██║██╔════╝██╔══██╗██╔══██╗
 ██████╦╝██║░░░██║░░░░░░██║░░░█████╗░░██╔██╗██║╚█████╗░██║░░██║██████╔╝
 ██╔══██╗██║░░░██║░░░░░░██║░░░██╔══╝░░██║╚████║░╚═══██╗██║░░██║██╔══██╗
 ██████╦╝██║░░░██║░░░░░░██║░░░███████╗██║░╚███║██████╔╝╚█████╔╝██║░░██║
 ╚═════╝░╚═╝░░░╚═╝░░░░░░╚═╝░░░╚══════╝╚═╝░░╚══╝╚═════╝░░╚════╝░╚═╝░░╚═╝
-                                                    
+
                                                     - Mining a new element.
     """
     ohai "This script will install:"

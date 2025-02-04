@@ -16,22 +16,21 @@ def kill_process_on_port(port):
         else:
             print(f"No process found using port {port}.")
     except subprocess.CalledProcessError:
-        print(f"Port {port} is not in use.")        
+        print(f"Port {port} is not in use.")
 
 def start_server(port) -> TCPServer:
     kill_process_on_port(port)
-    
+
     handler = http.server.SimpleHTTPRequestHandler
     httpd: TCPServer = socketserver.TCPServer(("", int(port)), handler)
-    
+
     server_thread = threading.Thread(target=httpd.serve_forever)
     server_thread.daemon = True
     server_thread.start()
-    
+
     return httpd
 
 def stop_server(httpd: TCPServer) -> None:
     if httpd:
         httpd.shutdown()
-        httpd.server_close() 
-    
+        httpd.server_close()

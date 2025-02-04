@@ -132,7 +132,7 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
             cursor.execute("ALTER TABLE new_miner_details RENAME TO miner_details;")
             db.conn.commit()
 
-        # Update miner_details  
+        # Update miner_details
         for hotkey, response in benchmark_responses:
             # Print current values in the row before updating
             cursor.execute("""
@@ -156,18 +156,18 @@ def update_miner_details(db: ComputeDb, hotkey_list, benchmark_responses: Tuple[
                     INSERT INTO miner_details (hotkey, details, no_specs_count)
                     VALUES (?, '{}', 1)
                     ON CONFLICT(hotkey) DO UPDATE SET
-                        no_specs_count = 
+                        no_specs_count =
                             CASE
                                 WHEN miner_details.no_specs_count >= 5 THEN 5
                                 ELSE miner_details.no_specs_count + 1
                             END,
-                        details = 
+                        details =
                             CASE
                                 WHEN miner_details.no_specs_count >= 5 THEN '{}'
                                 ELSE excluded.details
                             END;
                 """, (hotkey, '{}'))
-        db.conn.commit()    
+        db.conn.commit()
     except Exception as e:
         db.conn.rollback()
         bt.logging.error(f"Error while updating miner_details: {e}")

@@ -93,4 +93,3 @@ We are committed to providing a welcoming and inclusive environment. All partici
 If you have any questions or need further guidance, don't hesitate to ask for help in our [community channels](https://discord.gg/t7BMee4w). Our community and maintainers are here to support you.
 
 Thank you for contributing to the Compute Subnet! Together, we're building the future of decentralized computing.
-

@@ -655,7 +655,7 @@ class Miner:
                         self.current_block + 75
                     )  # 75 ~ every 15 minutes
                     self.sync_status()
-                    
+
                     # check allocation status
                     self.__check_alloaction_errors()
 

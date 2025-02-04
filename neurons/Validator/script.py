@@ -178,7 +178,7 @@ def check_docker_availability() -> Tuple[bool, str]:
         result = subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
         # If the command was successful, Docker is installed
         docker_version = result.stdout.strip()
-        
+
         if check_docker_container('sn27-check-container') is True:
             return True, docker_version
         else:
@@ -193,12 +193,12 @@ def check_docker_availability() -> Tuple[bool, str]:
             "Note: running a miner within containerized instances is not supported."
         )
         return False, error_message
-    
+
 
 def check_docker_container(container_id_or_name: str):
     try:
         # Start the container
-        subprocess.run(["docker", "start", container_id_or_name], 
+        subprocess.run(["docker", "start", container_id_or_name],
                         check=True,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
@@ -208,7 +208,7 @@ def check_docker_container(container_id_or_name: str):
                         check=True,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
-        
+
         # Get the logs from the container
         logs_result = subprocess.run(
             ["docker", "logs", container_id_or_name],
@@ -247,18 +247,18 @@ def get_perf_info(encrypted=True):
     except (Exception, RuntimeError) as e:
         print(e)
         return ""
-    
+
 def check_ssh_login(host, port, username, password):
     try:
         # Create an SSH client instance
         ssh_client = paramiko.SSHClient()
-        
+
         # Automatically add the server's host key (you can adjust this if needed)
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         # Attempt to connect to the SSH server using the provided credentials
         ssh_client.connect(hostname=host, port=port, username=username, password=password, timeout=10)
-        
+
         # If login is successful
         print("SSH login successful")
         return True

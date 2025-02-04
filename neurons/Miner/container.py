@@ -190,7 +190,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             # Open the file in write mode ('w') and write the data
             with open(file_path, 'w') as file:
                 file.write(allocation_key)
-    
+
             return {"status": True, "info": encrypted_info}
         else:
             bt.logging.info(f"Container falied with status : {container.status}")
