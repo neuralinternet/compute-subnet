@@ -162,6 +162,7 @@ class Allocation(BaseModel):
     ssh_command: str = ""
     ssh_key: str = ""
     uuid_key: str = ""
+    miner_version: int = 0
 
 
 class DockerRequirement(BaseModel):
@@ -311,7 +312,7 @@ class RegisterAPI:
         if self.config.logging.trace:
             self.app = FastAPI(debug=False)
         else:
-            self.app = FastAPI(debug=False, docs_url=None, redoc_url=None)
+            self.app = FastAPI(debug=False, docs_url="/docs", redoc_url=None)
 
         load_dotenv()
         self._setup_routes()
@@ -518,7 +519,7 @@ class RegisterAPI:
                 allocated.ssh_password = info["password"]
                 allocated.uuid_key = info["uuid"]
                 allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
-
+                allocated.miner_version = result.get("miner_version", 0)
                 update_allocation_db(result_hotkey, info, True)
                 await self._update_allocation_wandb()
                 bt.logging.info(f"API: Resource {result_hotkey} was successfully allocated")
@@ -667,7 +668,7 @@ class RegisterAPI:
                 allocated.ssh_password = info["password"]
                 allocated.uuid_key = info["uuid"]
                 allocated.ssh_command = f"ssh {info['username']}@{result['ip']} -p {str(info['port'])}"
-
+                allocated.miner_version = result.get("miner_version", 0)
                 update_allocation_db(result_hotkey, info, True)
                 await self._update_allocation_wandb()
 
@@ -1390,6 +1391,7 @@ class RegisterAPI:
                     )
                     entry.uuid_key = info["uuid"]
                     entry.ssh_key = info["ssh_key"]
+                    entry.miner_version = info.get("version", 0)
                     allocation_list.append(entry)
 
             except Exception as e:
@@ -2875,6 +2877,7 @@ class RegisterAPI:
                     if register_response and register_response["status"] is True:
                         register_response["ip"] = axon.ip
                         register_response["hotkey"] = axon.hotkey
+                        register_response["miner_version"] = axon.version
                         return register_response
                     else:
                         bt.logging.warning(
