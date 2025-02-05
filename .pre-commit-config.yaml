@@ -10,3 +10,12 @@ repos:
         - id: commitlint
           stages: [commit-msg]
           additional_dependencies: ['@commitlint/config-conventional']
+
+  # Local repository for a custom hook
+  - repo: local
+    hooks:
+      - id: check-branch-name
+        name: 'Check Branch Name'
+        entry: ./scripts/check-branch-name.sh
+        language: system
+        files: ^.*
