@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Define allowed prefixes including release
-allowed_prefixes="feat|feature|bugfix|hotfix|chore|refactor|test|spike|prototype|release"
+allowed_prefixes="feat|feature|bugfix|hotfix|chore|refactor|test|spike|prototype|release|docs"
 
 # Define the JIRA ticket pattern (CSN-XXXX, any number of digits)
 jira_ticket_pattern="CSN-[0-9]+"
