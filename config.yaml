@@ -71,18 +71,18 @@ gpu_performance:
     NVIDIA H100 80GB HBM3: 3.30
     NVIDIA H100: 2.80
     NVIDIA A100-SXM4-80GB: 1.90
-    NVIDIA A100 80GB PCIe: 1.65
-    NVIDIA A100-SXM4-40GB: 1.30
-    NVIDIA L40s: 0.55
-    NVIDIA RTX 6000 Ada Generation: 0.45
-    NVIDIA L40: 0.5
-    NVIDIA RTX A6000: 0.39
-    NVIDIA RTX 4090: 0.34
-    NVIDIA A40: 0.20
-    NVIDIA GeForce RTX 3090: 0.22
-    NVIDIA L4: 0.22
-    NVIDIA RTX A5000: 0.18
-    NVIDIA RTX A4500: 0.17
+    NVIDIA A100 80GB PCIe: 0
+    NVIDIA A100-SXM4-40GB: 0
+    NVIDIA L40s: 0
+    NVIDIA RTX 6000 Ada Generation: 0
+    NVIDIA L40: 0
+    NVIDIA RTX A6000: 0
+    NVIDIA RTX 4090: 0
+    NVIDIA A40: 0
+    NVIDIA GeForce RTX 3090: 0
+    NVIDIA L4: 0
+    NVIDIA RTX A5000: 0
+    NVIDIA RTX A4500: 0
 
 merkle_proof:
   miner_script_path: "neurons/Validator/miner_script_m_merkletree.py"
