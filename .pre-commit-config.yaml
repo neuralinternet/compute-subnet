@@ -18,11 +18,12 @@ repos:
         entry: ./scripts/check-current-branch.sh
         stages: [pre-commit, pre-push, manual]
         language: system
-        files: ^.*
+        always_run: true
+        verbose: true
   - repo: local
     hooks:
       - id: post-checkout-check
-        name: 'Check branch name'
+        name: 'Check Branch Name'
         entry: ./scripts/check-current-branch.sh
         stages: [post-checkout]
         language: system
