@@ -23,7 +23,7 @@ repos:
   - repo: local
     hooks:
       - id: post-checkout-check
-        name: 'Check Branch Name'
+        name: 'Check Branch Name 2'
         entry: ./scripts/check-current-branch.sh
         stages: [post-checkout]
         language: system
