@@ -10,7 +10,7 @@ jira_ticket_pattern="CSN-[0-9]+"
 release_version_pattern="release/v[0-9]+\.[0-9]+\.[0-9]+(-[a-z0-9]+)?"
 
 # Get the current branch name
-branch_name=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null)
+branch_name="$1"
 
 # Define the valid hotfix version pattern (hotfix/vX.Y.Z)
 hotfix_version_pattern="hotfix/v[0-9]+\.[0-9]+\.[0-9]+"
