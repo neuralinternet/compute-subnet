@@ -76,6 +76,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.status import HTTP_403_FORBIDDEN
 from dotenv import load_dotenv
 from typing import Optional, Union, List
+from contextlib import asynccontextmanager
 
 # Loads the .env file
 load_dotenv()
@@ -310,9 +311,17 @@ class RegisterAPI:
                 self.port = self.config.axon.port
 
         if self.config.logging.trace:
-            self.app = FastAPI(debug=False)
+            self.app = FastAPI(
+                lifespan=self.get_lifespan(),  # updated lifespan usage
+                debug=False
+            )
         else:
-            self.app = FastAPI(debug=False, docs_url="/docs", redoc_url=None)
+            self.app = FastAPI(
+                lifespan=self.get_lifespan(),  # updated lifespan usage
+                debug=False,
+                docs_url="/docs",
+                redoc_url=None
+            )
 
         load_dotenv()
         self._setup_routes()
@@ -338,6 +347,24 @@ class RegisterAPI:
         safe_max_workers = min((cpu_cores + 4)*4, configured_max_workers)
         self.executor = ThreadPoolExecutor(max_workers=safe_max_workers)
 
+    def get_lifespan(self):
+        @asynccontextmanager
+        async def lifespan(app: FastAPI):
+            """
+            This function is called when the application starts. <br>
+            It initializes the database connection and other necessary components. <br>
+            """
+            # Setup the repeated task
+            bt.logging.info("API: Starting the API server")
+            self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
+            self.allocate_check_task = asyncio.create_task(self._check_allocation())
+            bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
+            yield
+            """
+            This function is called when the application stops. <br>
+            """
+            bt.logging.info("API: Stopping the API server")
+        return lifespan
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -355,23 +382,7 @@ class RegisterAPI:
                 },
             )
 
-        @self.app.on_event("startup")
-        async def startup_event():
-            """
-            This function is called when the application starts. <br>
-            It initializes the database connection and other necessary components. <br>
-            """
-            # Setup the repeated task
-            self.metagraph_task = asyncio.create_task(self._refresh_metagraph())
-            self.allocate_check_task = asyncio.create_task(self._check_allocation())
-            bt.logging.info(f"Register API server is started on https://{self.ip_addr}:{self.port}")
 
-        @self.app.on_event("shutdown")
-        async def shutdown_event():
-            """
-            This function is called when the application stops. <br>
-            """
-            pass
 
         # Entry point for the API
         @self.app.get("/", tags=["Root"])
