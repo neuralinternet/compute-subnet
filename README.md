@@ -199,17 +199,17 @@ The score calculation function now determines a miner's performance primarily ba
 - NVIDIA H100 80GB HBM3: 3.30
 - NVIDIA H100: 2.80
 - NVIDIA A100-SXM4-80GB: 1.90
-- NVIDIA A100 80GB PCIe: 1.65
-- NVIDIA L40s: 1.10
-- NVIDIA L40: 1.00
-- NVIDIA RTX 6000 Ada Generation: 0.90
-- NVIDIA RTX A6000: 0.78
-- NVIDIA RTX 4090: 0.68
-- NVIDIA GeForce RTX 3090: 0.43
-- NVIDIA L4: 0.43
-- NVIDIA A40: 0.39
-- NVIDIA RTX A5000: 0.36
-- NVIDIA RTX A4500: 0.34
+- NVIDIA A100 80GB PCIe: 0
+- NVIDIA L40s: 0
+- NVIDIA L40: 0
+- NVIDIA RTX 6000 Ada Generation: 0
+- NVIDIA RTX A6000: 0
+- NVIDIA RTX 4090: 0
+- NVIDIA GeForce RTX 3090: 0
+- NVIDIA L4: 0
+- NVIDIA A40: 0
+- NVIDIA RTX A5000: 0
+- NVIDIA RTX A4500: 0
 
 **Scaling Factor**: Determine the highest GPU base score, multiply it by 8 (the maximum number of GPUs), and set this scenario as the 100-point baseline. A scaling factor is derived so that using eight of the top GPU models equals 50 points.
 
