@@ -1,0 +1,74 @@
+name: PR Title Check
+
+on:
+  pull_request:
+    types: [opened, edited]
+    branches: [ "dev" ]
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check PR title
+        id: check_title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$PR_TITLE" =~ ^CSN-[0-9]{3,5} ]]; then
+            echo "Invalid title: $PR_TITLE"
+            echo "::set-output name=invalid::true"
+          else
+            echo "Valid title"
+            echo "::set-output name=invalid::false"
+          fi
+
+      - name: Post comment if title is invalid
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ACCESS_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const title = "${{ github.event.pull_request.title }}";
+            const isInvalid = "${{steps.check_title.outputs.invalid}}";
+            const commentBody = `Please follow the naming conventions for PR titles. They should start with "CSN-" followed by 3 to 5 digits. Current title: "${title}"`;
+            const {data:comments} = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: issue_number
+            });
+            for (const comment of comments) {
+              if(comment.body.startsWith("Please follow the naming conventions for PR titles")) {
+                if(isInvalid === 'false') {
+                  await  github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id
+                  })
+                } else {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id,
+                    body: commentBody
+                  })
+                }
+                return;
+              }
+            }
+            // Post the new comment if the title is invalid
+            if (isInvalid === 'true') {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue_number,
+                body: commentBody
+              })
+            }
+      - name: Fail the check for invalid title
+        if: steps.check_title.outputs.invalid == 'true'
+        run: |
+          echo "Exiting with failure due to invalid PR title"
+          exit 1
