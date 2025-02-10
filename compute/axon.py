@@ -41,6 +41,7 @@ from bittensor.core.extrinsics.serving import do_serve_axon
 from bittensor.utils.btlogging import logging
 from bittensor.utils import format_error_message, networking as net
 from bittensor.utils import ( format_error_message, networking as net, unlock_key, Certificate )
+from bittensor.core.types import AxonServeCallParams
 
 # Local
 from compute import __version_as_int__
@@ -52,7 +53,7 @@ if TYPE_CHECKING:
     from bittensor.core.types import AxonServeCallParams
     from bittensor_wallet import Wallet
     from bittensor.core.subtensor import Subtensor
-    
+
 def custom_serve_extrinsic(
     subtensor: "Subtensor",
     wallet: "Wallet",
@@ -63,7 +64,7 @@ def custom_serve_extrinsic(
     placeholder1: int = 0,
     placeholder2: int = 0,
     wait_for_inclusion: bool = False,
-    wait_for_finalization: bool = True,
+    wait_for_finalization=True,
     certificate: Certificate | None = None,
 ) -> bool:
     """Subscribes a Bittensor endpoint to the subtensor chain.
@@ -77,48 +78,42 @@ def custom_serve_extrinsic(
         netuid (int): The network uid to serve on.
         placeholder1 (int): A placeholder for future use.
         placeholder2 (int): A placeholder for future use.
-        wait_for_inclusion (bool): If set, waits for the extrinsic to enter a block before returning ``true``, or returns ``false`` if the extrinsic fails to enter the block within the timeout.
-        wait_for_finalization (bool): If set, waits for the extrinsic to be finalized on the chain before returning ``true``, or returns ``false`` if the extrinsic fails to be finalized within the timeout.
-        certificate (Certificate | None): An optional certificate object that can be used for secure communication.
+        wait_for_inclusion (bool): If set, waits for the extrinsic to enter a block before returning ``True``, or
+            returns ``False`` if the extrinsic fails to enter the block within the timeout.
+        wait_for_finalization (bool): If set, waits for the extrinsic to be finalized on the chain before returning
+            ``True``, or returns ``False`` if the extrinsic fails to be finalized within the timeout.
+        certificate (bittensor.utils.Certificate): Certificate to use for TLS. If ``None``, no TLS will be used.
+            Defaults to ``None``.
+
     Returns:
-        success (bool): Flag is ``true`` if extrinsic was finalized or uncluded in the block. If we did not wait for finalization / inclusion, the response is ``true``.
+        success (bool): Flag is ``True`` if extrinsic was finalized or included in the block. If we did not wait for
+            finalization / inclusion, the response is ``True``.
     """
     # Decrypt hotkey
     if not (unlock := unlock_key(wallet, "hotkey")).success:
         logging.error(unlock.message)
         return False
-    params: "AxonServeCallParams" = {
-        "version": __version_as_int__,
-        "ip": net.ip_to_int(ip),
-        "port": port,
-        "ip_type": net.ip_version(ip),
-        "netuid": netuid,
-        "hotkey": wallet.hotkey.ss58_address,
-        "coldkey": wallet.coldkeypub.ss58_address,
-        "protocol": protocol,
-        "placeholder1": placeholder1,
-        "placeholder2": placeholder2,
-        "certificate": certificate,
-    }
+
+    params = AxonServeCallParams(
+        **{
+            "version": __version_as_int__,
+            "ip": net.ip_to_int(ip),
+            "port": port,
+            "ip_type": net.ip_version(ip),
+            "netuid": netuid,
+            "hotkey": wallet.hotkey.ss58_address,
+            "coldkey": wallet.coldkeypub.ss58_address,
+            "protocol": protocol,
+            "placeholder1": placeholder1,
+            "placeholder2": placeholder2,
+            "certificate": certificate,
+        }
+    )
     logging.debug("Checking axon ...")
     neuron = subtensor.get_neuron_for_pubkey_and_subnet(
         wallet.hotkey.ss58_address, netuid=netuid
     )
-    neuron_up_to_date = not neuron.is_null and params == {
-        "version": __version_as_int__,
-        "ip": net.ip_to_int(neuron.axon_info.ip),
-        "port": neuron.axon_info.port,
-        "ip_type": neuron.axon_info.ip_type,
-        "netuid": neuron.netuid,
-        "hotkey": neuron.hotkey,
-        "coldkey": neuron.coldkey,
-        "protocol": neuron.axon_info.protocol,
-        "placeholder1": neuron.axon_info.placeholder1,
-        "placeholder2": neuron.axon_info.placeholder2,
-    }
-    output = params.copy()
-    output["coldkey"] = wallet.coldkeypub.ss58_address
-    output["hotkey"] = wallet.hotkey.ss58_address
+    neuron_up_to_date = not neuron.is_null and params == neuron
     if neuron_up_to_date:
         logging.debug(
             f"Axon already served on: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) "
@@ -129,7 +124,7 @@ def custom_serve_extrinsic(
         f"Serving axon with: AxonInfo({wallet.hotkey.ss58_address},{ip}:{port}) -> {subtensor.network}:{netuid}"
     )
     success, error_message = do_serve_axon(
-        self=subtensor,
+        subtensor=subtensor,
         wallet=wallet,
         call_params=params,
         wait_for_finalization=wait_for_finalization,
@@ -188,7 +183,7 @@ class ComputeSubnetAxon(axon):
             external_port (:type:`Optional[int]`): The external port of the server to broadcast to the network.
             max_workers (:type:`Optional[int]`): Used to create the threadpool if not passed, specifies the number of active threads servicing requests.
         """
-        
+
         # Build and check config.
         if config is None:
             config = axon.config()
@@ -220,13 +215,13 @@ class ComputeSubnetAxon(axon):
         )
         self.full_address = str(self.config.axon.ip) + ":" + str(self.config.axon.port)  # type: ignore
         self.started = False
-        
+
         # Build middleware
         self.thread_pool = PriorityThreadPoolExecutor(
             max_workers=self.config.axon.max_workers  # type: ignore
         )
         self.nonces: dict[str, int] = {}
-        
+
         # Request default functions.
         self.forward_class_types: dict[str, list[Signature]] = {}
         self.blacklist_fns: dict[str, Callable | None] = {}
