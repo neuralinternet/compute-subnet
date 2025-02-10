@@ -1,31 +1,15 @@
-name: commitlint
+name: commit-message-check
 
 on: [push, pull_request]
 
 jobs:
-  commitlint:
+  commit-message-check:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - name: Install required dependencies
-        run: |
-          sudo apt-get install -y nodejs npm
-      - name: Print versions
-        run: |
-          git --version
-          node --version
-          npm --version
-          npx commitlint --version
-      - name: Install commitlint
-        run: |
-          npm install --save-dev @commitlint/config-conventional @commitlint/cli
 
-      - name: Validate current commit (last commit) with commitlint
-        if: github.event_name == 'push'
-        run: npx commitlint --last --verbose
-
-      - name: Validate PR commits with commitlint
-        if: github.event_name == 'pull_request'
-        run: npx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+      - name: Run commit message validation with Bash script
+        run: ./scripts/validate_commit_message.sh ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}
