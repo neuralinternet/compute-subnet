@@ -1,8 +1,11 @@
 #!/bin/bash
 
-# Define regex patterns for each part of the commit message
-VALID_TYPE_REGEX="^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)"
-VALID_SCOPE_REGEX="^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\([a-zA-Z0-9/_-]+\))?:"
+# Define valid commit types once
+VALID_TYPES="feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert"
+
+# Define regex patterns using the valid types
+VALID_TYPE_REGEX="^($VALID_TYPES)"
+VALID_SCOPE_REGEX="^($VALID_TYPES)(\([a-zA-Z0-9/_-]+\))?:"
 VALID_SUBJECT_REGEX=": .{3,72}$"
 
 # Detect whether it's running locally (pre-commit) or in GitHub Actions
@@ -28,7 +31,7 @@ for commit_msg in "${COMMIT_MESSAGES[@]}"; do
 
     # Check if commit message starts with a valid type
     if ! [[ $commit_msg =~ $VALID_TYPE_REGEX ]]; then
-        error_messages+=("❌ Missing or invalid commit type. Expected one of: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert.")
+        error_messages+=("❌ Missing or invalid commit type. Expected one of: $VALID_TYPES.")
     fi
 
     # Check if scope format is valid (optional but well-formed)
@@ -56,7 +59,7 @@ done
 if [[ $invalid_commit_found -eq 1 ]]; then
     echo -e "\n❌ ERROR: Some commit messages are invalid. Please follow the Conventional Commit format."
     echo -e "\n💡 Expected format: <type>(<scope>): <subject>\n"
-    echo -e "🔹 Valid types: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert"
+    echo -e "🔹 Valid types: $VALID_TYPES"
     echo -e "🔹 Example: feat(auth): add JWT authentication\n"
     exit 1
 else
