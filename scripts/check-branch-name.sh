@@ -21,6 +21,12 @@ if [ -z "$branch_name" ] || [ "$branch_name" = "HEAD" ]; then
     exit 1
 fi
 
+# ✅ Allow dev and main branches without validation
+if echo "$branch_name" | grep -Eq "^(dev|main)$"; then
+    printf "✅ Branch '%s' is allowed and does not require validation.\n" "$branch_name"
+    exit 0
+fi
+
 # Check if it's a valid release branch (release/vX.Y.Z)
 if echo "$branch_name" | grep -Eq "^$release_version_pattern$"; then
     printf "✅ Branch name is valid (Release branch): '%s'\n" "$branch_name"
