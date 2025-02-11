@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+import asyncio
 import threading
 import time
 import base64
@@ -81,7 +82,7 @@ class MinerChecker:
             bt.logging.info(f"Miner {hotkey} already penalized, skipping.")
 
 
-    def miner_checking_thread(self, axon):
+    async def miner_checking_thread(self, axon):
         """Handles allocation, SSH access, and deallocation of a miner."""
         wallet = bt.wallet(config=self.config)
         dendrite = bt.dendrite(wallet=wallet)
@@ -94,12 +95,12 @@ class MinerChecker:
         device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
 
         try:
-            check_allocation = dendrite.query(axon, Allocate(timeline=30, device_requirement=device_requirement, checking=True,), timeout=30)
+            check_allocation = await dendrite(axon, Allocate(timeline=30, device_requirement=device_requirement, checking=True,), timeout=30)
 
             if check_allocation and check_allocation["status"] is True:
                 bt.logging.info(f"Successfully passed allocaton check: miner {axon.hotkey}")
                 # Simulate an allocation query with Allocate
-                response = dendrite.query(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
+                response = await dendrite(axon, Allocate(timeline=1, device_requirement=device_requirement, checking=False, public_key=public_key), timeout=60)
                 if response and response["status"] is True:
                     allocation_status = True
                     bt.logging.info(f"Successfully allocated miner {axon.hotkey}")
@@ -124,7 +125,7 @@ class MinerChecker:
         while allocation_status and retry_count < max_retries:
             try:
                 # Deallocation query
-                deregister_response = dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
+                deregister_response = await dendrite.query(axon, Allocate(timeline=0, checking=False, public_key=public_key), timeout=60)
                 if deregister_response and deregister_response["status"] is True:
                     allocation_status = False
                     bt.logging.info(f"Deallocated miner {axon.hotkey}")
