@@ -49,22 +49,22 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 
 ## Key Resources
 
-- **NI Compute App (Rent GPUs)**  
+- **NI Compute App (Rent GPUs)**
   [Cloud Platform](https://app.neuralinternet.ai/)
-  
-- **Subnet 27 (This Repo)**  
+
+- **Subnet 27 (This Repo)**
   [GitHub: neuralinternet/compute-subnet](https://github.com/neuralinternet/compute-subnet)
 
-- **Bittensor**  
-  [Bittensor Documentation](https://docs.bittensor.com/)  
+- **Bittensor**
+  [Bittensor Documentation](https://docs.bittensor.com/)
 
-- **Compute Subnet Discord Channel**  
+- **Compute Subnet Discord Channel**
   [Join Discord](https://discord.gg/ZpaGVXfaCF)
 
-- **Real-Time Compute Subnet Metrics**  
+- **Real-Time Compute Subnet Metrics**
   [OpenCompute Dashboard](https://opencompute.streamlit.app/)
 
-- **Reward Program for Valuable Contributions**  
+- **Reward Program for Valuable Contributions**
   [CONTRIBUTING.md](https://github.com/neuralinternet/compute-subnet/blob/main/CONTRIBUTING.md)
 
 > **Note**: We do **not** support container-based (dockerized) GPU platforms such as Runpod, VastAI, or Lambda. We strongly encourage providing your own hardware. If you cannot supply hardware in-house, recommended GPU providers include:
@@ -80,20 +80,20 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 ![Miner Overview Diagram](docs/sn27_miner_overview1.png)
 
 ### Miner
-- **Role**: Contribute resources (GPU instances) to the network.  
-- **Rewards**: Performance-based. Higher-performance devices with more GPUs receive higher rewards.  
-- **Key Requirements**:  
-  - GPU(s) with up-to-date drivers.  
-  - Properly opened ports. E.g. 4444 for validator allocations, 8091 for serving the axon.  
+- **Role**: Contribute resources (GPU instances) to the network.
+- **Rewards**: Performance-based. Higher-performance devices with more GPUs receive higher rewards.
+- **Key Requirements**:
+  - GPU(s) with up-to-date drivers.
+  - Properly opened ports. E.g. 4444 for validator allocations, 8091 for serving the axon.
   - A registered wallet hotkey on the correct Bittensor subnet (netuid 27 for main, or netuid 15 for test).
 
 ### Validator
-- **Role**: Verifies the miners' computational integrity, assigns performance scores, and dynamically allocates resources to clients.  
-- **Actions**:  
-  - Requests performance data (e.g., GPU type, memory) from miners.  
-  - Benchmarks or runs tasks to confirm advertised hardware.  
-  - Updates scores that determine miners’ reward weights.  
-- **Key Requirements**:  
+- **Role**: Verifies the miners' computational integrity, assigns performance scores, and dynamically allocates resources to clients.
+- **Actions**:
+  - Requests performance data (e.g., GPU type, memory) from miners.
+  - Benchmarks or runs tasks to confirm advertised hardware.
+  - Updates scores that determine miners’ reward weights.
+- **Key Requirements**:
   - A registered wallet hotkey on the correct Bittensor subnet (netuid 27 for main, or netuid 15 for test).
   - Up-to-date code to ensure accurate scoring.
 
@@ -111,7 +111,7 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 ### Install Docker
 A Docker environment is required for miner resource allocation:
 
-1. **Install Docker** on Ubuntu:  
+1. **Install Docker** on Ubuntu:
    [Official Docs](https://docs.docker.com/engine/install/ubuntu)
 
 2. **Verify Docker**:
@@ -156,9 +156,9 @@ options:
   -h, --help            show this help message and exit
   --print-completion {bash,zsh,tcsh}
                         Print shell tab completion script
-```                       
+```
 See Bittensor’s documentation for alternative installation instructions.
-[Bittensor Documentation](https://docs.bittensor.com/)  
+[Bittensor Documentation](https://docs.bittensor.com/)
 
 ### Create or Regenerate Keys
 1. **Create new coldkey** (stores funds):
@@ -197,7 +197,7 @@ sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
 
 ### CUDA Toolkit and GPU Drivers
 > **Tip**: If Nvidia toolkit and drivers are already installed on your machine, scroll down to step 5 to verify then move on to the docker CUDA support.
-1. **Download** the latest CUDA from [NVIDIA's official page](https://developer.nvidia.com/cuda-downloads).  
+1. **Download** the latest CUDA from [NVIDIA's official page](https://developer.nvidia.com/cuda-downloads).
 2. **Install** (example for Ubuntu 22.04 (Dec. 2024)):
    ```bash
    wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
@@ -236,7 +236,7 @@ The output of which should look something like:
 | 30%   34C    P0              70W / 300W |  400MiB / 4914000MiB |      4%      Default |
 |                                         |                      |                  N/A |
 +-----------------------------------------+----------------------+----------------------+
-                                                                                         
+
 +---------------------------------------------------------------------------------------+
 | Processes:                                                                            |
 |  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
@@ -267,7 +267,7 @@ sudo apt install -y nvidia-docker2
 ```
 
 ### WandB Setup
-1. **Create a free WandB account**: [wandb.ai](https://wandb.ai/)  
+1. **Create a free WandB account**: [wandb.ai](https://wandb.ai/)
 2. **Obtain an API Key** and place it into your `.env` file:
    ```bash
    cd compute-subnet
@@ -298,7 +298,7 @@ Open necessary ports:
    sudo ufw enable
    sudo ufw status
    ```
-> **Tip**: You can open any ports: `sudo ufw allow xxxx/tcp` and use them as your `axon.port` default e.g. `sudo ufw allow 8091/tcp` and this port would be specified in your pm2 miner proccess arguments as `--axon.port 8091`. If you are using a cloud server it is a good idea to check with your provider if ports are open by default. If you can create your own network rules make sure these inbound rules are applied to the server. Ask your provider for assitance with this netowrking step. 
+> **Tip**: You can open any ports: `sudo ufw allow xxxx/tcp` and use them as your `axon.port` default e.g. `sudo ufw allow 8091/tcp` and this port would be specified in your pm2 miner proccess arguments as `--axon.port 8091`. If you are using a cloud server it is a good idea to check with your provider if ports are open by default. If you can create your own network rules make sure these inbound rules are applied to the server. Ask your provider for assitance with this netowrking step.
 
 3. **Add user to docker group** (if not already):
    ```bash
@@ -323,7 +323,7 @@ You need **$TAO** tokens in your coldkey to register the hotkey on the chosen ne
   btcli s register --subtensor.network test --netuid 15
   ```
 
-> If you get the error `too many registrations this interval`, wait for the next interval and retry.  
+> If you get the error `too many registrations this interval`, wait for the next interval and retry.
 > **Registration cost** can be checked [Here](https://taostats.io/subnets/netuid-27/#registration). Or check using the CLI w/ `btcli s list` (Cost is 'RECYCLE').
 
 ---
@@ -343,9 +343,9 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
 ```
 
 - **`--netuid`**: Subnet ID (27 for main, 15 for test).
-- **`--subtensor.network`**: Your Bittensor chain endpoint.  
+- **`--subtensor.network`**: Your Bittensor chain endpoint.
   - **Main**: `finney`
-  - **Test**: `test`  
+  - **Test**: `test`
   - Or use a custom endpoint, e.g. `subvortex.info:9944` (recommended)
 - **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created [above](#create-or-regenerate-keys) and used in registration (btcli's defaults are `default` and `default` but both can be freely customized)
 - **`--axon.port`**: default 8091 can be replaced with any port number allowed by ufw as instructed [above](#networking-and-firewall) to serve your axon. Important for proper functionality and miner<->validator communication.
@@ -414,8 +414,8 @@ pm2 start ./neurons/validator.py --name <VALIDATOR_NAME> --interpreter python3 -
 | NVIDIA RTX A5000                | 0.36       |
 | NVIDIA RTX A4500                | 0.34       |
 
-1. **Base GPU Score**: Tied to the GPU model.  
-2. **Scaling**: Up to 8 GPUs can be recognized. The top theoretical scenario (8 of the highest GPU model) is set to 50 points.  
+1. **Base GPU Score**: Tied to the GPU model.
+2. **Scaling**: Up to 8 GPUs can be recognized. The top theoretical scenario (8 of the highest GPU model) is set to 50 points.
 
 ---
 
@@ -436,13 +436,13 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
   - Ensure the miner is running properly and not blacklisted.
 - **Deregistered unexpectedly**:
   - Competition on the network is high; more powerful devices may outcompete you.
-  - Connection or environment issues.  
+  - Connection or environment issues.
   - Make sure scripts and Docker containers are running stably.
 
 ---
 
 ## Reward Program for Contributions
-We encourage community involvement in improving **Compute Subnet**. A **bounty program** is in place to reward valuable contributions.  
+We encourage community involvement in improving **Compute Subnet**. A **bounty program** is in place to reward valuable contributions.
 See the **[Reward Program for Valuable Contributions](https://github.com/neuralinternet/compute-subnet/blob/main/CONTRIBUTING.md)** for details.
 
 
