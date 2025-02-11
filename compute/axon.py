@@ -54,6 +54,12 @@ if TYPE_CHECKING:
     from bittensor_wallet import Wallet
     from bittensor.core.subtensor import Subtensor
 
+from bittensor.core.errors import (
+    InvalidRequestNameError,
+    SynapseParsingError,
+    UnknownSynapseError,
+)
+
 def custom_serve_extrinsic(
     subtensor: "Subtensor",
     wallet: "Wallet",
@@ -297,7 +303,7 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
         """
         super().__init__(app, axon=axon)
 
-    async def preprocess(self, request: Request) -> bittensor.core.synapse.Synapse:
+    async def preprocess(self, request: "Request") -> "Synapse":
         """
         Performs the initial processing of the incoming request. This method is responsible for
         extracting relevant information from the request and setting up the Synapse object, which
@@ -307,9 +313,10 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
             request (Request): The incoming request to be preprocessed.
 
         Returns:
-            bittensor.Synapse: The Synapse object representing the preprocessed state of the request.
+            bittensor.core.synapse.Synapse: The Synapse object representing the preprocessed state of the request.
 
         The preprocessing involves:
+
         1. Extracting the request name from the URL path.
         2. Creating a Synapse instance from the request headers using the appropriate class type.
         3. Filling in the Axon and Dendrite information into the Synapse object.
@@ -319,13 +326,27 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
         ensuring that all necessary information is encapsulated within the Synapse object.
         """
         # Extracts the request name from the URL path.
-        request_name = request.url.path.split("/")[1]
+        try:
+            request_name = request.url.path.split("/")[1]
+        except Exception:
+            raise InvalidRequestNameError(
+                f"Improperly formatted request. Could not parser request {request.url.path}."
+            )
 
         # Creates a synapse instance from the headers using the appropriate forward class type
         # based on the request name obtained from the URL path.
-        synapse = self.axon.forward_class_types[request_name].from_headers(
-            request.headers
-        )
+        request_synapse = self.axon.forward_class_types.get(request_name)
+        if request_synapse is None:
+            raise UnknownSynapseError(
+                f"Synapse name '{request_name}' not found. Available synapses {list(self.axon.forward_class_types.keys())}"
+            )
+
+        try:
+            synapse = request_synapse.from_headers(request.headers)  # type: ignore
+        except Exception:
+            raise SynapseParsingError(
+                f"Improperly formatted request. Could not parse headers {request.headers} into synapse of type {request_name}."
+            )
         synapse.name = request_name
 
         # Fills the local axon information into the synapse.
@@ -334,16 +355,13 @@ class ComputeSubnetAxonMiddleware(AxonMiddleware):
                 "version": __version_as_int__,
                 "uuid": str(self.axon.uuid),
                 "nonce": time.monotonic_ns(),
-                "status_message": "Success",
-                "status_code": "100",
-                "placeholder1": 1,
-                "placeholder2": 2,
+                "status_code": "100"
             }
         )
 
         # Fills the dendrite information into the synapse.
         synapse.dendrite.__dict__.update(
-            {"port": int(request.client.port), "ip": str(request.client.host)}
+            {"port": str(request.client.port), "ip": str(request.client.host)}  # type: ignore
         )
 
         # Signs the synapse from the axon side using the wallet hotkey.
