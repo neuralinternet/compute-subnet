@@ -697,12 +697,8 @@ class Validator:
                     try:
                         # Set a timeout for the GPU test
                         timeout = 300  # e.g., 5 minutes
-                        result = await asyncio.wait_for(
-                            asyncio.get_event_loop().run_in_executor(
-                                self.executor, self.test_miner_gpu, axon, self.config_data
-                            ),
-                            timeout=timeout
-                        )
+                        result = await asyncio.wait_for(self.test_miner_gpu(axon, self.config_data), timeout=timeout)
+
                         if result[1] is not None and result[2] > 0:
                             async with results_lock:
                                 self.results[hotkey] = {
