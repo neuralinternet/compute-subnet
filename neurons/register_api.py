@@ -3011,12 +3011,12 @@ class RegisterAPI:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
 
-                        register_response = await asyncio.wait_for(
-                                asyncio.get_event_loop().run_in_executor(
-                                    self.executor, self.dendrite_check, axon, Allocate(timeline=1,checking=True)
-                                    ),
-                                timeout=30
-                        )
+                        task = asyncio.create_task(self.dendrite_check(axon, Allocate(timeline=1, checking=True)))
+                        try:
+                            register_response = await asyncio.wait_for(task, timeout=10)
+                        except asyncio.TimeoutError:
+                            register_response = True # Handle timeout case appropriately
+
                         deallocated_at = datetime.now(timezone.utc)
                         if register_response and register_response["status"] is False:
                             response = await self._notify_allocation_status(
