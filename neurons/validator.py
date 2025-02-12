@@ -697,9 +697,17 @@ class Validator:
                     try:
                         # Set a timeout for the GPU test
                         timeout = 300  # e.g., 5 minutes
+                        # Define a synchronous helper function to run the asynchronous test_miner_gpu
+                        # This is required because run_in_executor expects a synchronous callable.
+                        def run_test_miner_gpu():
+                            # Run the async test_miner_gpu function and wait for its result.
+                            return asyncio.run(self.test_miner_gpu(axon, self.config_data))
+
+                        # Submit the run_test_miner_gpu function to a thread pool executor.
+                        # The asyncio.wait_for is used to enforce a timeout for the overall operation.
                         result = await asyncio.wait_for(
-                            asyncio.get_event_loop().run_in_executor(
-                                self.executor, self.test_miner_gpu, axon, self.config_data
+                            asyncio.get_running_loop().run_in_executor(
+                                self.executor, run_test_miner_gpu
                             ),
                             timeout=timeout
                         )
