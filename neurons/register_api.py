@@ -3010,11 +3010,14 @@ class RegisterAPI:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
 
+                        def run_dendrite_check():
+                            # Run the async dendrite_check function and wait for its result.
+                            return asyncio.run(self.dendrite_check(axon, Allocate(timeline=1, checking=True)))
                         register_response = await asyncio.wait_for(
-                                asyncio.get_event_loop().run_in_executor(
-                                    self.executor, self.dendrite_check, axon, Allocate(timeline=1,checking=True)
-                                    ),
-                                timeout=30
+                            asyncio.get_running_loop().run_in_executor(
+                                self.executor, run_dendrite_check
+                            ),
+                            timeout=30
                         )
                         deallocated_at = datetime.now(timezone.utc)
                         if register_response and register_response["status"] is False:
