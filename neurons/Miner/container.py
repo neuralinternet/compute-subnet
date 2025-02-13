@@ -399,7 +399,10 @@ def restart_container(public_key:str):
                 ssh_container.restart()
                 # Reload the container to get updated information
                 ssh_container.reload()
-                return {"status": True}
+                if ssh_container.status == "running":
+                    return {"status": True}
+                else:
+                    return {"status": False}
             else:
                 bt.logging.info("No running container.")
                 return {"status": False}
