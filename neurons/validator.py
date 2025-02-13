@@ -245,9 +245,9 @@ class Validator:
         """
         Register the prometheus information on metagraph.
         :return: bool
-        """ 
+        """
         # extrinsic prometheus is removed at 8.2.1
-        
+
         bt.logging.info("Extrinsic prometheus information on metagraph.")
         success = True
         # TODO : remove all the related code from the code base
@@ -572,7 +572,7 @@ class Validator:
             valid_hotkeys.append(hotkey)
         return valid_hotkeys
 
-    def get_specs_wandb(self):
+    async def get_specs_wandb(self):
         """
         Retrieves hardware specifications from Wandb, updates the miner_details table,
         and checks for differences in GPU specs, logging changes only for allocated hotkeys.
@@ -622,7 +622,7 @@ class Validator:
                         bt.logging.info(f"GPU specs changed for allocated hotkey {hotkey}:")
                         bt.logging.info(f"Old count: {current_count}, Old name: {current_name}")
                         bt.logging.info(f"New count: {new_count}, New name: {new_name}")
-                        self.deallocate_miner(axon, None)
+                        await self.deallocate_miner(axon, None)
 
         # Update the local db with the new data from Wandb
         update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
@@ -697,9 +697,17 @@ class Validator:
                     try:
                         # Set a timeout for the GPU test
                         timeout = 300  # e.g., 5 minutes
+                        # Define a synchronous helper function to run the asynchronous test_miner_gpu
+                        # This is required because run_in_executor expects a synchronous callable.
+                        def run_test_miner_gpu():
+                            # Run the async test_miner_gpu function and wait for its result.
+                            return asyncio.run(self.test_miner_gpu(axon, self.config_data))
+
+                        # Submit the run_test_miner_gpu function to a thread pool executor.
+                        # The asyncio.wait_for is used to enforce a timeout for the overall operation.
                         result = await asyncio.wait_for(
-                            asyncio.get_event_loop().run_in_executor(
-                                self.executor, self.test_miner_gpu, axon, self.config_data
+                            asyncio.get_running_loop().run_in_executor(
+                                self.executor, run_test_miner_gpu
                             ),
                             timeout=timeout
                         )
@@ -768,7 +776,7 @@ class Validator:
             bt.logging.error(f"Proof-of-GPU task failed: {e}")
             self.gpu_task = None
 
-    def test_miner_gpu(self, axon, config_data):
+    async def test_miner_gpu(self, axon, config_data):
         """
         Allocate, test, and deallocate a single miner.
 
@@ -793,7 +801,7 @@ class Validator:
             # Step 1: Allocate Miner
             # Generate RSA key pair
             private_key, public_key = rsa.generate_key_pair()
-            allocation_response = self.allocate_miner(axon, private_key, public_key)
+            allocation_response = await self.allocate_miner(axon, private_key, public_key)
             if not allocation_response:
                 bt.logging.info(f"🌀 {hotkey}: Busy or not allocatable.")
                 return (hotkey, None, 0)
@@ -916,9 +924,9 @@ class Validator:
 
         finally:
             if allocation_status and miner_info:
-                self.deallocate_miner(axon, public_key)
+                await self.deallocate_miner(axon, public_key)
 
-    def allocate_miner(self, axon, private_key, public_key):
+    async def allocate_miner(self, axon, private_key, public_key):
         """
         Allocate a miner by querying the allocator.
 
@@ -938,13 +946,13 @@ class Validator:
             }
 
             # Simulate an allocation query with Allocate
-            check_allocation = dendrite.query(
+            check_allocation = await dendrite(
                 axon,
                 Allocate(timeline=1, device_requirement=device_requirement, checking=True),
                 timeout=30,
                 )
             if check_allocation  and check_allocation ["status"] is True:
-                response = dendrite.query(
+                response = await dendrite(
                     axon,
                     Allocate(
                         timeline=1,
@@ -981,7 +989,7 @@ class Validator:
             bt.logging.trace(f"{axon.hotkey}: Exception during miner allocation for: {e}")
             return None
 
-    def deallocate_miner(self, axon, public_key):
+    async def deallocate_miner(self, axon, public_key):
         """
         Deallocate a miner by sending a deregistration query.
 
@@ -1015,7 +1023,7 @@ class Validator:
             while allocation_status and retry_count < max_retries:
                 try:
                     # Send deallocation query
-                    deregister_response = dendrite.query(
+                    deregister_response = await dendrite(
                         axon,
                         Allocate(
                             timeline=0,
@@ -1086,13 +1094,13 @@ class Validator:
         block_next_pog = 1
         block_next_sync_status = 1
         block_next_set_weights = self.current_block + weights_rate_limit
-        block_next_hardware_info = 1        
+        block_next_hardware_info = 1
         block_next_miner_checking = 1
 
         time_next_pog = None
         time_next_sync_status = None
         time_next_set_weights = None
-        time_next_hardware_info = None        
+        time_next_hardware_info = None
 
         bt.logging.info("Starting validator loop.")
         while True:
@@ -1130,7 +1138,7 @@ class Validator:
                             self._queryable_uids = self.get_queryable()
 
                         # self.loop.run_in_executor(None, self.execute_specs_request) replaced by wandb query.
-                        self.get_specs_wandb()
+                        await self.get_specs_wandb()
 
                     # Perform miner checking
                     if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
