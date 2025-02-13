@@ -96,15 +96,15 @@ def build_merkle_tree_rows(C, hash_func=hashlib.sha256, num_threads=None):
         num_threads = 8
 
     n = C.shape[0]
-    
+
     # Hash each row of C using the specified hash function
     def hash_row(i):
         return hash_func(C[i, :].tobytes()).digest()
-    
+
     # Parallelize row hashing
     with ThreadPool(num_threads) as pool:
         leaves = pool.map(hash_row, range(n))
-    
+
     tree = leaves.copy()
     num_leaves = len(leaves)
     offset = 0
@@ -226,7 +226,7 @@ def process_gpu(gpu_id, s_A, s_B, n):
         # Set the current device
         torch.cuda.set_device(gpu_id)
         device = torch.device(f'cuda:{gpu_id}')
-        
+
         # Initialize timing dictionary
         gpu_timing = {}
 
@@ -317,7 +317,7 @@ def run_compute():
         for gpu_id in range(num_gpus):
             s_A, s_B = seeds[gpu_id]
             futures.append(executor.submit(process_gpu, gpu_id, s_A, s_B, n))
-        
+
         for future in as_completed(futures):
             root_hash_result, gpu_timing_result = future.result()
             if root_hash_result:
@@ -332,27 +332,27 @@ def run_compute():
 def run_proof_gpu(gpu_id, indices, num_gpus):
     # Set the GPU device
     torch.cuda.set_device(gpu_id)
-    
+
     # Load data for the specific GPU
     gpu_indices = indices[gpu_id]
     merkle_tree = np.load(f'/dev/shm/merkle_tree_gpu_{gpu_id}.npy', allow_pickle=True)
     C = np.load(f'/dev/shm/C_gpu_{gpu_id}.npy')
-    
+
     # Start proof generation
     start_time_proof = time.time()
     responses = {'rows': [], 'proofs': [], 'indices': gpu_indices}
     total_leaves = C.shape[0]
-    
+
     for idx, (i, j) in enumerate(gpu_indices):
         row = C[i, :]
         proof = get_merkle_proof_row(merkle_tree, i, total_leaves)
         responses['rows'].append(row)
         responses['proofs'].append(proof)
-    
+
     end_time_proof = time.time()
     proof_time = end_time_proof - start_time_proof
     print(f"GPU {gpu_id}: Proof generation time: {proof_time:.2f} seconds")
-    
+
     # Save responses to shared memory
     np.save(f'/dev/shm/responses_gpu_{gpu_id}.npy', responses)
 
@@ -360,7 +360,7 @@ def run_proof():
     # Get the challenge indices
     indices = get_challenge_indices()
     num_gpus = torch.cuda.device_count()
-    
+
     # Use ThreadPoolExecutor for parallel GPU processing
     with ThreadPoolExecutor(max_workers=num_gpus) as executor:
         futures = [
@@ -373,7 +373,7 @@ def run_proof():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Miner script for GPU proof.')
-    parser.add_argument('--mode', type=str, default='benchmark', 
+    parser.add_argument('--mode', type=str, default='benchmark',
                         choices=['benchmark', 'compute', 'proof', 'gpu_info'],
                         help='Mode to run: benchmark, compute, proof, or gpu_info')
     args = parser.parse_args()
