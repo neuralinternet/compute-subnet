@@ -32,8 +32,9 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 10. [Resource Allocation Mechanism](#resource-allocation-mechanism)
 11. [Network Overview Diagram](#network-overview-diagram)
 12. [Troubleshooting](#troubleshooting)
-13. [Reward Program for Contributions](#reward-program-for-contributions)
-14. [License](#license)
+13. [Actions to Update](#actions-to-update)
+14. [Reward Program for Contributions](#reward-program-for-contributions)
+15. [License](#license)
 
 ---
 
@@ -438,6 +439,18 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
   - Competition on the network is high; more powerful devices may outcompete you.
   - Connection or environment issues.
   - Make sure scripts and Docker containers are running stably.
+
+---
+## Actions To Update
+
+__**No action required when using auto-update flag**__.
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python -m pip install -e .
+pm2 restart <id>
+```
 
 ---
 
