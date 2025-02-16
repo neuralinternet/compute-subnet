@@ -439,22 +439,22 @@ class Miner:
                     public_key = synapse.public_key
                     new_ssh_key = docker_action["ssh_key"]
                     key_type = docker_action["key_type"]
-                    result = exchange_key_container(new_ssh_key, key_type)
+                    result = exchange_key_container(new_ssh_key, public_key, key_type)
                     synapse.output = result
                 elif docker_action["action"] == "restart":
                     public_key = synapse.public_key
-                    result = restart_container()
+                    result = restart_container(public_key)
                     synapse.output = result
                 elif docker_action["action"] == "pause":
                     public_key = synapse.public_key
-                    result = pause_container()
+                    result = pause_container(public_key)
                     synapse.output = result
                 elif (
                     docker_action["action"] == "unpause"
                     or docker_action["action"] == "resume"
                 ):
                     public_key = synapse.public_key
-                    result = unpause_container()
+                    result = unpause_container(public_key)
                     synapse.output = result
                 else:
                     bt.logging.info(f"Unknown action: {docker_action['action']}")
@@ -655,7 +655,7 @@ class Miner:
                         self.current_block + 75
                     )  # 75 ~ every 15 minutes
                     self.sync_status()
-                    
+
                     # check allocation status
                     self.__check_alloaction_errors()
 

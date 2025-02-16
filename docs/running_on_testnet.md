@@ -1,5 +1,5 @@
 # Running on the Testing Network
-This tutorial shows how to use the bittensor testnetwork to create a subnetwork and connect your mechanism to it. It is highly recommended that you run `running_on_staging` first before testnet. Mechanisms running on the testnet are open to anyone, and although they do not emit real TAO, they cost test TAO to create and you should be careful not to expose your private keys, to only use your testnet wallet, not use the same passwords as your mainnet wallet, and make sure your mechanism is resistant to abuse. 
+This tutorial shows how to use the bittensor testnetwork to create a subnetwork and connect your mechanism to it. It is highly recommended that you run `running_on_staging` first before testnet. Mechanisms running on the testnet are open to anyone, and although they do not emit real TAO, they cost test TAO to create and you should be careful not to expose your private keys, to only use your testnet wallet, not use the same passwords as your mainnet wallet, and make sure your mechanism is resistant to abuse.
 
 Note: This will require the `revolution` branch for Bittensor
 
@@ -47,11 +47,11 @@ btcli wallet faucet --wallet.name owner --subtensor.network test
 ```
 
 3. Purchasing a slot
-Using the test TAO from the previous step you can register your subnet to the chain. This will create a new subnet on the chain and give you the owner permissions to it. The code below shows how to purchase a slot. 
+Using the test TAO from the previous step you can register your subnet to the chain. This will create a new subnet on the chain and give you the owner permissions to it. The code below shows how to purchase a slot.
 *Note: Slots cost TAO, you wont get this TAO back, it is instead recycled back into the mechanism to be later mined.*
 ```bash
 # Run the register subnetwork command on the locally running chain.
-btcli subnet create --subtensor.network test 
+btcli subnet create --subtensor.network test
 # Enter the owner wallet name which gives permissions to the coldkey to later define running hyper parameters.
 >> Enter wallet name (default): owner # Enter your owner wallet name
 >> Enter password to unlock key: # Enter your wallet password.
@@ -89,19 +89,19 @@ This returns information about your registered keys.
 ```bash
 # Check that your validator key has been registered.
 btcli wallet overview --wallet.name validator --subtensor.network test
-Subnet: 1                                                                                                                                                                
-COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58                    
+Subnet: 1
+COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58
 miner    default  0      True   0.00000  0.00000  0.00000    0.00000    0.00000    0.00000            0  0.00000                14  none  5GTFrsEQfvTsh3WjiEVFeKzFTc2xcf…
-1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000                                                         
-                                                                          Wallet balance: τ0.0         
+1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000
+                                                                          Wallet balance: τ0.0
 
 # Check that your miner has been registered.
 btcli wallet overview --wallet.name miner --subtensor.network test
-Subnet: 1                                                                                                                                                                
-COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58                    
+Subnet: 1
+COLDKEY  HOTKEY   UID  ACTIVE  STAKE(τ)     RANK    TRUST  CONSENSUS  INCENTIVE  DIVIDENDS  EMISSION(ρ)   VTRUST  VPERMIT  UPDATED  AXON  HOTKEY_SS58
 miner    default  1      True   0.00000  0.00000  0.00000    0.00000    0.00000    0.00000            0  0.00000                14  none  5GTFrsEQfvTsh3WjiEVFeKzFTc2xcf…
-1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000                                                         
-                                                                          Wallet balance: τ0.0   
+1        1        2            τ0.00000  0.00000  0.00000    0.00000    0.00000    0.00000           ρ0  0.00000
+                                                                          Wallet balance: τ0.0
 ```
 
 12. Edit the default `NETUID=1` and `CHAIN_ENDPOINT=ws://127.0.0.1:9946` arguments in `template/__init__.py` to match your created subnetwork.

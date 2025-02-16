@@ -55,7 +55,7 @@ def identify_gpu(fp16_tflops, fp32_tflops, estimated_avram, gpu_data, reported_n
 
         combined_score = (fp16_deviation + fp32_deviation + avram_deviation) / 3
         combined_scores.append((gpu, combined_score))
-    
+
     # Sort by the lowest deviation
     identified_gpu = sorted(combined_scores, key=lambda x: x[1])[0][0]
 
@@ -183,7 +183,7 @@ def receive_responses(ssh_client, num_gpus):
             for gpu_id in range(num_gpus):
                 remote_path = f'/dev/shm/responses_gpu_{gpu_id}.npy'
                 local_path = f'{temp_dir}/responses_gpu_{gpu_id}.npy'
-                
+
                 try:
                     sftp.get(remote_path, local_path)
                     response = np.load(local_path, allow_pickle=True)
@@ -193,7 +193,7 @@ def receive_responses(ssh_client, num_gpus):
                     responses[gpu_id] = None
     except Exception as e:
         print(f"SFTP connection error: {e}")
-    
+
     return responses
 
 def xorshift32_numpy(state):
@@ -321,7 +321,7 @@ def verify_merkle_proof_row(row, proof, root_hash, index, total_leaves, hash_fun
     computed_hash = hash_func(row.tobytes()).digest()
     idx = index
     num_leaves = total_leaves
-    
+
     # Iterate through each sibling hash in the proof
     for sibling_hash in proof:
         if idx % 2 == 0:
@@ -334,7 +334,7 @@ def verify_merkle_proof_row(row, proof, root_hash, index, total_leaves, hash_fun
         computed_hash = hash_func(combined).digest()
         # Move up to the next level
         idx = idx // 2
-    
+
     # Compare the computed hash with the provided root hash
     return computed_hash == root_hash
 
