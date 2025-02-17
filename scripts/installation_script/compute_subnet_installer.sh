@@ -3,8 +3,7 @@ set -u
 set -o history -o histexpand
 
 ##############################################################################
-#                  compute_subnet_installer.sh (UNIFIED)
-#                  Comments and logs in English
+#                  compute_subnet_installer.sh
 ##############################################################################
 #
 # This script will:
@@ -17,15 +16,6 @@ set -o history -o histexpand
 # Usage:
 #   ./compute_subnet_installer.sh
 #   ./compute_subnet_installer.sh --automated   (non-interactive mode)
-#
-# Environment variables (especially if using --automated):
-#   WANDB_KEY="YOUR_WANDB_API_KEY"
-#   NETUID=27 (or 15, etc.)
-#   SUBTENSOR_NETWORK="subvortex.info:9944" (or "test")
-#   AXON_PORT=8091
-#
-#   In automated mode, the script will skip confirmations, but will NOT create
-#   wallets. If no wallets are found, the miner setup part will simply skip.
 #
 ##############################################################################
 # 0 means "no reboot needed", 1 means "reboot needed"
@@ -479,7 +469,6 @@ if $AUTOMATED; then
   fi
   cd "$CS_PATH" || abort "Failed to change directory to $CS_PATH"
 else
-  # Interactive: try to detect the repo root with git
   if REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
     info "Detected repository root: $REPO_ROOT"
     cd "$REPO_ROOT" || abort "Failed to cd into $REPO_ROOT"
@@ -541,7 +530,6 @@ fi
 info "Installing compute-subnet in editable mode..."
 pip install -e . || abort "Failed to install compute-subnet (editable)."
 
-# Check if PyTorch is installed
 python -c "import torch" 2>/dev/null
 if [ $? -ne 0 ]; then
   info "PyTorch not found. Installing torch, torchvision, torchaudio..."
@@ -551,7 +539,6 @@ fi
 info "Installing OpenCL libraries..."
 sudo apt-get install -y ocl-icd-libopencl1 pocl-opencl-icd || abort "Failed to install OpenCL libraries."
 
-# npm and PM2
 info "Installing npm and PM2..."
 sudo apt-get update
 sudo apt-get install -y npm || abort "Failed to install npm."
@@ -647,9 +634,6 @@ inject_wandb_env
 #                      11) PM2 miner launch
 ##############################################################################
 
-# If the user has no wallet, they can still proceed, but the miner will likely fail
-# because there's no valid hotkey. We do not create wallets here.
-
 if [ ! -f "${CS_PATH}/neurons/miner.py" ]; then
   abort "miner.py not found in ${CS_PATH}/neurons. Please check the repository structure."
 fi
@@ -698,6 +682,3 @@ echo
 echo "Installation and miner setup is complete!"
 echo "If needed, you can rerun this script or manually manage PM2 processes."
 echo
-
-# Uncomment if you want an automatic reboot at the end:
-# sudo reboot
