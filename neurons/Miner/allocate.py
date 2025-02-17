@@ -56,7 +56,7 @@ def register_allocation(timeline, device_requirement, public_key, docker_require
         # Kill container when it meets timeline
         start(timeline)
         return run_status
-    
+
     except Exception as e:
         bt.logging.info(f"Error allocating container {e}")
     return {"status": False}
@@ -80,7 +80,7 @@ def deregister_allocation(public_key):
                 # Remove the key from the file after successful deallocation
                 with open(file_path, 'w') as file:
                     file.truncate(0)  # Clear the file
-                
+
                 bt.logging.info("Successfully de-allocated container.")
                 return {"status": True}
             else:

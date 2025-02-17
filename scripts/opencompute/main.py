@@ -113,4 +113,3 @@ try:
 except:
     st.write("Unable to connect to the server. Please try again later.")
     print("Error: ConnectionError occurred while attempting to connect to the server.")
-

@@ -27,6 +27,11 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 # Third-party
 import uvicorn
+from bittensor.core.axon import Axon as axon
+from bittensor.core.subtensor import Subtensor as subtensor
+
+# Third-party
+import uvicorn
 from fastapi import FastAPI, APIRouter
 from starlette.requests import Request
 
@@ -245,7 +250,6 @@ class ComputeSubnetAxon(axon):
         self.app.include_router(self.router)
 
         # Build ourselves as the middleware.
-        self.middleware_cls = ComputeSubnetAxonMiddleware
         self.app.add_middleware(self.middleware_cls, axon=self)
 
         # Attach default forward.
