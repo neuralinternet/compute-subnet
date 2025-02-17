@@ -385,18 +385,24 @@ def restart_container(public_key:str):
         # compare public_key to the local saved allocation key for security
         if allocation_key.strip() == public_key.strip():
             client, containers = get_docker()
-            running_container = None
+            ssh_container = None
             for container in containers:
                 if container_name in container.name:
-                    running_container = container
+                    ssh_container = container
                     break
-            if running_container:
+            if ssh_container:
                 # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
-                if running_container.status == "running":
-                    running_container.exec_run(cmd="kill -15 1")
-                    running_container.wait()
-                    running_container.restart()
-                return {"status": True}
+                if ssh_container.status == "running":
+                    ssh_container.exec_run(cmd="kill -15 1")
+                    ssh_container.wait()
+                # Restart container
+                ssh_container.restart()
+                # Reload the container to get updated information
+                ssh_container.reload()
+                if ssh_container.status == "running":
+                    return {"status": True}
+                else:
+                    return {"status": False}
             else:
                 bt.logging.info("No running container.")
                 return {"status": False}
