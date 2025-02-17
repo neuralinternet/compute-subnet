@@ -59,6 +59,12 @@ if TYPE_CHECKING:
     from bittensor_wallet import Wallet
     from bittensor.core.subtensor import Subtensor
 
+from bittensor.core.errors import (
+    InvalidRequestNameError,
+    SynapseParsingError,
+    UnknownSynapseError,
+)
+
 def custom_serve_extrinsic(
     subtensor: "Subtensor",
     wallet: "Wallet",
@@ -69,7 +75,7 @@ def custom_serve_extrinsic(
     placeholder1: int = 0,
     placeholder2: int = 0,
     wait_for_inclusion: bool = False,
-    wait_for_finalization=True,
+    wait_for_finalization: bool =True,
     certificate: Certificate | None = None,
 ) -> bool:
     """Subscribes a Bittensor endpoint to the subtensor chain.
@@ -100,19 +106,17 @@ def custom_serve_extrinsic(
         return False
 
     params = AxonServeCallParams(
-        **{
-            "version": __version_as_int__,
-            "ip": net.ip_to_int(ip),
-            "port": port,
-            "ip_type": net.ip_version(ip),
-            "netuid": netuid,
-            "hotkey": wallet.hotkey.ss58_address,
-            "coldkey": wallet.coldkeypub.ss58_address,
-            "protocol": protocol,
-            "placeholder1": placeholder1,
-            "placeholder2": placeholder2,
-            "certificate": certificate,
-        }
+        version=__version_as_int__,
+        ip=net.ip_to_int(ip),
+        port=port,
+        ip_type=net.ip_version(ip),
+        netuid=netuid,
+        hotkey=wallet.hotkey.ss58_address,
+        coldkey=wallet.coldkeypub.ss58_address,
+        protocol=protocol,
+        placeholder1=placeholder1,
+        placeholder2=placeholder2,
+        certificate=certificate,
     )
     logging.debug("Checking axon ...")
     neuron = subtensor.get_neuron_for_pubkey_and_subnet(
