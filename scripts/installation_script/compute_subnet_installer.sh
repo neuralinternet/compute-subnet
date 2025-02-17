@@ -3,7 +3,8 @@ set -u
 set -o history -o histexpand
 
 ##############################################################################
-#                  compute_subnet_installer.sh
+#                  compute_subnet_installer.sh (UNIFIED)
+#                  Comments and logs in English
 ##############################################################################
 #
 # This script will:
@@ -16,6 +17,15 @@ set -o history -o histexpand
 # Usage:
 #   ./compute_subnet_installer.sh
 #   ./compute_subnet_installer.sh --automated   (non-interactive mode)
+#
+# Environment variables (especially if using --automated):
+#   WANDB_KEY="YOUR_WANDB_API_KEY"
+#   NETUID=27 (or 15, etc.)
+#   SUBTENSOR_NETWORK="subvortex.info:9944" (or "test")
+#   AXON_PORT=8091
+#
+#   In automated mode, the script will skip confirmations, but will NOT create
+#   wallets. If no wallets are found, the miner setup part will simply skip.
 #
 ##############################################################################
 # 0 means "no reboot needed", 1 means "reboot needed"
@@ -224,7 +234,7 @@ else
       echo "# CUDA configuration added by compute_subnet_installer.sh"
       echo "export PATH=/usr/local/cuda-12.8/bin:\$PATH"
       echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:\$LD_LIBRARY_PATH"
-    } | tee -a "${HOME_DIR}/.bashrc"
+    } | sudo tee -a "${HOME_DIR}/.bashrc" > /dev/null
     info "CUDA environment variables appended to ${HOME_DIR}/.bashrc"
   else
     info "CUDA environment variables already present in ${HOME_DIR}/.bashrc"
@@ -238,7 +248,7 @@ fi
 #                      5) Check / Install Bittensor
 ##############################################################################
 bittensor_installed() {
-  # Basic check: if 'btcli' is in PATH
+  # Basic check: if 'btcli' is in PATH, we assume Bittensor is installed
   if command -v btcli >/dev/null 2>&1; then
     return 0
   fi
@@ -251,41 +261,32 @@ else
   info "Bittensor is not installed."
 
   if $AUTOMATED; then
-  info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
+  info "Automated mode: Installing Bittensor system-wide (no virtualenv)."
 
+  # Update packages if necessary
   sudo apt-get update -y || abort "Failed to update apt."
+
+  # Install Git, Python, etc.
   sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
 
-  python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
-
-  python3 -m pip install --user bittensor || abort "Failed to install Bittensor (user-level)."
-
-  if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-    info "Added '$HOME/.local/bin' to PATH in .bashrc"
-  fi
-
-  if [ -f "$HOME/.bashrc" ]; then
-    source "$HOME/.bashrc"
-    info "Sourced $HOME/.bashrc. PATH is now: $PATH"
-  fi
-
-  export PATH="$HOME/.local/bin:$PATH"
-  info "Manually exported ~/.local/bin to PATH for the current shell."
-
-  if ! command -v btcli >/dev/null 2>&1; then
-    echo "WARNING: btcli is still not recognized in this non-interactive shell."
-    echo "It will be recognized once you log in as $USER or start a new interactive session."
+  if [ ! -d "${HOME_DIR}/bittensor" ]; then
+    info "Cloning Bittensor SDK repo..."
+    git clone https://github.com/opentensor/bittensor.git "/home/ubuntu/bittensor" || abort "Failed to clone Bittensor repository."
   else
-    info "btcli is recognized in the current environment now."
+    info "Bittensor repo already present at /home/ubuntu/bittensor"
   fi
 
-  info "Bittensor installed successfully at user-level (no virtualenv)."
+  cd "/home/ubuntu/bittensor" || abort "Failed to enter Bittensor directory."
+
+  # System-wide install of Bittensor from source:
+  sudo pip3 install . || abort "Failed to install Bittensor system-wide."
+
+  cd - >/dev/null
+  info "Bittensor installed successfully without a virtual environment."
 
 else
     info "Interactive mode: Installing Bittensor using the official script."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
-      || abort "Bittensor installation failed."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" || abort "Bittensor installation failed."
     info "Bittensor installed successfully."
     NEED_REBOOT=1
   fi
@@ -478,6 +479,7 @@ if $AUTOMATED; then
   fi
   cd "$CS_PATH" || abort "Failed to change directory to $CS_PATH"
 else
+  # Interactive: try to detect the repo root with git
   if REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
     info "Detected repository root: $REPO_ROOT"
     cd "$REPO_ROOT" || abort "Failed to cd into $REPO_ROOT"
@@ -539,6 +541,7 @@ fi
 info "Installing compute-subnet in editable mode..."
 pip install -e . || abort "Failed to install compute-subnet (editable)."
 
+# Check if PyTorch is installed
 python -c "import torch" 2>/dev/null
 if [ $? -ne 0 ]; then
   info "PyTorch not found. Installing torch, torchvision, torchaudio..."
@@ -548,6 +551,7 @@ fi
 info "Installing OpenCL libraries..."
 sudo apt-get install -y ocl-icd-libopencl1 pocl-opencl-icd || abort "Failed to install OpenCL libraries."
 
+# npm and PM2
 info "Installing npm and PM2..."
 sudo apt-get update
 sudo apt-get install -y npm || abort "Failed to install npm."
@@ -643,6 +647,9 @@ inject_wandb_env
 #                      11) PM2 miner launch
 ##############################################################################
 
+# If the user has no wallet, they can still proceed, but the miner will likely fail
+# because there's no valid hotkey. We do not create wallets here.
+
 if [ ! -f "${CS_PATH}/neurons/miner.py" ]; then
   abort "miner.py not found in ${CS_PATH}/neurons. Please check the repository structure."
 fi
@@ -691,3 +698,6 @@ echo
 echo "Installation and miner setup is complete!"
 echo "If needed, you can rerun this script or manually manage PM2 processes."
 echo
+
+# Uncomment if you want an automatic reboot at the end:
+# sudo reboot
