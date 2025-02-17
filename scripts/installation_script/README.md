@@ -1,119 +1,166 @@
-# Bittensor and Compute-Subnet Setup Guide
+# Bittensor & Compute-Subnet Setup Guide (Two-Pass Installer)
 
-## Overview
-This guide provides comprehensive instructions for setting up Bittensor and Compute-Subnet on a Linux system for mining operations. The installation process is divided into two separate scripts:
+This guide explains how to install all necessary components (Docker, CUDA, NVIDIA Docker, Bittensor) and then set up the Compute-Subnet miner. You will run the unified installer script in two passes:
 
-1. `1_cuda_installer.sh`: Installs Docker, NVIDIA drivers, NVIDIA Docker support, the CUDA Toolkit, and Bittensor (via the btcli source installation)
-2. `2_compute_subnet_installer.sh`: Sets up the environment and launches the miner
+1. **First Pass**: Installs system dependencies (Docker, NVIDIA drivers, CUDA, Bittensor).
+2. **Wallet Creation / Funding**: A manual step where you create/import and fund your wallet.
+3. **Second Pass**: Re-run the installer to configure and launch the miner, now that the wallet exists.
+
+By splitting things up, you can reboot if needed after installing drivers, and ensure your wallet is funded before finalizing the miner setup.
 
 ## Prerequisites
 
-### Required Items
+- Ubuntu 22.04 or 24.04 (other distros may require manual steps).
+- NVIDIA GPU (the script installs drivers and CUDA 12.8).
+- WANDB Account (optional, recommended).
+- Sudo/Root access on your machine.
 
-#### Weights & Biases (WANDB) API Key
-- Generate from your WANDB account settings
-- Required for logging mining statistics
+## Step 1: Get the Unified Installer Script
 
-#### Bittensor Wallets and TAO
-- You must create and fund your wallets before running the second installer
-- The script will check for existing wallets in `~/.bittensor/wallets`
-- You need TAO (mainnet) or TestTAO (testnet) for registration
-- If no wallets are found, the script will abort
-
-#### GPU Drivers and CUDA Toolkit
-- The installer scripts automatically install NVIDIA drivers and the CUDA Toolkit (version 12.8) for Ubuntu 22.04 and 24.04
-- For other distributions or CUDA versions, manual installation may be required
-
-## Installation Steps
-
-### Clone the Repository
-
-First, clone the Compute-Subnet repository and navigate to the installation scripts directory:
+### Option 1: Clone the Repository
 
 ```bash
 git clone https://github.com/neuralinternet/compute-subnet.git
 cd compute-subnet/scripts/installation_script
 ```
 
-### Step 1: Run the CUDA and System Installer (1_cuda_installer.sh)
-
-This script installs Docker, NVIDIA drivers, NVIDIA Docker support, the CUDA Toolkit, and btcli from source.
+You will find the installer script named `compute_subnet_installer.sh` in the `scripts/installation_script/` folder. Make it executable:
 
 ```bash
-bash 1_cuda_installer.sh
+chmod +x compute_subnet_installer.sh
 ```
 
-**Note**: The script will prompt for confirmations and may reboot your system to finalize the driver and CUDA setup.
+### Option 2: Download via curl
 
-### Step 2: Create and Fund Your Wallets
+If you prefer, you can fetch the script directly:
 
-Before running the second installer, you must create and fund your wallets. You have two options:
+```bash
+curl -sL \
+  https://raw.githubusercontent.com/neuralinternet/compute-subnet/main/scripts/installation_script/compute_subnet_installer.sh \
+  -o compute_subnet_installer.sh
 
-#### Option 1: Create New Wallets
+chmod +x compute_subnet_installer.sh
+```
+
+## Step 2: First-Pass Installation
+
+Run the script to install Docker, NVIDIA drivers, CUDA, and Bittensor. Choose automated or interactive:
+
+```bash
+# Automated (skips confirmations)
+./compute_subnet_installer.sh --automated
+
+# Or Interactive (step-by-step questions)
+./compute_subnet_installer.sh
+```
+
+During this first pass:
+
+- The script checks for Docker, CUDA, Bittensor; installs them if missing.
+- If you install new GPU drivers, it may prompt you to reboot afterward.
+- It looks for your wallet. If none exists, it will likely skip final miner setup.
+
+## Step 3: Create & Fund Your Bittensor Wallet
+
+The script does not automatically create or import your wallet. You must do one of the following:
+
+### 3.1 Create a New Wallet
+
 ```bash
 # Create a new coldkey
-btcli wallet new_coldkey
+btcli w new_coldkey
 
 # Create a new hotkey
-btcli wallet new_hotkey
+btcli w new_hotkey
 ```
 
-#### Option 2: Import Existing Wallets
-```bash
-# Import existing coldkey
-btcli wallet regen_coldkey --mnemonic "your twelve words mnemonic here"
-
-# Import existing hotkey
-btcli wallet regen_hotkey --mnemonic "your twelve words mnemonic here"
-```
-
-#### Fund Your Wallet
-1. For mainnet:
-   - Transfer TAO to your coldkey wallet address
-   - You'll need TAO for registration and mining
-
-2. For testnet:
-   - Transfer TestTAO to your coldkey wallet address
-   - Required for testnet registration
-
-**⚠️ Important:**
-- The second installer will verify that wallets exist in `~/.bittensor/wallets`
-- If no wallets are found, the installation will abort
-- Make sure to create and fund your wallets before proceeding
-
-### Step 3: Run the Compute-Subnet Installer (2_compute_subnet_installer.sh)
-
-After creating and funding your wallets, proceed with the second script:
+### 3.2 Import an Existing Wallet
 
 ```bash
-bash 2_compute_subnet_installer.sh
+# Import coldkey from mnemonic
+btcli w regen_coldkey --mnemonic "twelve words..."
+--wallet.name mycold
+
+# Import hotkey from mnemonic
+btcli w regen_hotkey --mnemonic "twelve words..."
 ```
 
-The script will:
-- Verify existing wallets
-- Set up the environment
-- Configure and launch the miner
+### 3.3 Fund the Wallet
+
+- **Mainnet**: Send TAO to your coldkey address.
+- **Testnet**: Send TestTAO from other source to your coldkey.
+
+You must have enough TAO/TestTAO to register and mine.
+
+## Step 4: Second-Pass Installation (Miner Setup)
+
+Once your wallet is created and funded, re-run the script:
+
+```bash
+./compute_subnet_installer.sh --automated
+```
+(or without `--automated` for interactive prompts).
+
+Now, the script detects a funded wallet in `~/.bittensor/wallets` and proceeds:
+
+- Compute-Subnet dependencies installation (Python, PM2, etc.).
+- UFW firewall configuration (opens ports 22, 4444, and Axon port, typically 8091).
+- Optionally asks for a WANDB key (used for logging).
+- Creates a PM2 config for the miner and launches it in the background.
+
+At the end, you have a running miner process, assuming your wallet is registered and funded.
+
+## Verification
+
+Check PM2:
+
+```bash
+pm2 list
+pm2 logs subnetXX_miner
+```
+(XX depends on the netuid you selected.)
+
+Register Hotkey (if you haven't yet):
+
+```bash
+btcli register --wallet.name mycold --wallet.hotkey myhot
+```
+
+This requires sufficient TAO in the coldkey.
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+### Docker Permissions
 
-#### Missing Wallets
-- Ensure you have created your wallets using btcli before running the second installer
-- Check that your wallets exist in `~/.bittensor/wallets`
-- Verify your wallet has sufficient TAO/TestTAO
-
-#### Missing WANDB API Key
-- Edit the file `/home/ubuntu/compute-subnet/.env` to add your WANDB API key
-
-#### Docker Permissions
-If you encounter Docker permission issues:
 ```bash
 sudo usermod -aG docker $USER
 ```
-You might need to re-login or reboot after modifying group membership.
+
+Then re-login or reboot to apply group changes.
+
+### Wallet Not Found
+
+- Check if `~/.bittensor/wallets/<coldkey>/hotkeys/<hotkey>` exists.
+- Ensure you used the correct wallet/hotkey names.
+
+### WANDB Key
+
+- If you skip it, you can later edit `~/.env` in the compute-subnet repo folder to add `WANDB_API_KEY="..."`.
+
+### CUDA/Driver Issues
+
+- A reboot often fixes driver initialization problems.
+
+## Summary
+
+1. **First Pass**: Installs Docker, NVIDIA drivers, CUDA, Bittensor.
+2. **Wallet Creation**: Manually create/import and fund your wallet.
+3. **Second Pass**: Sets up the Compute-Subnet miner (PM2, firewall, WANDB, etc.).
+
+Using this approach, you ensure that all dependencies are in place and that you have a funded wallet before the miner is configured.
 
 ## Additional Resources
+
 - [Weights & Biases Documentation](https://docs.wandb.ai/)
 - [Bittensor Documentation](https://docs.bittensor.com/)
-- [Compute-Subnet Documentation](https://github.com/neuralinternet/compute-subnet)
+- [Compute-Subnet Repository](https://github.com/neuralinternet/compute-subnet)
