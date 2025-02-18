@@ -249,14 +249,12 @@ class Validator:
         # extrinsic prometheus is removed at 8.2.1
 
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = True
-        # TODO : remove all the related code from the code base
-        # self._subtensor.serve_prometheus(
-        #     wallet=self.wallet,
-        #     port=bt.core.settings.DEFAULTS.axon.port,
-        #     netuid=self.config.netuid,
-        #     force_update=force_update,
-        # )
+
+        success = self._subtensor.serve_prometheus(
+            wallet=self.wallet,
+            port=bt.core.settings.DEFAULTS.axon.port,
+            netuid=self.config.netuid
+        )
         if success:
             bt.logging.success(
                 prefix="Prometheus served",
