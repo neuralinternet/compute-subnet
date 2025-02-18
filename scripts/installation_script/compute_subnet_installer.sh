@@ -253,15 +253,12 @@ else
   if $AUTOMATED; then
     info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
 
-    # Update packages if necessary
     sudo apt-get update -y || abort "Failed to update apt."
 
-    # Install Python, pip, and Git
     sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
 
-    # Install Bittensor (user-level) from PyPI
-    python3 -m pip install --user --upgrade pip
-    python3 -m pip install --user bittensor || abort "Failed to install Bittensor (user-level)."
+    python3 -m pip install --upgrade pip
+    python3 -m pip install bittensor || abort "Failed to install Bittensor (user-level)."
 
     # Ensure ~/.local/bin is in PATH so 'btcli' is recognized
     if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
