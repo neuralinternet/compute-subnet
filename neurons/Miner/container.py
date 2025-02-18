@@ -117,7 +117,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
         docker_appendix = docker_requirement.get("dockerfile")
 
         # ensure base image exists
-        build_sample_container()  # this is a no-op when already built
+        build_sample_container(testing=testing)  # this is a no-op when already built
 
         bt.logging.info(f"Image: {image_name_base}")
 
@@ -272,7 +272,7 @@ def build_check_container(image_name: str, container_name: str):
         except Exception as close_error:
             bt.logging.warning(f"Error closing the Docker client: {close_error}")
 
-def build_sample_container():
+def build_sample_container(testing=False):
     """
     Build a sample container to speed up the process of building the container
 
@@ -292,7 +292,8 @@ def build_sample_container():
 
         # Step 1: Build the Docker image with an SSH server
         # Step 1: Build the Docker image with SSH server and install numpy
-        dockerfile_content = f"""
+        if testing:
+            dockerfile_content = f"""
         FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
         # Prevent interactive prompts during package installation
@@ -327,6 +328,43 @@ def build_sample_container():
         # Start SSH daemon
         CMD ["/usr/sbin/sshd", "-D"]
         """
+        else:
+            dockerfile_content = f"""
+        FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+        # Prevent interactive prompts during package installation
+        ENV DEBIAN_FRONTEND=noninteractive
+
+        # Install SSH server and necessary packages
+        RUN apt-get update && \\
+            apt-get install -y --no-install-recommends openssh-server python3-pip build-essential && \\
+            mkdir /var/run/sshd && \\
+            # Remove root password creation and disable PasswordAuthentication
+            sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config && \\
+            sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config && \\
+            sed -i 's/#ListenAddress 0.0.0.0/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+        RUN mkdir -p /root/.ssh/ && echo '{""}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+
+        # Ensure PATH includes Conda binaries
+        ENV PATH="/opt/conda/bin:$PATH"
+
+        # Activate Conda environment on shell startup (for interactive shells)
+        RUN echo "source /opt/conda/etc/profile.d/conda.sh && conda activate base" >> /root/.bashrc
+
+        # Force "python3" to be the conda Python
+        RUN ln -sf /opt/conda/bin/python /usr/local/bin/python3
+
+        # Install numpy
+        RUN pip3 install --upgrade pip && \\
+            pip3 install numpy==1.24.3 && \\
+            apt-get clean && \\
+            rm -rf /var/lib/apt/lists/*
+
+        # Start SSH daemon
+        CMD ["/usr/sbin/sshd", "-D"]
+        """
+
         # dockerfile_content = (
         #     """
         #     FROM ubuntu
@@ -351,7 +389,8 @@ def build_sample_container():
             dockerfile.write(dockerfile_content)
 
         # Build the Docker image and remove the intermediate containers
-        client.images.build(path=os.path.dirname(dockerfile_path), dockerfile=os.path.basename(dockerfile_path),
+        client.images.build(path=os.path.dirname(dockerfile_path),
+                            dockerfile=os.path.basename(dockerfile_path),
                             tag=image_name_base, rm=True)
         # Create the Docker volume with the specified size
         # client.volumes.create(volume_name, driver = 'local', driver_opts={'size': hard_disk_capacity})
