@@ -1,5 +1,5 @@
 at==0.0.3
-bittensor==8.5.0
+bittensor==9.0.0
 black==23.7.0
 cryptography==43.0.1
 docker==7.0.0

@@ -43,7 +43,7 @@ import asyncio
 import random
 from concurrent.futures import ThreadPoolExecutor
 
-from neurons.Validator.database.pog import get_pog_specs
+from neurons.Validator.database.pog import get_pog_specs, hotkey_hw_change_exists
 
 # Import Compute Subnet Libraries
 import RSAEncryption as rsa
@@ -126,7 +126,7 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
         if client_ip not in self.whitelisted_ips:
             bt.logging.info(f"Access attempt from IP: {client_ip}")
             raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Access forbidden: IP not whitelisted")
-        
+
         # Process the request and get the response
         response = await call_next(request)
         return response
@@ -331,13 +331,13 @@ class RegisterAPI:
         # Optional: Initialize per-hotkey locks if necessary
         self.hotkey_locks = {}
         self.hotkey_locks_lock = threading.Lock()
-        
+
         # Initialize executor for the thread execution
         cpu_cores = os.cpu_count() or 1
         configured_max_workers = 32
         safe_max_workers = min((cpu_cores + 4)*4, configured_max_workers)
         self.executor = ThreadPoolExecutor(max_workers=safe_max_workers)
-        
+
 
     def _setup_routes(self):
         # Define a custom validation error handler
@@ -456,7 +456,7 @@ class RegisterAPI:
                 timeline = int(requirements.timeline)
                 private_key, public_key = rsa.generate_key_pair()
                 run_start = time.time()
-                result = await run_in_threadpool(self._allocate_container, device_requirement,
+                result = await self._allocate_container( device_requirement,
                                                  timeline, public_key, docker_requirement.dict())
 
                 if result["status"] is False:
@@ -580,16 +580,29 @@ class RegisterAPI:
             """
 
             if hotkey in MINER_BLACKLIST:
-                bt.logging.warning(f"Allocation request by blacklisted hotkey: {hotkey}")
-                bt.logging.error(f"API: Allocation {hotkey} Failed : blacklisted")
+                bt.logging.warning(f"Allocation request by blacklisted hotkey (hw change): {hotkey}")
+                bt.logging.error(f"API: Allocation {hotkey} Failed : blacklisted (hw change)")
                 return JSONResponse(
                         status_code=status.HTTP_404_NOT_FOUND,
                         content={
                             "success": False,
-                            "message": "Fail to allocate resource, blacklisted",
-                            "err_detail": "blacklisted",
-                            },                                                                                                            
+                            "message": "Fail to allocate resource, blacklisted (hw change)",
+                            "err_detail": "blacklisted (hw change)",
+                            },
                         )
+
+            if hotkey_hw_change_exists(hotkey):  # Check if the hotkey exists
+                bt.logging.warning(f"Allocation request by blacklisted hotkey (hw change): {hotkey}")
+                bt.logging.error(f"API: Allocation {hotkey} Failed: blacklisted (hw change)")
+                return JSONResponse(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    content={
+                        "success": False,
+                        "message": "Fail to allocate resource, blacklisted (hw change)",
+                        "err_detail": "blacklisted (hw change)",
+                    },
+                )
+
             if hotkey:
                 # client_host = request.client.host
                 requirements = DeviceRequirement()
@@ -612,7 +625,7 @@ class RegisterAPI:
                 run_start = time.time()
 
                 result = await self._allocate_container_hotkey(requirements, hotkey,requirements.timeline, public_key, docker_requirement.dict())
-                
+
                 if result["status"] is False:
                     bt.logging.error(f"API: Allocation {hotkey} Failed : {result['msg']}")
                     return JSONResponse(
@@ -760,10 +773,8 @@ class RegisterAPI:
                             while retry_count < MAX_NOTIFY_RETRY:
                                 allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey)
                                 # Change to the non-thread execution to prevent the thread usage limit
-                                # deregister_response = await run_in_threadpool(
-                                #     self.dendrite.query, axon, allocate_class, timeout=60
-                                # )
-                                deregister_response = self.dendrite.query(axon, allocate_class, timeout=60)
+                                # deregister_response = await self.dendrite( axon, allocate_class, timeout=60 )
+                                deregister_response = await self.dendrite(axon, allocate_class, timeout=60)
                                 run_end = time.time()
                                 time_eval = run_end - run_start
                                 # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -877,7 +888,7 @@ class RegisterAPI:
                             if query_version:
                                 checking_result = {"hotkey": hotkey, "version": axon.version}
                             else:
-                                register_response = await run_in_threadpool(self.dendrite.query,
+                                register_response = await self.dendrite(
                                                                             axon, Allocate(timeline=1, checking=True, ),
                                                                             timeout=10)
                                 await asyncio.sleep(0.1)
@@ -953,9 +964,7 @@ class RegisterAPI:
                         run_start = time.time()
                         allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
-                        response = await run_in_threadpool(
-                            self.dendrite.query, axon, allocate_class, timeout=60
-                        )
+                        response = await self.dendrite( axon, allocate_class, timeout=60)
                         run_end = time.time()
                         time_eval = run_end - run_start
                         # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -1056,9 +1065,7 @@ class RegisterAPI:
                         run_start = time.time()
                         allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
-                        response = await run_in_threadpool(
-                            self.dendrite.query, axon, allocate_class, timeout=60
-                        )
+                        response = await self.dendrite( axon, allocate_class, timeout=60)
                         run_end = time.time()
                         time_eval = run_end - run_start
                         # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -1160,9 +1167,7 @@ class RegisterAPI:
                         run_start = time.time()
                         allocate_class = Allocate(timeline=0, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
-                        response = await run_in_threadpool(
-                            self.dendrite.query, axon, allocate_class, timeout=60
-                        )
+                        response = await self.dendrite( axon, allocate_class, timeout=60)
                         run_end = time.time()
                         time_eval = run_end - run_start
                         # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -1264,9 +1269,7 @@ class RegisterAPI:
                         run_start = time.time()
                         allocate_class = Allocate(timeline=1, device_requirement={}, checking=False, public_key=regkey,
                                                   docker_change=True, docker_action=docker_action)
-                        response = await run_in_threadpool(
-                            self.dendrite.query, axon, allocate_class, timeout=60
-                        )
+                        response = await self.dendrite( axon, allocate_class, timeout=60)
                         run_end = time.time()
                         time_eval = run_end - run_start
                         # bt.logging.info(f"API: Stop docker container in: {run_end - run_start:.2f} seconds")
@@ -1727,8 +1730,8 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")            
-            GPU_COUNTS = 0 
+            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")
+            GPU_COUNTS = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
                 if specs_details:
@@ -1779,7 +1782,7 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")            
+            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")
             counter = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
@@ -1856,7 +1859,7 @@ class RegisterAPI:
             query: The query parameter to filter the resources. <br>
             """
 
-            bt.logging.info(f"API: List resources(wandb) on compute subnet")            
+            bt.logging.info(f"API: List resources(wandb) on compute subnet")
             self.wandb.api.flush()
 
             specs_details,running_hotkey = await get_wandb_running_miners()
@@ -2731,7 +2734,7 @@ class RegisterAPI:
 
         return config
 
-    def _allocate_container(self, device_requirement, timeline, public_key, docker_requirement: dict):
+    async def _allocate_container(self, device_requirement, timeline, public_key, docker_requirement: dict):
         """
         Allocate the container with the given device requirement. <br>
         """
@@ -2747,7 +2750,7 @@ class RegisterAPI:
             if axon.hotkey in candidates_hotkey:
                 axon_candidates.append(axon)
 
-        responses = self.dendrite.query(
+        responses = await self.dendrite(
             axon_candidates,
             Allocate(
                 timeline=timeline, device_requirement=device_requirement, checking=True
@@ -2784,7 +2787,7 @@ class RegisterAPI:
         for hotkey in sorted_hotkeys:
             index = self.metagraph.hotkeys.index(hotkey)
             axon = self.metagraph.axons[index]
-            register_response = self.dendrite.query(
+            register_response = await self.dendrite(
                 axon,
                 Allocate(
                     timeline=timeline,
@@ -2836,7 +2839,7 @@ class RegisterAPI:
 
                 while attempt < max_retries:
                     attempt += 1
-                    check_allocation = self.dendrite.query(
+                    check_allocation = await self.dendrite(
                             axon,
                             Allocate(
                                 timeline=timeline,
@@ -2849,7 +2852,7 @@ class RegisterAPI:
                         bt.logging.warning(
                             f"API: Allocation check failed for hotkey: {hotkey} result: {check_allocation}, axon: {axon.ip}:{axon.port}")
                         await asyncio.sleep(3)
-                        continue  # Move to the next axon if allocation check failed                                                                    
+                        continue  # Move to the next axon if allocation check failed
                     else:
                         bt.logging.info(f"API: Allocation check passed for hotkey: {hotkey}")
                         break
@@ -2857,7 +2860,7 @@ class RegisterAPI:
                 if check_allocation and check_allocation["status"] is True:
                     try:
                         bt.logging.info(f"API: Allocation started for hotkey: {hotkey}")
-                        register_response = self.dendrite.query(
+                        register_response = await self.dendrite(
                             axon,
                             Allocate(
                                 timeline=60,
@@ -2868,6 +2871,7 @@ class RegisterAPI:
                             ),
                             timeout=60,
                         )
+
                     except Exception as e:
                         bt.logging.error(f"Exception during registration for hotkey {hotkey}: {e}")
                         await asyncio.sleep(1)
@@ -3019,12 +3023,12 @@ class RegisterAPI:
                         index = self.metagraph.hotkeys.index(hotkey)
                         axon = self.metagraph.axons[index]
 
-                        register_response = await asyncio.wait_for(
-                                asyncio.get_event_loop().run_in_executor(
-                                    self.executor, self.dendrite_check.query, axon, Allocate(timeline=1,checking=True)
-                                    ),
-                                timeout=30
-                        )
+                        task = asyncio.create_task(self.dendrite_check(axon, Allocate(timeline=1, checking=True)))
+                        try:
+                            register_response = await asyncio.wait_for(task, timeout=10)
+                        except asyncio.TimeoutError:
+                            register_response = True # Handle timeout case appropriately
+
                         deallocated_at = datetime.now(timezone.utc)
                         if register_response and register_response["status"] is False:
                             response = await self._notify_allocation_status(

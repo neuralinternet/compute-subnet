@@ -68,6 +68,15 @@ class ComputeDb:
                 )
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS hotkeys_hw_change (
+                    hotkey TEXT PRIMARY KEY,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    details TEXT
+                )
+                """
+            )
 
             self.conn.commit()
         except Exception as e:

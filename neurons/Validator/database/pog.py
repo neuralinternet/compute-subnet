@@ -16,6 +16,7 @@
 # DEALINGS IN THE SOFTWARE.
 import datetime
 import json
+from datetime import datetime, timedelta
 
 import bittensor as bt
 
@@ -184,3 +185,65 @@ def retrieve_stats(db: ComputeDb):
         return {}
     finally:
         cursor.close()
+
+def add_or_update_hotkey_hw_change(self, hotkey, details=""):
+    """
+    Adds or updates a hotkey in the hotkeys_hw_change table.
+    """
+    cursor = self.get_cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO hotkeys_hw_change (hotkey, details, created_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(hotkey) DO UPDATE SET created_at = CURRENT_TIMESTAMP, details = excluded.details
+            """,
+            (hotkey, details),
+        )
+        self.conn.commit()
+    except Exception as e:
+        self.conn.rollback()
+        bt.logging.error(f"Failed to add or update hotkey {hotkey}: {e}")
+    finally:
+        cursor.close()
+
+def delete_old_hotkey_hw_change(self, hours=4):
+    """
+    Deletes hotkeys older than the specified number of hours from the hotkeys_hw_change table.
+    """
+    cursor = self.get_cursor()
+    try:
+        threshold_time = datetime.now() - timedelta(hours=hours)
+        cursor.execute(
+            """
+            DELETE FROM hotkeys_hw_change WHERE created_at < ?
+            """,
+            (threshold_time,),
+        )
+        self.conn.commit()
+    except Exception as e:
+        self.conn.rollback()
+        bt.logging.error(f"Failed to delete old hotkeys: {e}")
+    finally:
+        cursor.close()
+
+def hotkey_hw_change_exists(self, hotkey):
+    """
+    Checks if a hotkey exists in the hotkeys_hw_change table.
+    """
+    cursor = self.get_cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT 1 FROM hotkeys_hw_change WHERE hotkey = ?
+            """,
+            (hotkey,),
+        )
+        result = cursor.fetchone()
+        return result is not None
+    except Exception as e:
+        bt.logging.error(f"Failed to check existence of hotkey {hotkey}: {e}")
+        return False
+    finally:
+        cursor.close()
+
