@@ -251,30 +251,38 @@ else
   info "Bittensor is not installed."
 
   if $AUTOMATED; then
-    info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
+  info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
 
-    sudo apt-get update -y || abort "Failed to update apt."
+  sudo apt-get update -y || abort "Failed to update apt."
+  sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
 
-    sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
+  python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
 
-    python3 -m pip install --upgrade pip
-    python3 -m pip install bittensor || abort "Failed to install Bittensor (user-level)."
+  python3 -m pip install --user bittensor || abort "Failed to install Bittensor (user-level)."
 
-    # Ensure ~/.local/bin is in PATH so 'btcli' is recognized
-    if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
-      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-      info "Added '$HOME/.local/bin' to PATH in .bashrc"
-    fi
+  if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+    info "Added '$HOME/.local/bin' to PATH in .bashrc"
+  fi
 
-    # Source .bashrc so current shell sees the updated PATH (only works in interactive shells)
-    if [ -f "$HOME/.bashrc" ]; then
-      source "$HOME/.bashrc"
-      info "Sourced $HOME/.bashrc. PATH is now: $PATH"
-    fi
+  if [ -f "$HOME/.bashrc" ]; then
+    source "$HOME/.bashrc"
+    info "Sourced $HOME/.bashrc. PATH is now: $PATH"
+  fi
 
-    info "Bittensor installed successfully at user-level (no virtualenv)."
+  export PATH="$HOME/.local/bin:$PATH"
+  info "Manually exported ~/.local/bin to PATH for the current shell."
 
+  if ! command -v btcli >/dev/null 2>&1; then
+    echo "WARNING: btcli is still not recognized in this non-interactive shell."
+    echo "It will be recognized once you log in as $USER or start a new interactive session."
   else
+    info "btcli is recognized in the current environment now."
+  fi
+
+  info "Bittensor installed successfully at user-level (no virtualenv)."
+
+else
     info "Interactive mode: Installing Bittensor using the official script."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
       || abort "Bittensor installation failed."
