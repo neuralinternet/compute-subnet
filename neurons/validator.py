@@ -241,7 +241,7 @@ class Validator:
         # Return the parsed config.
         return config
 
-    def init_prometheus(self, force_update: bool = False):
+    def init_prometheus(self):
         """
         Register the prometheus information on metagraph.
         :return: bool
@@ -446,7 +446,7 @@ class Validator:
         subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
-            self.init_prometheus(force_update=True)
+            self.init_prometheus()
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
