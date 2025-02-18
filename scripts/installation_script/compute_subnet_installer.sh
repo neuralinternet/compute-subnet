@@ -224,7 +224,7 @@ else
       echo "# CUDA configuration added by compute_subnet_installer.sh"
       echo "export PATH=/usr/local/cuda-12.8/bin:\$PATH"
       echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:\$LD_LIBRARY_PATH"
-    } | sudo tee -a "${HOME_DIR}/.bashrc" > /dev/null
+    } | tee -a "${HOME_DIR}/.bashrc"
     info "CUDA environment variables appended to ${HOME_DIR}/.bashrc"
   else
     info "CUDA environment variables already present in ${HOME_DIR}/.bashrc"
@@ -238,7 +238,7 @@ fi
 #                      5) Check / Install Bittensor
 ##############################################################################
 bittensor_installed() {
-  # Basic check: if 'btcli' is in PATH, we assume Bittensor is installed
+  # Basic check: if 'btcli' is in PATH
   if command -v btcli >/dev/null 2>&1; then
     return 0
   fi
@@ -251,32 +251,36 @@ else
   info "Bittensor is not installed."
 
   if $AUTOMATED; then
-  info "Automated mode: Installing Bittensor system-wide (no virtualenv)."
+    info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
 
-  # Update packages if necessary
-  sudo apt-get update -y || abort "Failed to update apt."
+    # Update packages if necessary
+    sudo apt-get update -y || abort "Failed to update apt."
 
-  # Install Git, Python, etc.
-  sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
+    # Install Python, pip, and Git
+    sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
 
-  if [ ! -d "${HOME_DIR}/bittensor" ]; then
-    info "Cloning Bittensor SDK repo..."
-    git clone https://github.com/opentensor/bittensor.git "/home/ubuntu/bittensor" || abort "Failed to clone Bittensor repository."
+    # Install Bittensor (user-level) from PyPI
+    python3 -m pip install --user --upgrade pip
+    python3 -m pip install --user bittensor || abort "Failed to install Bittensor (user-level)."
+
+    # Ensure ~/.local/bin is in PATH so 'btcli' is recognized
+    if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+      info "Added '$HOME/.local/bin' to PATH in .bashrc"
+    fi
+
+    # Source .bashrc so current shell sees the updated PATH (only works in interactive shells)
+    if [ -f "$HOME/.bashrc" ]; then
+      source "$HOME/.bashrc"
+      info "Sourced $HOME/.bashrc. PATH is now: $PATH"
+    fi
+
+    info "Bittensor installed successfully at user-level (no virtualenv)."
+
   else
-    info "Bittensor repo already present at /home/ubuntu/bittensor"
-  fi
-
-  cd "/home/ubuntu/bittensor" || abort "Failed to enter Bittensor directory."
-
-  # System-wide install of Bittensor from source:
-  sudo pip3 install . || abort "Failed to install Bittensor system-wide."
-
-  cd - >/dev/null
-  info "Bittensor installed successfully without a virtual environment."
-
-else
     info "Interactive mode: Installing Bittensor using the official script."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" || abort "Bittensor installation failed."
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
+      || abort "Bittensor installation failed."
     info "Bittensor installed successfully."
     NEED_REBOOT=1
   fi
