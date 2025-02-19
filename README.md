@@ -199,19 +199,22 @@ sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
 ### CUDA Toolkit and GPU Drivers
 > **Tip**: If Nvidia toolkit and drivers are already installed on your machine, scroll down to step 5 to verify then move on to the docker CUDA support.
 1. **Download** the latest CUDA from [NVIDIA's official page](https://developer.nvidia.com/cuda-downloads).
-2. **Install** (example for Ubuntu 22.04 (Dec. 2024)):
+2. **Install** (example for Ubuntu 22.04 (Feb. 2024)):
    ```bash
-   wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-   sudo dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-   sudo cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+   sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+   wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb
+   sudo dpkg -i cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb
+   sudo cp /var/cuda-repo-ubuntu2204-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
    sudo apt-get update
-   sudo apt-get -y install cuda-toolkit-12-3
-   sudo apt-get -y install cuda-drivers
+   sudo apt-get -y install cuda-toolkit-12-8
+
+   sudo apt-get install -y nvidia-open
    ```
 3. **Set environment variables**:
    ```bash
    echo "" >> ~/.bashrc
-   echo 'export CUDA_VERSION=cuda-12.3' >> ~/.bashrc
+   echo 'export CUDA_VERSION=cuda-12.8' >> ~/.bashrc
    echo 'export PATH="$PATH:/usr/local/$CUDA_VERSION/bin"' >> ~/.bashrc
    echo 'export LD_LIBRARY_PATH="/usr/local/$CUDA_VERSION/lib64:$LD_LIBRARY_PATH"' >> ~/.bashrc
    source ~/.bashrc
