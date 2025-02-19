@@ -21,7 +21,7 @@ import bittensor as bt
 
 from compute.utils.db import ComputeDb
 
-def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus):
+def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus, gpu_uuids, public_ip):
         """
         Inserts a new GPU spec entry for a given hotkey and ensures that only
         the latest three entries are retained.
@@ -35,10 +35,10 @@ def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus):
             # Insert the new GPU spec
             cursor.execute(
                 """
-                INSERT INTO pog_stats (hotkey, gpu_name, num_gpus)
-                VALUES (?, ?, ?)
+                INSERT INTO pog_stats (hotkey, gpu_name, num_gpus, gpu_uuids, public_ip)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (hotkey, gpu_name, num_gpus)
+                (hotkey, gpu_name, num_gpus, str(gpu_uuids), str(public_ip))
             )
 
             # Delete older entries if more than 4 exist for the hotkey
@@ -52,15 +52,25 @@ def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus):
                     LIMIT 4
                 )
                 AND hotkey = ?
+                AND (
+                    SELECT COUNT(DISTINCT
+                        gpu_name || '-' ||
+                        num_gpus || '-' ||
+                        gpu_uuids || '-' ||
+                        public_ip
+                    )
+                    FROM pog_stats
+                    WHERE hotkey = ?
+                ) = 1
                 """,
-                (hotkey, hotkey)
+                (hotkey, hotkey, hotkey)
             )
 
             db.conn.commit()
             # bt.logging.info(f"Updated pog_stats for hotkey: {hotkey}")
         except Exception as e:
             db.conn.rollback()
-            # bt.logging.error(f"Error updating pog_stats for {hotkey}: {e}")
+            bt.logging.error(f"Error updating pog_stats for {hotkey}: {e}")
         finally:
             cursor.close()
 
@@ -76,12 +86,29 @@ def get_pog_specs(db: ComputeDb, hotkey):
         cursor.execute(
             """
             SELECT gpu_name, num_gpus
-            FROM pog_stats
-            WHERE hotkey = ? AND gpu_name IS NOT NULL AND num_gpus IS NOT NULL
+            FROM pog_stats AS ps
+            WHERE hotkey = ?
+              AND gpu_name IS NOT NULL
+              AND num_gpus IS NOT NULL
+              AND gpu_uuids IS NOT NULL
+              AND public_ip IS NOT NULL
+              AND (
+              SELECT COUNT(DISTINCT
+                  gpu_name || '-' || num_gpus || '-' || gpu_uuids || '-' || public_ip
+              )
+              FROM pog_stats
+              WHERE hotkey = ?
+              ) = 1
+              AND NOT EXISTS (
+              SELECT 1
+              FROM pog_stats
+              WHERE hotkey <> ?
+                AND (public_ip = ps.public_ip OR gpu_uuids = ps.gpu_uuids)
+              )
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (hotkey,)
+            (hotkey, hotkey, hotkey)
         )
         row = cursor.fetchone()
         if row:
