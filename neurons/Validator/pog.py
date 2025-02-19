@@ -10,6 +10,7 @@ import tempfile
 import yaml
 import torch
 import bittensor as bt
+import re
 
 def load_yaml_config(file_path):
     """
@@ -55,7 +56,7 @@ def identify_gpu(fp16_tflops, fp32_tflops, estimated_avram, gpu_data, reported_n
 
         combined_score = (fp16_deviation + fp32_deviation + avram_deviation) / 3
         combined_scores.append((gpu, combined_score))
-    
+
     # Sort by the lowest deviation
     identified_gpu = sorted(combined_scores, key=lambda x: x[1])[0][0]
 
@@ -183,7 +184,7 @@ def receive_responses(ssh_client, num_gpus):
             for gpu_id in range(num_gpus):
                 remote_path = f'/dev/shm/responses_gpu_{gpu_id}.npy'
                 local_path = f'{temp_dir}/responses_gpu_{gpu_id}.npy'
-                
+
                 try:
                     sftp.get(remote_path, local_path)
                     response = np.load(local_path, allow_pickle=True)
@@ -193,7 +194,7 @@ def receive_responses(ssh_client, num_gpus):
                     responses[gpu_id] = None
     except Exception as e:
         print(f"SFTP connection error: {e}")
-    
+
     return responses
 
 def xorshift32_numpy(state):
@@ -321,7 +322,7 @@ def verify_merkle_proof_row(row, proof, root_hash, index, total_leaves, hash_fun
     computed_hash = hash_func(row.tobytes()).digest()
     idx = index
     num_leaves = total_leaves
-    
+
     # Iterate through each sibling hash in the proof
     for sibling_hash in proof:
         if idx % 2 == 0:
@@ -334,7 +335,7 @@ def verify_merkle_proof_row(row, proof, root_hash, index, total_leaves, hash_fun
         computed_hash = hash_func(combined).digest()
         # Move up to the next level
         idx = idx // 2
-    
+
     # Compare the computed hash with the provided root hash
     return computed_hash == root_hash
 
@@ -364,3 +365,50 @@ def get_remote_gpu_info(ssh_client):
         raise RuntimeError(f"Failed to get GPU info: {error}")
 
     return json.loads(output)
+
+def get_remote_gpu_uuid(ssh_client):
+    """
+    Execute nvidia-smi -L to get GPU UUIDs from the remote miner.
+
+    Args:
+        ssh_client (paramiko.SSHClient): SSH client connected to the miner.
+
+    Returns:
+        dict: Dictionary containing GPU UUIDs.
+    """
+    command = "nvidia-smi -L"
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+
+    output = stdout.read().decode().strip()
+    error = stderr.read().decode().strip()
+
+    if error:
+        raise RuntimeError(f"Failed to get GPU UUID: {error}")
+
+    # Parse output lines like: "GPU 0: Tesla T4 (UUID: GPU-12345678-1234-1234-1234-123456789abc)"
+    pattern = r"GPU\s+(\d+):.*\(UUID:\s+([^)]+)\)"
+    matches = re.findall(pattern, output)
+    if not matches:
+        raise ValueError("Could not parse GPU UUIDs from output")
+    gpu_uuids = {int(gpu_id): uuid.strip() for gpu_id, uuid in matches}
+    return gpu_uuids
+
+
+def get_public_ip(ssh_client):
+    """
+    Retrieve the public IP address of the remote machine using a curl command via SSH.
+
+    Returns:
+        str: The public IP address.
+    """
+    command = "wget -qO- 'https://api.ipify.org?format=json'"
+    stdin, stdout, stderr = ssh_client.exec_command(command)
+    output = stdout.read().decode().strip()
+    error = stderr.read().decode().strip()
+    if error:
+        raise RuntimeError(f"Failed to retrieve public IP: {error}")
+    try:
+        data = json.loads(output)
+        return data.get("ip")
+    except Exception as e:
+        raise RuntimeError(f"Error parsing public IP response: {e}")
