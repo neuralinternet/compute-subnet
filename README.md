@@ -403,17 +403,6 @@ pm2 start ./neurons/validator.py --name <VALIDATOR_NAME> --interpreter python3 -
 | NVIDIA H100 80GB HBM3           | 3.30       |
 | NVIDIA H100                      | 2.80       |
 | NVIDIA A100-SXM4-80GB           | 1.90       |
-| NVIDIA A100 80GB PCIe           | 1.65       |
-| NVIDIA L40s                      | 1.10       |
-| NVIDIA L40                       | 1.00       |
-| NVIDIA RTX 6000 Ada Generation  | 0.90       |
-| NVIDIA RTX A6000                | 0.78       |
-| NVIDIA RTX 4090                 | 0.68       |
-| NVIDIA GeForce RTX 3090         | 0.43       |
-| NVIDIA L4                        | 0.43       |
-| NVIDIA A40                       | 0.39       |
-| NVIDIA RTX A5000                | 0.36       |
-| NVIDIA RTX A4500                | 0.34       |
 
 1. **Base GPU Score**: Tied to the GPU model.
 2. **Scaling**: Up to 8 GPUs can be recognized. The top theoretical scenario (8 of the highest GPU model) is set to 50 points.
