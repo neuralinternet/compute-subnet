@@ -41,6 +41,7 @@ class ComputeDb:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_uid ON challenge_details (uid)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_ss58_address ON challenge_details (ss58_address)")
             cursor.execute("CREATE TABLE IF NOT EXISTS wandb_runs (hotkey TEXT PRIMARY KEY, run_id TEXT NOT NULL)")
+            # Create the table if it doesn't exist, without the new columns since they'll be added if missing
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS pog_stats (
@@ -51,8 +52,15 @@ class ComputeDb:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (hotkey) REFERENCES miner_details (hotkey) ON DELETE CASCADE
                 )
-            """
+                """
             )
+            # Check current columns and add new ones only if they do not exist
+            pragma = cursor.execute("PRAGMA table_info(pog_stats)").fetchall()
+            columns = [row[1] for row in pragma]
+            if "gpu_uuids" not in columns:
+                cursor.execute("ALTER TABLE pog_stats ADD COLUMN gpu_uuids TEXT")
+            if "public_ip" not in columns:
+                cursor.execute("ALTER TABLE pog_stats ADD COLUMN public_ip TEXT")
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS stats (
