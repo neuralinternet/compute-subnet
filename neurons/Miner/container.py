@@ -76,13 +76,13 @@ def kill_container():
         # Kill and remove the appropriate container
         if running_container_test:
             if running_container_test.status == "running":
-                running_container_test.exec_run(cmd="kill -15 1")
+                running_container_test.stop(signal=15)
                 running_container_test.wait()
             running_container_test.remove()
             bt.logging.info(f"Container '{container_name_test}' was killed successfully")
         elif running_container:
             if running_container.status == "running":
-                running_container.exec_run(cmd="kill -15 1")
+                running_container.stop(signal=15)
                 running_container.wait()
             running_container.remove()
             bt.logging.info(f"Container '{container_name}' was killed successfully")
@@ -171,7 +171,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             ports={22: docker_ssh_port},
             init=True,
             shm_size=f"{shm_size_gb}g",  # Set the shared memory size to 2GB
-            restart_policy={"Name": "on-failure", "MaximumRetryCount": 3},
+            restart_policy={"Name": "unless-stopped"},
 #            volumes={ docker_volume: {'bind': '/root/workspace/', 'mode': 'rw'}},
         )
 
@@ -393,7 +393,7 @@ def restart_container(public_key:str):
             if ssh_container:
                 # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
                 if ssh_container.status == "running":
-                    ssh_container.exec_run(cmd="kill -15 1")
+                    ssh_container.stop(signal=15)
                     ssh_container.wait()
                 # Restart container
                 ssh_container.restart()
@@ -500,7 +500,7 @@ def exchange_key_container(new_ssh_key: str, public_key: str, key_type: str = "u
                     key_list = user_key + "\n" + terminal_key
                     # bt.logging.debug(f"New SSH key: {key_list}")
                     running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
-                    running_container.exec_run(cmd="kill -15 1")
+                    running_container.stop(signal=15)
                     running_container.wait()
                     running_container.restart()
                 return {"status": True}
