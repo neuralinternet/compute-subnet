@@ -193,6 +193,7 @@ class Resource(BaseModel):
     ram: str = "0"
     hard_disk: str = "0"
     allocate_status: str = ""  # "Avail." or "Res."
+    version: int = 0 # miner version
 
 
 class Specs(BaseModel):
@@ -1666,15 +1667,17 @@ class RegisterAPI:
                 )
 
                 bt.logging.info(penalized_hotkeys)
-
-
                 for run in runs:
                     run_config = run.config
                     run_hotkey = run_config.get("hotkey")
                     specs = run_config.get("specs")
                     configs = run_config.get("config")
-                    is_active = any(axon.hotkey == run_hotkey for axon in self.metagraph.axons)
-
+                    hotkey_axon = False
+                    for axon in self.metagraph.axons:
+                        if axon.hotkey == run_hotkey:
+                            hotkey_axon = axon
+                    is_active = True if hotkey_axon else False
+                    specs['version'] = axon.version
                     #if is_active:
                         #bt.logging.info(f"DEBUG - This hotkey is active - {run_hotkey}")
                     # check the signature
@@ -1914,7 +1917,7 @@ class RegisterAPI:
                                 total_gpu_counts[gpu_name] = (
                                         total_gpu_counts.get(gpu_name, 0) + gpu_count
                                 )
-
+                                version = details.get("version", 0)
                             except (KeyError, IndexError, TypeError):
                                 gpu_name = "Invalid details"
                                 gpu_capacity = "N/A"
@@ -1922,6 +1925,7 @@ class RegisterAPI:
                                 cpu_count = "N/A"
                                 ram = "N/A"
                                 hard_disk = "N/A"
+                                version = "N/A"
                         else:
                             gpu_name = "No details available"
                             gpu_capacity = "N/A"
@@ -1929,7 +1933,7 @@ class RegisterAPI:
                             cpu_count = "N/A"
                             ram = "N/A"
                             hard_disk = "N/A"
-
+                            version = "N/A"
                         # Allocation status
                         # allocate_status = "N/A"
 
@@ -1985,6 +1989,7 @@ class RegisterAPI:
                                     resource.ram = float(ram)
                                     resource.hard_disk = float(hard_disk)
                                     resource.allocate_status = allocate_status
+                                    resource.version = version
                                     resource_list.append(resource)
                         except (KeyError, IndexError, TypeError, ValueError) as e:
                             bt.logging.error(f"API: Error occurred while filtering resources: {e}")
