@@ -32,8 +32,9 @@ Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a 
 10. [Resource Allocation Mechanism](#resource-allocation-mechanism)
 11. [Network Overview Diagram](#network-overview-diagram)
 12. [Troubleshooting](#troubleshooting)
-13. [Reward Program for Contributions](#reward-program-for-contributions)
-14. [License](#license)
+13. [Actions to Update](#actions-to-update)
+14. [Reward Program for Contributions](#reward-program-for-contributions)
+15. [License](#license)
 
 ---
 
@@ -198,19 +199,22 @@ sudo apt -y install ocl-icd-libopencl1 pocl-opencl-icd
 ### CUDA Toolkit and GPU Drivers
 > **Tip**: If Nvidia toolkit and drivers are already installed on your machine, scroll down to step 5 to verify then move on to the docker CUDA support.
 1. **Download** the latest CUDA from [NVIDIA's official page](https://developer.nvidia.com/cuda-downloads).
-2. **Install** (example for Ubuntu 22.04 (Dec. 2024)):
+2. **Install** (example for Ubuntu 22.04 (Feb. 2024)):
    ```bash
-   wget https://developer.download.nvidia.com/compute/cuda/12.3.1/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-   sudo dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.1-545.23.08-1_amd64.deb
-   sudo cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/
+   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+   sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+   wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb
+   sudo dpkg -i cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb
+   sudo cp /var/cuda-repo-ubuntu2204-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
    sudo apt-get update
-   sudo apt-get -y install cuda-toolkit-12-3
-   sudo apt-get -y install cuda-drivers
+   sudo apt-get -y install cuda-toolkit-12-8
+
+   sudo apt-get install -y nvidia-open
    ```
 3. **Set environment variables**:
    ```bash
    echo "" >> ~/.bashrc
-   echo 'export CUDA_VERSION=cuda-12.3' >> ~/.bashrc
+   echo 'export CUDA_VERSION=cuda-12.8' >> ~/.bashrc
    echo 'export PATH="$PATH:/usr/local/$CUDA_VERSION/bin"' >> ~/.bashrc
    echo 'export LD_LIBRARY_PATH="/usr/local/$CUDA_VERSION/lib64:$LD_LIBRARY_PATH"' >> ~/.bashrc
    source ~/.bashrc
@@ -402,17 +406,6 @@ pm2 start ./neurons/validator.py --name <VALIDATOR_NAME> --interpreter python3 -
 | NVIDIA H100 80GB HBM3           | 3.30       |
 | NVIDIA H100                      | 2.80       |
 | NVIDIA A100-SXM4-80GB           | 1.90       |
-| NVIDIA A100 80GB PCIe           | 1.65       |
-| NVIDIA L40s                      | 1.10       |
-| NVIDIA L40                       | 1.00       |
-| NVIDIA RTX 6000 Ada Generation  | 0.90       |
-| NVIDIA RTX A6000                | 0.78       |
-| NVIDIA RTX 4090                 | 0.68       |
-| NVIDIA GeForce RTX 3090         | 0.43       |
-| NVIDIA L4                        | 0.43       |
-| NVIDIA A40                       | 0.39       |
-| NVIDIA RTX A5000                | 0.36       |
-| NVIDIA RTX A4500                | 0.34       |
 
 1. **Base GPU Score**: Tied to the GPU model.
 2. **Scaling**: Up to 8 GPUs can be recognized. The top theoretical scenario (8 of the highest GPU model) is set to 50 points.
@@ -438,6 +431,18 @@ Validators reserve resources from miners by specifying required CPU, GPU count, 
   - Competition on the network is high; more powerful devices may outcompete you.
   - Connection or environment issues.
   - Make sure scripts and Docker containers are running stably.
+
+---
+## Actions To Update
+
+__**No action required when using auto-update flag**__.
+
+```sh
+git pull
+python -m pip install -r requirements.txt
+python -m pip install -e .
+pm2 restart <id>
+```
 
 ---
 
