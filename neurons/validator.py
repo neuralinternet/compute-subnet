@@ -64,7 +64,7 @@ from neurons.Validator.calculate_pow_score import calc_score_pog
 from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
 from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
 from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
-from neurons.Validator.pog import adjust_matrix_size, compute_script_hash, execute_script_on_miner, get_random_seeds, load_yaml_config, parse_merkle_output, receive_responses, send_challenge_indices, send_script_and_request_hash, parse_benchmark_output, identify_gpu, send_seeds, verify_merkle_proof_row, get_remote_gpu_info, verify_responses
+from neurons.Validator.pog import adjust_matrix_size, compute_script_hash, execute_script_on_miner, get_random_seeds, load_yaml_config, parse_merkle_output, receive_responses, send_challenge_indices, send_script_and_request_hash, parse_benchmark_output, identify_gpu, send_seeds, verify_merkle_proof_row, get_remote_gpu_info, verify_responses, get_public_ip, get_remote_gpu_uuid
 from neurons.Validator.database.pog import get_pog_specs, retrieve_stats, update_pog_stats, write_stats
 
 class Validator:
@@ -711,13 +711,15 @@ class Validator:
                             ),
                             timeout=timeout
                         )
-                        if result[1] is not None and result[2] > 0:
+                        if result[1] is not None and result[2] > 0 and result[3] is not None and result[4] is not None:
                             async with results_lock:
                                 self.results[hotkey] = {
                                     "gpu_name": result[1],
-                                    "num_gpus": result[2]
+                                    "num_gpus": result[2],
+                                    "gpu_uuids": result[3],
+                                    "public_ip": result[4],
                                 }
-                            update_pog_stats(self.db, hotkey, result[1], result[2])
+                            update_pog_stats(self.db, hotkey, result[1], result[2], result[3], result[4])
                         else:
                             raise RuntimeError("GPU test failed")
                     except asyncio.TimeoutError:
@@ -729,7 +731,7 @@ class Validator:
                             await queue.put(axon)
                         else:
                             bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts (Timeout).")
-                            update_pog_stats(self.db, hotkey, None, None)
+                            update_pog_stats(self.db, hotkey, None, None, None, None)
                     except Exception as e:
                         bt.logging.trace(f"Exception in worker for {hotkey}: {e}")
                         retry_counts[hotkey] += 1
@@ -739,7 +741,7 @@ class Validator:
                             await queue.put(axon)
                         else:
                             bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts.")
-                            update_pog_stats(self.db, hotkey, None, None)
+                            update_pog_stats(self.db, hotkey, None, None, None, None)
                     finally:
                         queue.task_done()
 
@@ -911,16 +913,25 @@ class Validator:
             bt.logging.trace(f"{hotkey}: [Merkle Proof] Responses received from miner.")
 
             verification_passed = verify_responses(seeds, root_hashes, responses, indices, n)
+
+            # Step 8: get public ip address
+            public_ip = get_public_ip(ssh_client)
+            bt.logging.trace(f"{hotkey}: Public IP address: {public_ip}")
+
+            # Step 9: get GPU UUID
+            gpu_uuid = get_remote_gpu_uuid(ssh_client)
+            bt.logging.trace(f"{hotkey}: GPU UUID: {gpu_uuid}")
+
             if verification_passed and timing_passed:
-                bt.logging.info(f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s)")
-                return (hotkey, gpu_name, num_gpus)
+                bt.logging.info(f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s), UUID: {gpu_uuid}, Public IP: {public_ip}")
+                return (hotkey, gpu_name, num_gpus, gpu_uuid, public_ip)
             else:
                 bt.logging.info(f"⚠️  {hotkey}: GPU Identification: Aborted due to verification failure")
-                return (hotkey, None, 0)
+                return (hotkey, None, 0, None, None)
 
         except Exception as e:
             bt.logging.info(f"❌ {hotkey}: Error testing Miner: {e}")
-            return (hotkey, None, 0)
+            return (hotkey, None, 0,None,None)
 
         finally:
             if allocation_status and miner_info:
