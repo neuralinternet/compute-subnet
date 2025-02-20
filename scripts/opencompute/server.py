@@ -151,7 +151,8 @@ async def sync_data_periodically():
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(sync_data_periodically())
+    # asyncio.create_task(sync_data_periodically())
+    pass
 
 @app.get("/keys")
 async def get_keys() -> Dict[str, List[str]]:

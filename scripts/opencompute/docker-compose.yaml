@@ -1,0 +1,17 @@
+services:
+  frontend:
+    image: frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    build:
+      dockerfile: frontend.Dockerfile
+    container_name: opencompute-frontend
+
+
+  backend:
+    image: backend
+    container_name: opencompute-backend
+    build:
+      dockerfile: backend.Dockerfile
