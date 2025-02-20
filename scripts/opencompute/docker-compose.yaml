@@ -1,11 +1,13 @@
+version: '3'
 services:
   frontend:
     image: frontend
     ports:
-      - "8501:8501"
+      - "80:8501"
     depends_on:
       - backend
     build:
+      context: .
       dockerfile: frontend.Dockerfile
     container_name: opencompute-frontend
 
@@ -14,4 +16,5 @@ services:
     image: backend
     container_name: opencompute-backend
     build:
+      context: .
       dockerfile: backend.Dockerfile

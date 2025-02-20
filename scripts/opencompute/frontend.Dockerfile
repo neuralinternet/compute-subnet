@@ -1,12 +1,7 @@
-# setup optional docker arg list
-ARG PYTHON_RUNTIME=python:3.13-slim
-ARG WORKDIR=/app
-
-# use the right python runtime base image
-FROM ${PYTHON_RUNTIME}
+FROM python:3.13-slim
 
 # move to a non root folder
-WORKDIR ${WORKDIR}
+WORKDIR /app
 
 # copy app files
 COPY icon.ico .
