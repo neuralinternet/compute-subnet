@@ -35,7 +35,7 @@ def kill_container():
                 running_container = container
                 break
         if running_container:
-            running_container.stop()
+            running_container.stop(timeout=0)
             running_container.remove()
             return True
     except Exception as e:

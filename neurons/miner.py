@@ -460,16 +460,26 @@ class Miner:
                     bt.logging.info(f"Unknown action: {docker_action['action']}")
             else:
                 public_key = synapse.public_key
+                # FIXME: I'm not sure I understand this timeline business completely
+                # and also kill_container binary doesn't seem to have sources
                 if timeline > 0:
-                    if self.allocate_action == False:
-                        self.allocate_action = True
-                        # stop_server(self.miner_http_server)
-                        result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
+                    try:
+                        if not hasattr(self, 'allocate_action'):
+                            # FIXME: this is really unsafe way to lock things
+                            # TODO: replace with multiprocessing.Lock or asyncio.Lock (analyse which is better here)
+                            self.allocate_action = False
+
+                        if self.allocate_action == False:
+                            self.allocate_action = True
+                            # stop_server(self.miner_http_server)
+                            result = register_allocation(timeline, device_requirement, public_key, docker_requirement)
+                            self.allocate_action = False
+                            synapse.output = result
+                        else:
+                            bt.logging.info(f"Allocation is already in progress. Please wait for the previous one to finish")
+                            synapse.output = {"status": False}
+                    finally:
                         self.allocate_action = False
-                        synapse.output = result
-                    else:
-                        bt.logging.info(f"Allocation is already in progress. Please wait for the previous one to finish")
-                        synapse.output = {"status": False}
                 else:
                     result = deregister_allocation(public_key)
                     # self.miner_http_server = start_server(self.config.ssh.port)
