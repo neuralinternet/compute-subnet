@@ -1,12 +1,16 @@
+import os
 import sqlite3
 
 import bittensor as bt
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class ComputeDb:
     def __init__(self):
         # Connect to the database (or create it if it doesn't exist)
-        self.conn = sqlite3.connect("database.db", check_same_thread=False)
+
+        self.conn = sqlite3.connect(os.getenv("SQLITE_DB_PATH", "database.db"), check_same_thread=False)
         self.init()
 
     def close(self):
