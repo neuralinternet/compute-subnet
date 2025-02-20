@@ -6,7 +6,6 @@ WORKDIR /app
 # copy the requirements file and the app file
 COPY requirements.txt .
 COPY server.py .
-COPY .env .
 
 RUN apt update && \
     apt install -y python3-dev gcc g++ cargo && \
@@ -14,7 +13,7 @@ RUN apt update && \
 
 # pip install the requirements
 RUN pip3 install --upgrade pip
-RUN pip3 install wandb python-dotenv pandas uvicorn fastapi bittensor
+RUN pip3 install wandb pandas uvicorn fastapi bittensor
 
 # create non root user
 RUN adduser opencompute

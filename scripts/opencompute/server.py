@@ -3,14 +3,12 @@ from typing import Dict, List, Any
 import bittensor as bt
 import wandb
 import os
-from dotenv import load_dotenv
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 app = FastAPI()
 
 # Load environment variables
-load_dotenv()
 api_key = os.getenv("WANDB_API_KEY")
 
 # Constants for W&B

@@ -18,3 +18,4 @@ services:
     build:
       context: .
       dockerfile: backend.Dockerfile
+    env_file: ".env"
