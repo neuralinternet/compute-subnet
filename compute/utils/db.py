@@ -9,8 +9,12 @@ load_dotenv()
 class ComputeDb:
     def __init__(self):
         # Connect to the database (or create it if it doesn't exist)
+        try:
+            self.conn = sqlite3.connect(os.getenv("SQLITE_DB_PATH", "database.db"), check_same_thread=False)
+        except (sqlite3.Error, Exception) as e:
+            bt.logging.error(f"Failed to connect to the SQLite database: {e}")
+            self.conn = None
 
-        self.conn = sqlite3.connect(os.getenv("SQLITE_DB_PATH", "database.db"), check_same_thread=False)
         self.init()
 
     def close(self):
