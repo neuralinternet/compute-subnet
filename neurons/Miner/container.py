@@ -137,6 +137,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
 
         # Setup SSH authorized keys
         RUN mkdir -p /root/.ssh/ && echo '{docker_ssh_key}' > /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+        RUN echo 'root:{password}' | chpasswd
 
         """
 
