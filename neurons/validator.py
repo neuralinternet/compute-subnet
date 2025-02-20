@@ -946,11 +946,13 @@ class Validator:
             }
 
             # Simulate an allocation query with Allocate
+            bt.logging.trace(f"Pre-checking {axon.hotkey}")
             check_allocation = await dendrite(
                 axon,
                 Allocate(timeline=1, device_requirement=device_requirement, checking=True),
                 timeout=30,
                 )
+            bt.logging.trace(f"Allocating {axon.hotkey}")
             if check_allocation  and check_allocation ["status"] is True:
                 response = await dendrite(
                     axon,
@@ -977,6 +979,7 @@ class Validator:
                         'username': info['username'],
                         'password': info['password'],
                     }
+                    bt.logging.trace(f"Info: {miner_info} - for miner {axon.hotkey}")
                     return miner_info
                 else:
                     bt.logging.trace(f"{axon.hotkey}: Miner allocation failed or no response received.")
