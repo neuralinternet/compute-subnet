@@ -11,11 +11,10 @@ class ComputeDb:
         # Connect to the database (or create it if it doesn't exist)
         try:
             self.conn = sqlite3.connect(os.getenv("SQLITE_DB_PATH", "database.db"), check_same_thread=False)
+            self.init()
         except (sqlite3.Error, Exception) as e:
-            bt.logging.error(f"Failed to connect to the SQLite database: {e}")
+            bt.logging.error(f"ComputeDb: Failed to connect to and initialize the SQLite database: {e}")
             self.conn = None
-
-        self.init()
 
     def close(self):
         self.conn.close()
