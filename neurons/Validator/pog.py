@@ -1,6 +1,7 @@
 import hashlib
 from itertools import zip_longest
 import json
+import re
 import secrets  # For secure random seed generation
 import tempfile
 
@@ -363,6 +364,22 @@ def get_remote_gpu_info(ssh_client):
 
     return json.loads(output)
 
+def execute_nvidia_smi(ssh_client, command):
+    _, stdout, stderr = ssh_client.exec_command(command)
+
+    error = stderr.read().decode().strip()
+    stdout = stdout.read().decode().strip()
+    if error or not stdout:
+        if error:
+            bt.logging.trace(f"[Query] nvidia-smi -q execution failed: {error}.")
+        # fall back to use docker --gpus all
+        command = f"docker run --gpus all --rm ubuntu {command}"
+        _, stdout, stderr = ssh_client.exec_command(command)
+
+        error = stderr.read().decode().strip()
+        stdout = stdout.read().decode().strip()
+    return stdout, error
+
 def query_remote_gpu(ssh_client):
     """
     Execute nvidia-smi -q to query GPU attributes from the remote miner.
@@ -372,20 +389,9 @@ def query_remote_gpu(ssh_client):
         dict: Dictionary containing GPU Serial Numbers, UUID and PCI Bus Id.
     """
     command = "nvidia-smi -q"
-    _, stdout, stderr = ssh_client.exec_command(command)
-
-    error = stderr.read().decode().strip()
-    stdout = stdout.read().decode().strip()
-    if error or not stdout:
-        if error:
-            bt.logging.trace(f"[Query] nvidia-smi -q execution failed: {error}.")
-        # fall back to use docker --gpus all
-        command = "docker run --gpus all --rm ubuntu nvidia-smi -q"
-        _, stdout, stderr = ssh_client.exec_command(command)
-
-        error = stderr.read().decode().strip()
-        if error:
-            raise RuntimeError(f"Failed to get GPU query data: {error}")
+    stdout, error = execute_nvidia_smi(ssh_client, command)
+    if error:
+        raise RuntimeError(f"Failed to get GPU query data: {error}")
 
     serials = []
     uuids = []
@@ -407,10 +413,9 @@ def query_remote_gpu(ssh_client):
 
     return {'gpu_serials': serials, 'gpu_uuids': uuids, 'pci_bus_ids': bus_ids}
 
-
-def verify_uuids(ssh_client, gpu_uuids, pci_bus_ids):
+def verify_gpu_uuids(ssh_client, gpu_uuids, pci_bus_ids):
     """
-    Verifies the responses from GPUs query by checking linux nvidia driver information.
+    Verifies the responses from GPUs query by checking UUIDs.
 
     Parameters:
         ssh_client (paramiko.SSHClient): SSH client connected to the miner.
@@ -424,6 +429,24 @@ def verify_uuids(ssh_client, gpu_uuids, pci_bus_ids):
         bt.logging.trace("[Verification] FAILURE: Missing UUID/PCI Bus Id")
         return False
 
+    command = "nvidia-smi -L"
+    list_stdout, error = execute_nvidia_smi(ssh_client, command)
+    if error:
+        bt.logging.trace("[Verification] FAILURE: GPU Listing information missing")
+        return False
+
+    # Parse output lines like: "GPU 0: Tesla T4 (UUID: GPU-12345678-1234-1234-1234-123456789abc)"
+    pattern = r"GPU\s+(\d+):.*\(UUID:\s+([^)]+)\)"
+    matches = re.findall(pattern, list_stdout)
+    if not matches:
+        bt.logging.trace("[Verification] FAILURE: GPU Listing information missing")
+        return False
+
+    gpu_uuid_ids = {uuid.strip(): gpu_id for gpu_id, uuid in matches}
+    if set(gpu_uuids) ^ set(gpu_uuid_ids.keys()):
+        bt.logging.trace("[Verification] FAILURE: UUID Property Value mismatch")
+        return False
+
     # check uuid from driver info using pci bus id
     for uuid, pci_bus_id in zip_longest(gpu_uuids, pci_bus_ids, fillvalue=None):
         if uuid is None or pci_bus_id is None:
@@ -431,7 +454,14 @@ def verify_uuids(ssh_client, gpu_uuids, pci_bus_ids):
                 f"[Verification] FAILURE: Misaligned UUID/PCI Bus Id information: {uuid}/{pci_bus_id}"
             )
             return False
+        # step 1: check uuid matching from nvidia-smi -L result
+        if uuid not in gpu_uuid_ids:
+            bt.logging.trace(
+                f"[Verification] FAILURE: UUID information Value mismatch: {uuid} missing"
+            )
+            return False
 
+        # step 2: check uuid matching with linux driver information
         command = f"cat /proc/driver/nvidia/gpus/{pci_bus_id}/information"
         _, stdout, stderr = ssh_client.exec_command(command)
 
@@ -442,4 +472,30 @@ def verify_uuids(ssh_client, gpu_uuids, pci_bus_ids):
                 f"[Verification] FAILURE: UUID/PCI Bus Id information Value mismatch: {uuid}/{pci_bus_id}"
             )
             return False
+    # step 3: check cuda device properties
+    ids = ",".join(gpu_uuid_ids.values())
+    torch_command = f"""
+    /opt/conda/bin/python -c "
+import torch
+for i in ({ids}):
+    if property := torch.cuda.get_device_properties(i):
+        print(str(property.uuid))
+"
+    """
+    _, stdout, stderr = ssh_client.exec_command(torch_command)
+    error = stderr.read().decode().strip()
+    stdout.read().decode().strip()
+    if error or not stdout:
+        bt.logging.trace("[Verification] FAILURE: GPU UUID information missing")
+        return False
+
+    for index, uuid in enumerate(stdout.splitlines()):
+        if int(gpu_uuid_ids.pop(uuid, '-1')) != index:
+            bt.logging.trace("[Verification] FAILURE: UUID Property Value mismatch")
+            return False
+
+    # some of the uuid was not found from cuda device properties result
+    if gpu_uuid_ids:
+        bt.logging.trace("[Verification] FAILURE: UUID Property Value mismatch")
+        return False
     return True
