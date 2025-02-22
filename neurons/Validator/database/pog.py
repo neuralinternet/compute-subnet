@@ -14,70 +14,78 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-import datetime
 import json
 
 import bittensor as bt
 
 from compute.utils.db import ComputeDb
 
-def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus):
-        """
-        Inserts a new GPU spec entry for a given hotkey and ensures that only
-        the latest three entries are retained.
+def update_pog_stats(db: ComputeDb, hotkey, gpu_name, num_gpus, gpu_serials, gpu_uuids, gpu_pci_bus_ids):
+    """
+    Inserts a new GPU spec entry for a given hotkey and ensures that only
+    the latest three entries are retained.
 
-        :param hotkey: The miner's hotkey identifier.
-        :param gpu_name: The name/model of the GPU.
-        :param num_gpus: The number of GPUs.
-        """
-        cursor = db.get_cursor()
-        try:
-            # Insert the new GPU spec
-            cursor.execute(
-                """
-                INSERT INTO pog_stats (hotkey, gpu_name, num_gpus)
-                VALUES (?, ?, ?)
-                """,
-                (hotkey, gpu_name, num_gpus)
+    :param hotkey: The miner's hotkey identifier.
+    :param gpu_name: The name/model of the GPU.
+    :param num_gpus: The number of GPUs.
+    :param gpu_serials: The serials number of GPUs.
+    :param gpu_uuids: The UUID of GPUs.
+    :param gpu_pci_bus_ids: The PCI Bus Id of GPUs.
+    """
+    cursor = db.get_cursor()
+    try:
+        # Insert the new GPU spec
+        cursor.execute(
+            """
+            INSERT INTO pog_stats (hotkey, gpu_name, num_gpus, gpu_serials, gpu_uuids, gpu_pci_bus_ids)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (hotkey, gpu_name, num_gpus, str(gpu_serials), str(gpu_uuids), str(gpu_pci_bus_ids))
+        )
+
+        # Delete older entries if more than 4 exist for the hotkey
+        cursor.execute(
+            """
+            DELETE FROM pog_stats
+            WHERE id NOT IN (
+                SELECT id FROM pog_stats
+                WHERE hotkey = ?
+                ORDER BY created_at DESC
+                LIMIT 4
             )
+            AND hotkey = ?
+            """,
+            (hotkey, hotkey)
+        )
 
-            # Delete older entries if more than 4 exist for the hotkey
-            cursor.execute(
-                """
-                DELETE FROM pog_stats
-                WHERE id NOT IN (
-                    SELECT id FROM pog_stats
-                    WHERE hotkey = ?
-                    ORDER BY created_at DESC
-                    LIMIT 4
-                )
-                AND hotkey = ?
-                """,
-                (hotkey, hotkey)
-            )
-
-            db.conn.commit()
-            # bt.logging.info(f"Updated pog_stats for hotkey: {hotkey}")
-        except Exception as e:
-            db.conn.rollback()
-            # bt.logging.error(f"Error updating pog_stats for {hotkey}: {e}")
-        finally:
-            cursor.close()
+        db.conn.commit()
+        # bt.logging.info(f"Updated pog_stats for hotkey: {hotkey}")
+    except Exception as e:
+        db.conn.rollback()
+        bt.logging.error(f"Error updating pog_stats for {hotkey}: {e}")
+    finally:
+        cursor.close()
 
 def get_pog_specs(db: ComputeDb, hotkey):
     """
     Retrieves the most recent GPU spec entry for a given hotkey where gpu_name is not None.
 
     :param hotkey: The miner's hotkey identifier.
-    :return: A dictionary with 'gpu_name' and 'num_gpus' or None if no valid entries exist.
+    :return: A dictionary with 'gpu_name', 'num_gpus', 'gpu_serials', 'gpu_uuids' and 'gpu_pci_bus_ids'
+             or None if no valid entries exist.
     """
     cursor = db.get_cursor()
     try:
         cursor.execute(
             """
-            SELECT gpu_name, num_gpus
-            FROM pog_stats
-            WHERE hotkey = ? AND gpu_name IS NOT NULL AND num_gpus IS NOT NULL
+            SELECT gpu_name, num_gpus, gpu_serials, gpu_uuids, gpu_pci_bus_ids
+            FROM pog_stats AS ps
+            WHERE hotkey = ?
+              AND gpu_name IS NOT NULL
+              AND num_gpus IS NOT NULL
+              AND gpu_serials IS NOT NULL
+              AND gpu_uuids IS NOT NULL
+              AND gpu_pci_bus_ids IS NOT NULL
             ORDER BY created_at DESC
             LIMIT 1
             """,
@@ -85,9 +93,15 @@ def get_pog_specs(db: ComputeDb, hotkey):
         )
         row = cursor.fetchone()
         if row:
-            gpu_name, num_gpus = row
+            gpu_name, num_gpus, gpu_serials, gpu_uuids, gpu_pci_bus_ids = row
             # bt.logging.info(f"Retrieved pog_stats for hotkey {hotkey}: GPU Name={gpu_name}, Num GPUs={num_gpus}")
-            return {"gpu_name": gpu_name, "num_gpus": num_gpus}
+            return {
+                "gpu_name": gpu_name,
+                "num_gpus": num_gpus,
+                "gpu_serials": gpu_serials,
+                "gpu_uuids": gpu_uuids,
+                "gpu_pci_bus_ids": gpu_pci_bus_ids,
+            }
         else:
             # bt.logging.warning(f"No valid pog_stats found for hotkey {hotkey}")
             return None

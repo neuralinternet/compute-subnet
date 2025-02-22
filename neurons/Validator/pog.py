@@ -1,15 +1,13 @@
-import paramiko
 import hashlib
-import numpy as np
-import os
-import time
-import blake3
-import secrets  # For secure random seed generation
+from itertools import zip_longest
 import json
+import secrets  # For secure random seed generation
 import tempfile
-import yaml
-import torch
+
 import bittensor as bt
+import numpy as np
+import yaml
+
 
 def load_yaml_config(file_path):
     """
@@ -364,3 +362,47 @@ def get_remote_gpu_info(ssh_client):
         raise RuntimeError(f"Failed to get GPU info: {error}")
 
     return json.loads(output)
+
+def query_remote_gpu(ssh_client):
+    """
+    Execute nvidia-smi -q to query GPU attributes from the remote miner.
+    Args:
+        ssh_client (paramiko.SSHClient): SSH client connected to the miner.
+    Returns:
+        dict: Dictionary containing GPU Serial Numbers, UUID and PCI Bus Id.
+    """
+    command = "nvidia-smi -q"
+    _, stdout, stderr = ssh_client.exec_command(command)
+
+    error = stderr.read().decode().strip()
+    stdout = stdout.read().decode().strip()
+    if error or not stdout:
+        if error:
+            bt.logging.trace(f"[Query] nvidia-smi -q execution failed: {error}.")
+        # fall back to use docker --gpus all
+        command = "docker run --gpus all --rm ubuntu nvidia-smi -q"
+        _, stdout, stderr = ssh_client.exec_command(command)
+
+        error = stderr.read().decode().strip()
+        if error:
+            raise RuntimeError(f"Failed to get GPU query data: {error}")
+
+    serials = []
+    uuids = []
+    bus_ids = []
+    for line in stdout.read().decode().strip().splitlines():
+        key_value = line.strip().split(':', maxsplit=1)
+        if len(key_value) == 1:
+            continue
+        value = key_value[1].strip()
+        match key_value[0].strip():
+            case 'Serial Number':
+                serials.append(value)
+            case 'GPU UUID':
+                uuids.append(value)
+            case 'Bus Id':
+                bus_ids.append(value)
+            case _:
+                pass
+
+    return {'gpu_serials': serials, 'gpu_uuids': uuids, 'pci_bus_ids': bus_ids}

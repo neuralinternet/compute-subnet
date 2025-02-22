@@ -16,56 +16,85 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import ast
 import asyncio
 import base64
+import concurrent.futures
 import json
 import os
 import random
 import threading
+import time
 import traceback
-import hashlib
-import numpy as np
-import yaml
-import multiprocessing
 from asyncio import AbstractEventLoop
-from typing import Dict, Tuple, List
+from collections import defaultdict
+from typing import Dict, List, Tuple
 
 import bittensor as bt
-import math
-import time
+import numpy as np
 import paramiko
-
-import cryptography
-import torch
-from cryptography.fernet import Fernet
-from torch._C._te import Tensor # type: ignore
 import RSAEncryption as rsa
-import concurrent.futures
-from collections import defaultdict
-
+import torch
 import Validator.app_generator as ag
+from torch._C._te import Tensor  # type: ignore
+
 from compute import (
-    SUSPECTED_EXPLOITERS_HOTKEYS,
     SUSPECTED_EXPLOITERS_COLDKEYS,
+    SUSPECTED_EXPLOITERS_HOTKEYS,
     __version_as_int__,
     validator_permit_stake,
-    weights_rate_limit
-    )
+    weights_rate_limit,
+)
 from compute.axon import ComputeSubnetSubtensor
-from compute.protocol import Allocate, Challenge, Specs
+from compute.protocol import Allocate
 from compute.utils.db import ComputeDb
-from compute.utils.math import percent, force_to_float_or_default
+from compute.utils.math import percent
 from compute.utils.parser import ComputeArgPaser
-from compute.utils.subtensor import is_registered, get_current_block, calculate_next_block_time
-from compute.utils.version import try_update, get_local_version, version2number, get_remote_version
+from compute.utils.subtensor import (
+    calculate_next_block_time,
+    get_current_block,
+    is_registered,
+)
+from compute.utils.version import (
+    get_local_version,
+    get_remote_version,
+    try_update,
+    version2number,
+)
 from compute.wandb.wandb import ComputeWandb
 from neurons.Validator.calculate_pow_score import calc_score_pog
-from neurons.Validator.database.allocate import update_miner_details, select_has_docker_miners_hotkey, get_miner_details
-from neurons.Validator.database.challenge import select_challenge_stats, update_challenge_details
-from neurons.Validator.database.miner import select_miners, purge_miner_entries, update_miners
-from neurons.Validator.pog import adjust_matrix_size, compute_script_hash, execute_script_on_miner, get_random_seeds, load_yaml_config, parse_merkle_output, receive_responses, send_challenge_indices, send_script_and_request_hash, parse_benchmark_output, identify_gpu, send_seeds, verify_merkle_proof_row, get_remote_gpu_info, verify_responses
-from neurons.Validator.database.pog import get_pog_specs, retrieve_stats, update_pog_stats, write_stats
+from neurons.Validator.database.allocate import (
+    get_miner_details,
+    update_miner_details,
+)
+from neurons.Validator.database.miner import (
+    purge_miner_entries,
+    select_miners,
+    update_miners,
+)
+from neurons.Validator.database.pog import (
+    get_pog_specs,
+    retrieve_stats,
+    update_pog_stats,
+    write_stats,
+)
+from neurons.Validator.pog import (
+    adjust_matrix_size,
+    compute_script_hash,
+    execute_script_on_miner,
+    get_random_seeds,
+    get_remote_gpu_info,
+    identify_gpu,
+    load_yaml_config,
+    parse_benchmark_output,
+    parse_merkle_output,
+    query_remote_gpu,
+    receive_responses,
+    send_challenge_indices,
+    send_script_and_request_hash,
+    send_seeds,
+    verify_responses,
+)
+
 
 class Validator:
     blocks_done: set = set()
@@ -103,7 +132,7 @@ class Validator:
         return self._dendrite
 
     @property
-    def metagraph(self) -> bt.metagraph: # type: ignore
+    def metagraph(self) -> bt.metagraph:  # type: ignore
         return self._metagraph
 
     @property
@@ -128,7 +157,11 @@ class Validator:
 
     @property
     def miners_items_to_set(self):
-        return set((uid, hotkey) for uid, hotkey in self.miners.items()) if self.miners else None
+        return (
+            set((uid, hotkey) for uid, hotkey in self.miners.items())
+            if self.miners
+            else None
+        )
 
     def __init__(self):
         # Step 1: Parse the bittensor and compute subnet config
@@ -136,21 +169,39 @@ class Validator:
 
         # Setup extra args
         self.blacklist_hotkeys = {hotkey for hotkey in self.config.blacklist_hotkeys}
-        self.blacklist_coldkeys = {coldkey for coldkey in self.config.blacklist_coldkeys}
+        self.blacklist_coldkeys = {
+            coldkey for coldkey in self.config.blacklist_coldkeys
+        }
         self.whitelist_hotkeys = {hotkey for hotkey in self.config.whitelist_hotkeys}
-        self.whitelist_coldkeys = {coldkey for coldkey in self.config.whitelist_coldkeys}
-        self.exploiters_hotkeys = {hotkey for hotkey in SUSPECTED_EXPLOITERS_HOTKEYS} if self.config.blacklist_exploiters else {}
-        self.exploiters_coldkeys = {coldkey for coldkey in SUSPECTED_EXPLOITERS_COLDKEYS} if self.config.blacklist_exploiters else {}
+        self.whitelist_coldkeys = {
+            coldkey for coldkey in self.config.whitelist_coldkeys
+        }
+        self.exploiters_hotkeys = (
+            {hotkey for hotkey in SUSPECTED_EXPLOITERS_HOTKEYS}
+            if self.config.blacklist_exploiters
+            else {}
+        )
+        self.exploiters_coldkeys = (
+            {coldkey for coldkey in SUSPECTED_EXPLOITERS_COLDKEYS}
+            if self.config.blacklist_exploiters
+            else {}
+        )
 
         # Set custom validator arguments
         self.validator_specs_batch_size = self.config.validator_specs_batch_size
         self.validator_challenge_batch_size = self.config.validator_challenge_batch_size
-        self.validator_perform_hardware_query = self.config.validator_perform_hardware_query
-        self.validator_whitelist_updated_threshold = self.config.validator_whitelist_updated_threshold
+        self.validator_perform_hardware_query = (
+            self.config.validator_perform_hardware_query
+        )
+        self.validator_whitelist_updated_threshold = (
+            self.config.validator_whitelist_updated_threshold
+        )
 
         # Set up logging with the provided configuration and directory.
         bt.logging(config=self.config, logging_dir=self.config.full_path)
-        bt.logging.info(f"Running validator for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:")
+        bt.logging.info(
+            f"Running validator for subnet: {self.config.netuid} on network: {self.config.subtensor.chain_endpoint} with config:"
+        )
         # Log the configuration for reference.
         bt.logging.info(self.config)
 
@@ -187,8 +238,10 @@ class Validator:
         self.config_data = load_yaml_config(config_file)
         cpu_cores = os.cpu_count() or 1
         configured_max_workers = self.config_data["merkle_proof"].get("max_workers", 32)
-        safe_max_workers = min((cpu_cores + 4)*4, configured_max_workers)
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=safe_max_workers)
+        safe_max_workers = min((cpu_cores + 4) * 4, configured_max_workers)
+        self.executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=safe_max_workers
+        )
         self.results = {}
         self.gpu_task = None  # Track the GPU task
 
@@ -220,7 +273,9 @@ class Validator:
         This function is responsible for setting up and parsing command-line arguments.
         :return: config
         """
-        parser = ComputeArgPaser(description="This script aims to help validators with the compute subnet.")
+        parser = ComputeArgPaser(
+            description="This script aims to help validators with the compute subnet."
+        )
         config = parser.config
 
         # Step 3: Set up logging directory
@@ -260,14 +315,14 @@ class Validator:
         if success:
             bt.logging.success(
                 prefix="Prometheus served",
-                suffix=f"<blue>Current version: {get_local_version()}</blue>"  # Corrected keyword
+                suffix=f"<blue>Current version: {get_local_version()}</blue>",  # Corrected keyword
             )
         else:
             bt.logging.error("Prometheus initialization failed")
         return success
 
     def init_local(self):
-        bt.logging.info(f"🔄 Syncing metagraph with subtensor.")
+        bt.logging.info("🔄 Syncing metagraph with subtensor.")
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         self.uids = self.metagraph.uids.tolist()
 
@@ -276,7 +331,9 @@ class Validator:
         # Set the weights of validators to zero.
         self.scores = self.scores * (self.metagraph.total_stake < 1.024e3)
         # Set the weight to zero for all nodes without assigned IP addresses.
-        self.scores = self.scores * torch.Tensor(self.get_valid_tensors(metagraph=self.metagraph))
+        self.scores = self.scores * torch.Tensor(
+            self.get_valid_tensors(metagraph=self.metagraph)
+        )
         bt.logging.info(f"🔢 Initialized scores : {self.scores.tolist()}")
         self.sync_scores()
 
@@ -308,7 +365,9 @@ class Validator:
                 id, hotkey, details = row
                 hotkey_list.append(hotkey)
         except Exception as e:
-            bt.logging.info(f"An error occurred while retrieving allocation details: {e}")
+            bt.logging.info(
+                f"An error occurred while retrieving allocation details: {e}"
+            )
         finally:
             cursor.close()
 
@@ -327,8 +386,12 @@ class Validator:
         self.update_allocation_wandb()
 
         # Fetch allocated hotkeys and stats
-        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
-        self.stats_allocated = self.wandb.get_stats_allocated(valid_validator_hotkeys, True)
+        self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(
+            valid_validator_hotkeys, True
+        )
+        self.stats_allocated = self.wandb.get_stats_allocated(
+            valid_validator_hotkeys, True
+        )
 
         self._queryable_uids = self.get_queryable()
 
@@ -351,19 +414,23 @@ class Validator:
 
                 # If found in our local database
                 if gpu_specs is not None:
-                    score = calc_score_pog(gpu_specs, hotkey, self.allocated_hotkeys, self.config_data)
-                    self.stats[uid]["own_score"] = True  # or "yes" if you prefer a string
+                    score = calc_score_pog(
+                        gpu_specs, hotkey, self.allocated_hotkeys, self.config_data
+                    )
+                    self.stats[uid]["own_score"] = (
+                        True  # or "yes" if you prefer a string
+                    )
                 else:
                     # If not found locally, try fallback from stats_allocated
                     if uid in self.stats_allocated:
-                        score = self.stats_allocated[uid].get("score", 0)/100
+                        score = self.stats_allocated[uid].get("score", 0) / 100
                         gpu_specs = self.stats_allocated[uid].get("gpu_specs", None)
                         self.stats[uid]["own_score"] = False  # or "no"
                     else:
                         score = 0
                         self.stats[uid]["own_score"] = True  # or "no"
 
-                self.stats[uid]["score"] = score*100
+                self.stats[uid]["score"] = score * 100
                 self.stats[uid]["gpu_specs"] = gpu_specs
 
                 # Keep or override reliability_score if you want
@@ -374,7 +441,9 @@ class Validator:
                 bt.logging.trace(f"KeyError occurred for UID {uid}: {str(e)}")
                 score = 0
             except Exception as e:
-                bt.logging.trace(f"An unexpected exception occurred for UID {uid}: {str(e)}")
+                bt.logging.trace(
+                    f"An unexpected exception occurred for UID {uid}: {str(e)}"
+                )
                 score = 0
 
             # Keep a simple reference of scores
@@ -445,25 +514,34 @@ class Validator:
             try_update()
 
         # Check if the validator has the prometheus info updated
-        subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
+        subnet_prometheus_version = self.metagraph.neurons[
+            self.validator_subnet_uid
+        ].prometheus_info.version
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
             self.init_prometheus(force_update=True)
 
-    def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
+    def sync_miners_info(
+        self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]
+    ):
         if queryable_tuple_uids_axons:
             for uid, axon in queryable_tuple_uids_axons:
-                if self.miners_items_to_set and (uid, axon.hotkey) not in self.miners_items_to_set:
+                if (
+                    self.miners_items_to_set
+                    and (uid, axon.hotkey) not in self.miners_items_to_set
+                ):
                     try:
-                        bt.logging.info(f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries.")
+                        bt.logging.info(
+                            f"❌ Miner {uid}-{self.miners[uid]} has been deregistered. Clean up old entries."
+                        )
                         purge_miner_entries(self.db, uid, self.miners[uid])
                     except KeyError:
                         pass
                     bt.logging.info(f"✅ Setting up new miner {uid}-{axon.hotkey}.")
-                    update_miners(self.db, [(uid, axon.hotkey)]),
+                    (update_miners(self.db, [(uid, axon.hotkey)]),)
                     self.miners[uid] = axon.hotkey
         else:
-            bt.logging.warning(f"❌ No queryable miners.")
+            bt.logging.warning("❌ No queryable miners.")
 
     @staticmethod
     def filter_axons(queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
@@ -484,9 +562,16 @@ class Validator:
 
     def filter_axon_version(self, dict_filtered_axons: dict):
         # Get the minimal miner version
-        latest_version = version2number(get_remote_version(pattern="__minimal_miner_version__"))
-        if percent(len(dict_filtered_axons), self.total_current_miners) <= self.validator_whitelist_updated_threshold:
-            bt.logging.info(f"Less than {self.validator_whitelist_updated_threshold}% miners are currently using the last version. Allowing all.")
+        latest_version = version2number(
+            get_remote_version(pattern="__minimal_miner_version__")
+        )
+        if (
+            percent(len(dict_filtered_axons), self.total_current_miners)
+            <= self.validator_whitelist_updated_threshold
+        ):
+            bt.logging.info(
+                f"Less than {self.validator_whitelist_updated_threshold}% miners are currently using the last version. Allowing all."
+            )
             return dict_filtered_axons
 
         dict_filtered_axons_version = {}
@@ -501,7 +586,9 @@ class Validator:
 
         # Blacklist coldkeys that are blacklisted by user
         if coldkey in self.blacklist_coldkeys:
-            bt.logging.trace(f"Blacklisted recognized coldkey {coldkey} - with hotkey: {hotkey}")
+            bt.logging.trace(
+                f"Blacklisted recognized coldkey {coldkey} - with hotkey: {hotkey}"
+            )
             return True
 
         # Blacklist coldkeys that are blacklisted by user or by set of hotkeys
@@ -513,7 +600,9 @@ class Validator:
 
         # Blacklist coldkeys that are exploiters
         if coldkey in self.exploiters_coldkeys:
-            bt.logging.trace(f"Blacklisted exploiter coldkey {coldkey} - with hotkey: {hotkey}")
+            bt.logging.trace(
+                f"Blacklisted exploiter coldkey {coldkey} - with hotkey: {hotkey}"
+            )
             return True
 
         # Blacklist hotkeys that are exploiters
@@ -530,7 +619,9 @@ class Validator:
         for uid in metagraph.uids:
             neuron = metagraph.neurons[uid]
 
-            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
+            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(
+                neuron=neuron
+            ):
                 self.total_current_miners += 1
                 tensors.append(True)
             else:
@@ -544,7 +635,9 @@ class Validator:
             neuron: bt.NeuronInfoLite = self.metagraph.neurons[uid]
             axon = self.metagraph.axons[uid]
 
-            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(neuron=neuron):
+            if neuron.axon_info.ip != "0.0.0.0" and not self.is_blacklisted(
+                neuron=neuron
+            ):
                 valid_queryable.append((uid, axon))
 
         return valid_queryable
@@ -556,7 +649,9 @@ class Validator:
         self.sync_miners_info(queryable)
 
         dict_filtered_axons = self.filter_axons(queryable_tuple_uids_axons=queryable)
-        dict_filtered_axons = self.filter_axon_version(dict_filtered_axons=dict_filtered_axons)
+        dict_filtered_axons = self.filter_axon_version(
+            dict_filtered_axons=dict_filtered_axons
+        )
         return dict_filtered_axons
 
     def get_valid_validator_hotkeys(self):
@@ -577,7 +672,9 @@ class Validator:
         Retrieves hardware specifications from Wandb, updates the miner_details table,
         and checks for differences in GPU specs, logging changes only for allocated hotkeys.
         """
-        bt.logging.info(f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}")
+        bt.logging.info(
+            f"💻 Hardware list of uids queried (Wandb): {list(self._queryable_uids.keys())}"
+        )
 
         # Retrieve specs from Wandb
         specs_dict = self.wandb.get_miner_specs(self._queryable_uids)
@@ -619,13 +716,19 @@ class Validator:
                             break
 
                     if axon:
-                        bt.logging.info(f"GPU specs changed for allocated hotkey {hotkey}:")
-                        bt.logging.info(f"Old count: {current_count}, Old name: {current_name}")
+                        bt.logging.info(
+                            f"GPU specs changed for allocated hotkey {hotkey}:"
+                        )
+                        bt.logging.info(
+                            f"Old count: {current_count}, Old name: {current_name}"
+                        )
                         bt.logging.info(f"New count: {new_count}, New name: {new_name}")
                         await self.deallocate_miner(axon, None)
 
         # Update the local db with the new data from Wandb
-        update_miner_details(self.db, list(specs_dict.keys()), list(specs_dict.values()))
+        update_miner_details(
+            self.db, list(specs_dict.keys()), list(specs_dict.values())
+        )
 
         # Log the hotkey and specs
         # bt.logging.info(f"✅ GPU specs per hotkey (Wandb):")
@@ -650,21 +753,27 @@ class Validator:
             # Init miners to be tested
             self._queryable_uids = self.get_queryable()
             valid_validator_hotkeys = self.get_valid_validator_hotkeys()
-            self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
+            self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(
+                valid_validator_hotkeys, True
+            )
 
             # Settings
             merkle_proof = self.config_data["merkle_proof"]
-            retry_limit = merkle_proof.get("pog_retry_limit",30)
-            retry_interval = merkle_proof.get("pog_retry_interval",75)
-            num_workers = merkle_proof.get("max_workers",32)
-            max_delay = merkle_proof.get("max_random_delay",1200)
+            retry_limit = merkle_proof.get("pog_retry_limit", 30)
+            retry_interval = merkle_proof.get("pog_retry_interval", 75)
+            num_workers = merkle_proof.get("max_workers", 32)
+            max_delay = merkle_proof.get("max_random_delay", 1200)
 
             # Random delay for PoG
             delay = random.uniform(0, max_delay)  # Random delay
-            bt.logging.info(f"💻⏳ Scheduled Proof-of-GPU task to start in {delay:.2f} seconds.")
+            bt.logging.info(
+                f"💻⏳ Scheduled Proof-of-GPU task to start in {delay:.2f} seconds."
+            )
             await asyncio.sleep(delay)
 
-            bt.logging.info(f"💻 Starting Proof-of-GPU benchmarking for uids: {list(self._queryable_uids.keys())}")
+            bt.logging.info(
+                f"💻 Starting Proof-of-GPU benchmarking for uids: {list(self._queryable_uids.keys())}"
+            )
             # Shared dictionary to store results
             self.results = {}
             # Dictionary to track retry counts
@@ -697,11 +806,14 @@ class Validator:
                     try:
                         # Set a timeout for the GPU test
                         timeout = 300  # e.g., 5 minutes
+
                         # Define a synchronous helper function to run the asynchronous test_miner_gpu
                         # This is required because run_in_executor expects a synchronous callable.
                         def run_test_miner_gpu():
                             # Run the async test_miner_gpu function and wait for its result.
-                            return asyncio.run(self.test_miner_gpu(axon, self.config_data))
+                            return asyncio.run(
+                                self.test_miner_gpu(axon, self.config_data)
+                            )
 
                         # Submit the run_test_miner_gpu function to a thread pool executor.
                         # The asyncio.wait_for is used to enforce a timeout for the overall operation.
@@ -709,47 +821,67 @@ class Validator:
                             asyncio.get_running_loop().run_in_executor(
                                 self.executor, run_test_miner_gpu
                             ),
-                            timeout=timeout
+                            timeout=timeout,
                         )
-                        if result[1] is not None and result[2] > 0:
+                        if (result[1] is not None and
+                            result[2] > 0 and
+                            result[3] is not None and
+                            result[4] is not None and
+                            result[5] is not None
+                        ):
                             async with results_lock:
                                 self.results[hotkey] = {
                                     "gpu_name": result[1],
-                                    "num_gpus": result[2]
+                                    "num_gpus": result[2],
+                                    "gpu_serials": result[3],
+                                    "gpu_uuids": result[4],
+                                    "gpu_pci_bus_ids": result[5],
                                 }
-                            update_pog_stats(self.db, hotkey, result[1], result[2])
+                            update_pog_stats(self.db, hotkey, result[1], result[2], result[3], result[4], result[5])
                         else:
                             raise RuntimeError("GPU test failed")
                     except asyncio.TimeoutError:
-                        bt.logging.warning(f"⏳ Timeout while testing {hotkey}. Retrying...")
+                        bt.logging.warning(
+                            f"⏳ Timeout while testing {hotkey}. Retrying..."
+                        )
                         retry_counts[hotkey] += 1
                         if retry_counts[hotkey] < retry_limit:
-                            bt.logging.info(f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
+                            bt.logging.info(
+                                f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})"
+                            )
                             await asyncio.sleep(retry_interval)
                             await queue.put(axon)
                         else:
-                            bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts (Timeout).")
-                            update_pog_stats(self.db, hotkey, None, None)
+                            bt.logging.info(
+                                f"❌ {hotkey}: Miner failed after {retry_limit} attempts (Timeout)."
+                            )
+                            update_pog_stats(self.db, hotkey, None, None, None, None, None)
                     except Exception as e:
                         bt.logging.trace(f"Exception in worker for {hotkey}: {e}")
                         retry_counts[hotkey] += 1
                         if retry_counts[hotkey] < retry_limit:
-                            bt.logging.info(f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})")
+                            bt.logging.info(
+                                f"🔄 {hotkey}: Retrying miner -> (Attempt {retry_counts[hotkey]})"
+                            )
                             await asyncio.sleep(retry_interval)
                             await queue.put(axon)
                         else:
-                            bt.logging.info(f"❌ {hotkey}: Miner failed after {retry_limit} attempts.")
-                            update_pog_stats(self.db, hotkey, None, None)
+                            bt.logging.info(
+                                f"❌ {hotkey}: Miner failed after {retry_limit} attempts."
+                            )
+                            update_pog_stats(self.db, hotkey, None, None, None, None, None)
                     finally:
                         queue.task_done()
 
             # Number of concurrent workers
             # Determine a safe default number of workers
             cpu_cores = os.cpu_count() or 1
-            safe_max_workers = min((cpu_cores + 4)*4, num_workers)
+            safe_max_workers = min((cpu_cores + 4) * 4, num_workers)
 
             workers = [asyncio.create_task(worker()) for _ in range(safe_max_workers)]
-            bt.logging.trace(f"Started {safe_max_workers} worker tasks for Proof-of-GPU benchmarking.")
+            bt.logging.trace(
+                f"Started {safe_max_workers} worker tasks for Proof-of-GPU benchmarking."
+            )
 
             # Wait until the queue is fully processed
             await queue.join()
@@ -763,7 +895,9 @@ class Validator:
             bt.logging.success(f"✅ Proof-of-GPU benchmarking completed.")
             return self.results
         except Exception as e:
-            bt.logging.info(f"❌ Exception in proof_of_gpu: {e}\n{traceback.format_exc()}")
+            bt.logging.info(
+                f"❌ Exception in proof_of_gpu: {e}\n{traceback.format_exc()}"
+            )
 
     def on_gpu_task_done(self, task):
         try:
@@ -794,27 +928,35 @@ class Validator:
             gpu_tolerance_pairs = gpu_data.get("gpu_tolerance_pairs", {})
             # Extract Merkle Proof Settings
             merkle_proof = config_data["merkle_proof"]
-            time_tol = merkle_proof.get("time_tolerance",5)
+            time_tol = merkle_proof.get("time_tolerance", 5)
             # Extract miner_script path
             miner_script_path = merkle_proof["miner_script_path"]
 
             # Step 1: Allocate Miner
             # Generate RSA key pair
             private_key, public_key = rsa.generate_key_pair()
-            allocation_response = await self.allocate_miner(axon, private_key, public_key)
+            allocation_response = await self.allocate_miner(
+                axon, private_key, public_key
+            )
             if not allocation_response:
                 bt.logging.info(f"🌀 {hotkey}: Busy or not allocatable.")
                 return (hotkey, None, 0)
             allocation_status = True
             miner_info = allocation_response
-            host = miner_info['host']
+            host = miner_info["host"]
             bt.logging.trace(f"{hotkey}: Allocated Miner for testing.")
 
             # Step 2: Connect via SSH
             ssh_client = paramiko.SSHClient()
             ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             bt.logging.trace(f"{hotkey}: Connect to Miner via SSH.")
-            ssh_client.connect(host, port=miner_info.get('port', 22), username=miner_info['username'], password=miner_info['password'], timeout=10)
+            ssh_client.connect(
+                host,
+                port=miner_info.get("port", 22),
+                username=miner_info["username"],
+                password=miner_info["password"],
+                timeout=10,
+            )
             if not (ssh_client):
                 ssh_client.close()
                 bt.logging.info(f"{hotkey}: SSH connection failed.")
@@ -823,44 +965,80 @@ class Validator:
 
             # Step 3: Hash Check
             local_hash = compute_script_hash(miner_script_path)
-            bt.logging.trace(f"{hotkey}: [Step 1] Local script hash computed successfully.")
+            bt.logging.trace(
+                f"{hotkey}: [Step 1] Local script hash computed successfully."
+            )
             bt.logging.trace(f"{hotkey}: Local Hash: {local_hash}")
             remote_hash = send_script_and_request_hash(ssh_client, miner_script_path)
             if local_hash != remote_hash:
-                bt.logging.info(f"{hotkey}: [Integrity Check] FAILURE: Hash mismatch detected.")
+                bt.logging.info(
+                    f"{hotkey}: [Integrity Check] FAILURE: Hash mismatch detected."
+                )
                 raise ValueError(f"{hotkey}: Script integrity verification failed.")
 
             # Step 4: Get GPU info NVIDIA from the remote miner
-            bt.logging.trace(f"{hotkey}: [Step 4] Retrieving GPU information (NVIDIA driver) from miner...")
+            bt.logging.trace(
+                f"{hotkey}: [Step 4] Retrieving GPU information (NVIDIA driver) from miner..."
+            )
             gpu_info = get_remote_gpu_info(ssh_client)
             num_gpus_reported = gpu_info["num_gpus"]
-            gpu_name_reported = gpu_info["gpu_names"][0] if num_gpus_reported > 0 else None
+            gpu_name_reported = (
+                gpu_info["gpu_names"][0] if num_gpus_reported > 0 else None
+            )
             bt.logging.trace(f"{hotkey}: [Step 4] Reported GPU Information:")
             if num_gpus_reported > 0:
                 bt.logging.trace(f"{hotkey}: Number of GPUs: {num_gpus_reported}")
                 bt.logging.trace(f"{hotkey}: GPU Type: {gpu_name_reported}")
+
+                query_result = query_remote_gpu(ssh_client)
+                gpu_serials = query_result["gpu_serials"]
+                gpu_uuids = query_result["gpu_uuids"]
+                gpu_pci_bus_ids = query_result["pci_bus_ids"]
+
+                bt.logging.trace(f"{hotkey}: GPU Serials: {gpu_serials}")
+                bt.logging.trace(f"{hotkey}: GPU UUIDs: {gpu_uuids}")
+                bt.logging.trace(f"{hotkey}: GPU PCI Bus Id: {gpu_pci_bus_ids}")
             if num_gpus_reported <= 0:
                 bt.logging.info(f"{hotkey}: No GPUs detected.")
                 raise ValueError("No GPUs detected.")
 
             # Step 5: Run the benchmarking mode
             bt.logging.info(f"💻 {hotkey}: Executing benchmarking mode.")
-            bt.logging.trace(f"{hotkey}: [Step 5] Executing benchmarking mode on the miner...")
-            execution_output = execute_script_on_miner(ssh_client, mode='benchmark')
+            bt.logging.trace(
+                f"{hotkey}: [Step 5] Executing benchmarking mode on the miner..."
+            )
+            execution_output = execute_script_on_miner(ssh_client, mode="benchmark")
             bt.logging.trace(f"{hotkey}: [Step 5] Benchmarking completed.")
             # Parse the execution output
-            num_gpus, vram, size_fp16, time_fp16, size_fp32, time_fp32 = parse_benchmark_output(execution_output)
-            bt.logging.trace(f"{hotkey}: [Benchmark Results] Detected {num_gpus} GPU(s) with {vram} GB unfractured VRAM.")
-            bt.logging.trace(f"{hotkey}: FP16 - Matrix Size: {size_fp16}, Execution Time: {time_fp16} s")
-            bt.logging.trace(f"{hotkey}: FP32 - Matrix Size: {size_fp32}, Execution Time: {time_fp32} s")
+            num_gpus, vram, size_fp16, time_fp16, size_fp32, time_fp32 = (
+                parse_benchmark_output(execution_output)
+            )
+            bt.logging.trace(
+                f"{hotkey}: [Benchmark Results] Detected {num_gpus} GPU(s) with {vram} GB unfractured VRAM."
+            )
+            bt.logging.trace(
+                f"{hotkey}: FP16 - Matrix Size: {size_fp16}, Execution Time: {time_fp16} s"
+            )
+            bt.logging.trace(
+                f"{hotkey}: FP32 - Matrix Size: {size_fp32}, Execution Time: {time_fp32} s"
+            )
             # Calculate performance metrics
-            fp16_tflops = (2 * size_fp16 ** 3) / time_fp16 / 1e12
-            fp32_tflops = (2 * size_fp32 ** 3) / time_fp32 / 1e12
+            fp16_tflops = (2 * size_fp16**3) / time_fp16 / 1e12
+            fp32_tflops = (2 * size_fp32**3) / time_fp32 / 1e12
             bt.logging.trace(f"{hotkey}: [Performance Metrics] Calculated TFLOPS:")
             bt.logging.trace(f"{hotkey}: FP16: {fp16_tflops:.2f} TFLOPS")
             bt.logging.trace(f"{hotkey}: FP32: {fp32_tflops:.2f} TFLOPS")
-            gpu_name = identify_gpu(fp16_tflops, fp32_tflops, vram, gpu_data, gpu_name_reported, gpu_tolerance_pairs)
-            bt.logging.trace(f"{hotkey}: [GPU Identification] Based on performance: {gpu_name}")
+            gpu_name = identify_gpu(
+                fp16_tflops,
+                fp32_tflops,
+                vram,
+                gpu_data,
+                gpu_name_reported,
+                gpu_tolerance_pairs,
+            )
+            bt.logging.trace(
+                f"{hotkey}: [GPU Identification] Based on performance: {gpu_name}"
+            )
 
             # Step 6: Run the Merkle proof mode
             bt.logging.trace(f"{hotkey}: [Step 6] Initiating Merkle Proof Mode.")
@@ -868,15 +1046,21 @@ class Validator:
             n = adjust_matrix_size(vram, element_size=4, buffer_factor=0.10)
             seeds = get_random_seeds(num_gpus)
             send_seeds(ssh_client, seeds, n)
-            bt.logging.trace(f"{hotkey}: [Step 6] Compute mode executed on miner - Matrix Size: {n}")
+            bt.logging.trace(
+                f"{hotkey}: [Step 6] Compute mode executed on miner - Matrix Size: {n}"
+            )
             start_time = time.time()
-            execution_output = execute_script_on_miner(ssh_client, mode='compute')
+            execution_output = execute_script_on_miner(ssh_client, mode="compute")
             end_time = time.time()
             elapsed_time = end_time - start_time
-            bt.logging.trace(f"{hotkey}: Compute mode execution time: {elapsed_time:.2f} seconds.")
+            bt.logging.trace(
+                f"{hotkey}: Compute mode execution time: {elapsed_time:.2f} seconds."
+            )
             # Parse the execution output
             root_hashes_list, gpu_timings_list = parse_merkle_output(execution_output)
-            bt.logging.trace(f"{hotkey}: [Merkle Proof] Root hashes received from GPUs:")
+            bt.logging.trace(
+                f"{hotkey}: [Merkle Proof] Root hashes received from GPUs:"
+            )
             for gpu_id, root_hash in root_hashes_list:
                 bt.logging.trace(f"{hotkey}: GPU {{gpu_id}}: {{root_hash}}")
 
@@ -885,42 +1069,68 @@ class Validator:
             total_merkle_tree_time = 0.0
             num_gpus = len(gpu_timings_list)
             for _, timing in gpu_timings_list:
-                total_multiplication_time += timing.get('multiplication_time', 0.0)
-                total_merkle_tree_time += timing.get('merkle_tree_time', 0.0)
-            average_multiplication_time = total_multiplication_time / num_gpus if num_gpus > 0 else 0.0
-            average_merkle_tree_time = total_merkle_tree_time / num_gpus if num_gpus > 0 else 0.0
-            bt.logging.trace(f"{hotkey}: Average Matrix Multiplication Time: {average_multiplication_time:.4f} seconds")
-            bt.logging.trace(f"{hotkey}: Average Merkle Tree Time: {average_merkle_tree_time:.4f} seconds")
+                total_multiplication_time += timing.get("multiplication_time", 0.0)
+                total_merkle_tree_time += timing.get("merkle_tree_time", 0.0)
+            average_multiplication_time = (
+                total_multiplication_time / num_gpus if num_gpus > 0 else 0.0
+            )
+            average_merkle_tree_time = (
+                total_merkle_tree_time / num_gpus if num_gpus > 0 else 0.0
+            )
+            bt.logging.trace(
+                f"{hotkey}: Average Matrix Multiplication Time: {average_multiplication_time:.4f} seconds"
+            )
+            bt.logging.trace(
+                f"{hotkey}: Average Merkle Tree Time: {average_merkle_tree_time:.4f} seconds"
+            )
 
             timing_passed = False
-            if elapsed_time < time_tol + num_gpus * time_fp32 and average_multiplication_time < time_fp32:
+            if (
+                elapsed_time < time_tol + num_gpus * time_fp32
+                and average_multiplication_time < time_fp32
+            ):
                 timing_passed = True
 
             # Step 7: Verify merkle proof
             root_hashes = {gpu_id: root_hash for gpu_id, root_hash in root_hashes_list}
             gpu_timings = {gpu_id: timing for gpu_id, timing in gpu_timings_list}
-            n = gpu_timings[0]['n']  # Assuming same n for all GPUs
+            n = gpu_timings[0]["n"]  # Assuming same n for all GPUs
             indices = {}
             num_indices = 1
             for gpu_id in range(num_gpus):
-                indices[gpu_id] = [(np.random.randint(0, n), np.random.randint(0, n)) for _ in range(num_indices)]
+                indices[gpu_id] = [
+                    (np.random.randint(0, n), np.random.randint(0, n))
+                    for _ in range(num_indices)
+                ]
             send_challenge_indices(ssh_client, indices)
-            execution_output = execute_script_on_miner(ssh_client, mode='proof')
+            execution_output = execute_script_on_miner(ssh_client, mode="proof")
             bt.logging.trace(f"{hotkey}: [Merkle Proof] Proof mode executed on miner.")
             responses = receive_responses(ssh_client, num_gpus)
             bt.logging.trace(f"{hotkey}: [Merkle Proof] Responses received from miner.")
 
-            verification_passed = verify_responses(seeds, root_hashes, responses, indices, n)
+            verification_passed = verify_responses(
+                seeds, root_hashes, responses, indices, n
+            )
+
             if verification_passed and timing_passed:
-                bt.logging.info(f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s)")
-                return (hotkey, gpu_name, num_gpus)
+                bt.logging.info(
+                    f"✅ {hotkey}: GPU Identification: Detected {num_gpus} x {gpu_name} GPU(s)"
+                    f", Serial Number(s): {gpu_serials}, UUID(s): {gpu_uuids}"
+                )
+
+                gpu_serials = query_result["gpu_serials"]
+                gpu_uuids = query_result["gpu_uuids"]
+                gpu_pci_bus_ids = query_result["pci_bus_ids"]
+                return (hotkey, gpu_name, num_gpus, gpu_serials, gpu_uuids, gpu_pci_bus_ids)
             else:
-                bt.logging.info(f"⚠️  {hotkey}: GPU Identification: Aborted due to verification failure")
-                return (hotkey, None, 0)
+                bt.logging.info(
+                    f"⚠️  {hotkey}: GPU Identification: Aborted due to verification failure"
+                )
+                return (hotkey, None, 0, None, None, None)
 
         except Exception as e:
             bt.logging.info(f"❌ {hotkey}: Error testing Miner: {e}")
-            return (hotkey, None, 0)
+            return (hotkey, None, 0, None, None, None)
 
         finally:
             if allocation_status and miner_info:
@@ -938,7 +1148,13 @@ class Validator:
             dendrite = bt.dendrite(wallet=self.wallet)
 
             # Define device requirements (customize as needed)
-            device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
+            device_requirement = {
+                "cpu": {"count": 1},
+                "gpu": {},
+                "hard_disk": {"capacity": 1073741824},
+                "ram": {"capacity": 1073741824},
+                "testing": True,
+            }
             device_requirement["gpu"] = {"count": 1, "capacity": 0, "type": ""}
 
             docker_requirement = {
@@ -948,10 +1164,12 @@ class Validator:
             # Simulate an allocation query with Allocate
             check_allocation = await dendrite(
                 axon,
-                Allocate(timeline=1, device_requirement=device_requirement, checking=True),
+                Allocate(
+                    timeline=1, device_requirement=device_requirement, checking=True
+                ),
                 timeout=30,
-                )
-            if check_allocation  and check_allocation ["status"] is True:
+            )
+            if check_allocation and check_allocation["status"] is True:
                 response = await dendrite(
                     axon,
                     Allocate(
@@ -972,21 +1190,27 @@ class Validator:
                     info = json.loads(decrypted_info_str)
 
                     miner_info = {
-                        'host': axon.ip,
-                        'port': info['port'],
-                        'username': info['username'],
-                        'password': info['password'],
+                        "host": axon.ip,
+                        "port": info["port"],
+                        "username": info["username"],
+                        "password": info["password"],
                     }
                     return miner_info
                 else:
-                    bt.logging.trace(f"{axon.hotkey}: Miner allocation failed or no response received.")
+                    bt.logging.trace(
+                        f"{axon.hotkey}: Miner allocation failed or no response received."
+                    )
                     return None
             else:
-                bt.logging.trace(f"{axon.hotkey}: Miner aready allocated or no response received.")
+                bt.logging.trace(
+                    f"{axon.hotkey}: Miner aready allocated or no response received."
+                )
                 return None
 
         except Exception as e:
-            bt.logging.trace(f"{axon.hotkey}: Exception during miner allocation for: {e}")
+            bt.logging.trace(
+                f"{axon.hotkey}: Exception during miner allocation for: {e}"
+            )
             return None
 
     async def deallocate_miner(self, axon, public_key):
@@ -1004,12 +1228,14 @@ class Validator:
 
                 cursor.execute(
                     "SELECT details, hotkey FROM allocation WHERE hotkey = ?",
-                    (axon.hotkey,)
+                    (axon.hotkey,),
                 )
                 row = cursor.fetchone()
 
                 if row:
-                    info = json.loads(row[0])  # Parse JSON string from the 'details' column
+                    info = json.loads(
+                        row[0]
+                    )  # Parse JSON string from the 'details' column
                     public_key = info.get("regkey")
             except Exception as e:
                 bt.logging.trace(f"{axon.hotkey}: Missing public key: {e}")
@@ -1033,7 +1259,10 @@ class Validator:
                         timeout=60,
                     )
 
-                    if deregister_response and deregister_response.get("status") is True:
+                    if (
+                        deregister_response
+                        and deregister_response.get("status") is True
+                    ):
                         allocation_status = False
                         bt.logging.trace(f"Deallocated miner {axon.hotkey}")
                     else:
@@ -1043,7 +1272,9 @@ class Validator:
                             f"(attempt {retry_count}/{max_retries})"
                         )
                         if retry_count >= max_retries:
-                            bt.logging.trace(f"{axon.hotkey}: Max retries reached for deallocating miner.")
+                            bt.logging.trace(
+                                f"{axon.hotkey}: Max retries reached for deallocating miner."
+                            )
                         time.sleep(5)
                 except Exception as e:
                     retry_count += 1
@@ -1052,16 +1283,22 @@ class Validator:
                         f"(attempt {retry_count}/{max_retries}): {e}"
                     )
                     if retry_count >= max_retries:
-                        bt.logging.trace(f"{axon.hotkey}: Max retries reached for deallocating miner.")
+                        bt.logging.trace(
+                            f"{axon.hotkey}: Max retries reached for deallocating miner."
+                        )
                     time.sleep(5)
         except Exception as e:
-            bt.logging.trace(f"{axon.hotkey}: Unexpected error during deallocation: {e}")
+            bt.logging.trace(
+                f"{axon.hotkey}: Unexpected error during deallocation: {e}"
+            )
 
     def set_weights(self):
         # Remove all negative scores and attribute them 0.
         self.scores[self.scores < 0] = 0
         # Normalize the scores into weights
-        weights: torch.FloatTensor = torch.nn.functional.normalize(self.scores, p=1.0, dim=0).float()
+        weights: torch.FloatTensor = torch.nn.functional.normalize(
+            self.scores, p=1.0, dim=0
+        ).float()
         bt.logging.info(f"🏋️ Weight of miners : {weights.tolist()}")
         # This is a crucial step that updates the incentive mechanism on the Bittensor blockchain.
         # Miners with higher scores (or weights) receive a larger share of TAO rewards on this subnet.
@@ -1073,7 +1310,12 @@ class Validator:
             version_key=__version_as_int__,
             wait_for_inclusion=False,
         )
-        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
+        if (
+            isinstance(result[0], bool)
+            and result
+            or isinstance(result, tuple)
+            and result[0]
+        ):
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:
@@ -1110,15 +1352,26 @@ class Validator:
                 if self.current_block not in self.blocks_done:
                     self.blocks_done.add(self.current_block)
 
-                    time_next_pog = self.next_info(not block_next_pog == 1, block_next_pog)
-                    time_next_sync_status = self.next_info(not block_next_sync_status == 1, block_next_sync_status)
-                    time_next_set_weights = self.next_info(not block_next_set_weights == 1, block_next_set_weights)
+                    time_next_pog = self.next_info(
+                        not block_next_pog == 1, block_next_pog
+                    )
+                    time_next_sync_status = self.next_info(
+                        not block_next_sync_status == 1, block_next_sync_status
+                    )
+                    time_next_set_weights = self.next_info(
+                        not block_next_set_weights == 1, block_next_set_weights
+                    )
                     time_next_hardware_info = self.next_info(
-                        not block_next_hardware_info == 1 and self.validator_perform_hardware_query, block_next_hardware_info
+                        not block_next_hardware_info == 1
+                        and self.validator_perform_hardware_query,
+                        block_next_hardware_info,
                     )
 
                     # Perform proof of GPU (pog) queries
-                    if self.current_block % block_next_pog == 0 or block_next_pog < self.current_block:
+                    if (
+                        self.current_block % block_next_pog == 0
+                        or block_next_pog < self.current_block
+                    ):
                         block_next_pog = self.current_block + 360
 
                         if self.gpu_task is None or self.gpu_task.done():
@@ -1129,10 +1382,16 @@ class Validator:
                             bt.logging.info("Proof-of-GPU task is already running.")
 
                     # Perform specs queries
-                    if (self.current_block % block_next_hardware_info == 0 and self.validator_perform_hardware_query) or (
-                        block_next_hardware_info < self.current_block and self.validator_perform_hardware_query
+                    if (
+                        self.current_block % block_next_hardware_info == 0
+                        and self.validator_perform_hardware_query
+                    ) or (
+                        block_next_hardware_info < self.current_block
+                        and self.validator_perform_hardware_query
                     ):
-                        block_next_hardware_info = self.current_block + 150  # 150 -> ~ every 30 minutes
+                        block_next_hardware_info = (
+                            self.current_block + 150
+                        )  # 150 -> ~ every 30 minutes
 
                         if not hasattr(self, "_queryable_uids"):
                             self._queryable_uids = self.get_queryable()
@@ -1141,17 +1400,27 @@ class Validator:
                         await self.get_specs_wandb()
 
                     # Perform miner checking
-                    if self.current_block % block_next_miner_checking == 0 or block_next_miner_checking < self.current_block:
+                    if (
+                        self.current_block % block_next_miner_checking == 0
+                        or block_next_miner_checking < self.current_block
+                    ):
                         # Next block the validators will do port checking again.
-                        block_next_miner_checking = self.current_block + 50  # 300 -> every 60 minutes
+                        block_next_miner_checking = (
+                            self.current_block + 50
+                        )  # 300 -> every 60 minutes
 
                         # Filter axons with stake and ip address.
                         self._queryable_uids = self.get_queryable()
 
                         # self.sync_checklist()
 
-                    if self.current_block % block_next_sync_status == 0 or block_next_sync_status < self.current_block:
-                        block_next_sync_status = self.current_block + 25  # ~ every 5 minutes
+                    if (
+                        self.current_block % block_next_sync_status == 0
+                        or block_next_sync_status < self.current_block
+                    ):
+                        block_next_sync_status = (
+                            self.current_block + 25
+                        )  # ~ every 5 minutes
                         self.sync_status()
 
                         # Log chain data to wandb
@@ -1159,13 +1428,22 @@ class Validator:
                             "Block": self.current_block,
                             "Stake": float(self.metagraph.S[self.validator_subnet_uid]),
                             "Rank": float(self.metagraph.R[self.validator_subnet_uid]),
-                            "vTrust": float(self.metagraph.validator_trust[self.validator_subnet_uid]),
-                            "Emission": float(self.metagraph.E[self.validator_subnet_uid]),
+                            "vTrust": float(
+                                self.metagraph.validator_trust[
+                                    self.validator_subnet_uid
+                                ]
+                            ),
+                            "Emission": float(
+                                self.metagraph.E[self.validator_subnet_uid]
+                            ),
                         }
                         self.wandb.log_chain_data(chain_data)
 
                     # Periodically update the weights on the Bittensor blockchain, ~ every 20 minutes
-                    if self.current_block - self.last_updated_block > weights_rate_limit:
+                    if (
+                        self.current_block - self.last_updated_block
+                        > weights_rate_limit
+                    ):
                         block_next_set_weights = self.current_block + weights_rate_limit
                         self.sync_scores()
                         self.set_weights()

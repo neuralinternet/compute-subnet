@@ -53,6 +53,15 @@ class ComputeDb:
                 )
             """
             )
+            # Check current columns and add new ones only if they do not exist
+            pragma = cursor.execute("PRAGMA table_info(pog_stats)").fetchall()
+            columns = [row[1] for row in pragma]
+            if "gpu_serials" not in columns:
+                cursor.execute("ALTER TABLE pog_stats ADD COLUMN gpu_serials TEXT DEFAULT ''")
+            if "gpu_uuids" not in columns:
+                cursor.execute("ALTER TABLE pog_stats ADD COLUMN gpu_uuids TEXT DEFAULT ''")
+            if "gpu_pci_bus_ids" not in columns:
+                cursor.execute("ALTER TABLE pog_stats ADD COLUMN gpu_pci_bus_ids TEXT DEFAULT ''")
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS stats (
