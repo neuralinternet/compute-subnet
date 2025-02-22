@@ -406,3 +406,40 @@ def query_remote_gpu(ssh_client):
                 pass
 
     return {'gpu_serials': serials, 'gpu_uuids': uuids, 'pci_bus_ids': bus_ids}
+
+
+def verify_uuids(ssh_client, gpu_uuids, pci_bus_ids):
+    """
+    Verifies the responses from GPUs query by checking linux nvidia driver information.
+
+    Parameters:
+        ssh_client (paramiko.SSHClient): SSH client connected to the miner.
+        gpu_uuids (list): The UUIDs of GPU(s)
+        pci_bus_ids (list): The PCI Bus Id of GPU(s)
+
+    Returns:
+        bool: True if verification passes, False otherwise.
+    """
+    if not gpu_uuids or not pci_bus_ids:
+        bt.logging.trace("[Verification] FAILURE: Missing UUID/PCI Bus Id")
+        return False
+
+    # check uuid from driver info using pci bus id
+    for uuid, pci_bus_id in zip_longest(gpu_uuids, pci_bus_ids, fillvalue=None):
+        if uuid is None or pci_bus_id is None:
+            bt.logging.trace(
+                f"[Verification] FAILURE: Misaligned UUID/PCI Bus Id information: {uuid}/{pci_bus_id}"
+            )
+            return False
+
+        command = f"cat /proc/driver/nvidia/gpus/{pci_bus_id}/information"
+        _, stdout, stderr = ssh_client.exec_command(command)
+
+        error = stderr.read().decode().strip()
+        stdout = stdout.read().decode().strip()
+        if error or not stdout or uuid not in stdout:
+            bt.logging.trace(
+                f"[Verification] FAILURE: UUID/PCI Bus Id information Value mismatch: {uuid}/{pci_bus_id}"
+            )
+            return False
+    return True

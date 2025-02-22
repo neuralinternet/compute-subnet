@@ -93,6 +93,7 @@ from neurons.Validator.pog import (
     send_script_and_request_hash,
     send_seeds,
     verify_responses,
+    verify_uuids,
 )
 
 
@@ -1110,7 +1111,7 @@ class Validator:
 
             verification_passed = verify_responses(
                 seeds, root_hashes, responses, indices, n
-            )
+            ) and verify_uuids(ssh_client, gpu_uuids, gpu_pci_bus_ids)
 
             if verification_passed and timing_passed:
                 bt.logging.info(
