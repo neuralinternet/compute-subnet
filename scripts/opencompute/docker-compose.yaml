@@ -1,0 +1,21 @@
+version: '3'
+services:
+  frontend:
+    image: frontend
+    ports:
+      - "80:8501"
+    depends_on:
+      - backend
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: opencompute-frontend
+
+
+  backend:
+    image: backend
+    container_name: opencompute-backend
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    env_file: ".env"

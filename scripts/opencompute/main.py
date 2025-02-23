@@ -1,17 +1,14 @@
 # Streamlit main script
 import streamlit as st
-import os
-from dotenv import load_dotenv
 import pandas as pd
 import requests
-import time
 
 # Configure the page to use wide layout
 st.set_page_config(page_title="Opencompute", layout="wide", page_icon="icon.ico")
 
 # Server details, insert the server IP and port
-SERVER_IP = ""
-SERVER_PORT = ""
+SERVER_IP = "opencompute-backend"
+SERVER_PORT = "8316"
 SERVER_URL = f"http://{SERVER_IP}:{SERVER_PORT}"
 
 def get_data_from_server(endpoint):
