@@ -1072,8 +1072,8 @@ class Validator:
             weights=weights,  # Weights to set for the miners.
             version_key=__version_as_int__,
             wait_for_inclusion=False,
-        )
-        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
+        ) # return type: tuple[bool, str]
+        if isinstance(result, tuple) and result and isinstance(result[0], bool) and result[0]:
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:
