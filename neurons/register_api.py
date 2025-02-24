@@ -23,6 +23,7 @@ import base64
 import os
 import json
 import bittensor as bt
+from bittensor import dendrite
 from compute.utils.socket import check_port
 import torch
 import time
@@ -2640,6 +2641,49 @@ class RegisterAPI:
                     content={
                         "success": False,
                         "message": "Error occurred while testing notify",
+                        "err_detail": e.__repr__(),
+                    },
+                )
+
+        @self.app.post("/test/ping",
+                       tags=["Testing"],)
+        async def ping_miner_test(hotkey_list: List[str] = "[]") -> JSONResponse:
+            bt.logging.info("Start Ping Test")
+            dendrite_test = bt.dendrite(wallet=self.wallet)
+            synapse = bt.Synapse()
+            success_count = 0
+            success_list = []
+            # synapse.timeout = 3.0
+            # synapse.name = "ping"
+            try:
+                # for axon in self.metagraph.axons:
+                if hotkey_list and len(hotkey_list)>0:
+                    axons = [axon for axon in self.metagraph.axons if axon.hotkey in hotkey_list]
+                else:
+                    axons = [axon for axon in self.metagraph.axons if axon.ip != "0.0.0.0"]
+                result = await self.dendrite_check.forward(axons=axons, synapse=synapse, timeout=10)
+                for uid, uid_data in enumerate(result):
+                    if uid_data.is_success == True:
+                        success_count += 1
+                        success_list.append({"uid": uid, "hotkey": uid_data.axon.hotkey, "ip": uid_data.axon.ip, "port": uid_data.axon.port})
+
+                bt.logging.info("Finish Ping Test")
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "success": True,
+                        "message": "Ping test successful",
+                        "success_count": success_count,
+                        "success_list": success_list
+                    },
+                )
+            except Exception as e:
+                bt.logging.error(f"API: An error occurred while testing ping: {e}")
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "success": False,
+                        "message": "Error occurred while testing ping",
                         "err_detail": e.__repr__(),
                     },
                 )
