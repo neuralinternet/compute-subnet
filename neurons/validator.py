@@ -329,7 +329,7 @@ class Validator:
         # Fetch allocated hotkeys and stats
         self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
         self.stats_allocated = self.wandb.get_stats_allocated(valid_validator_hotkeys, True)
-
+        self.penalized_hotkeys = self.wandb.get_penalized_hotkeys_checklist_bak(valid_validator_hotkeys, True)
         self._queryable_uids = self.get_queryable()
 
         # Calculate score
@@ -365,7 +365,8 @@ class Validator:
 
                 self.stats[uid]["score"] = score*100
                 self.stats[uid]["gpu_specs"] = gpu_specs
-
+                if hotkey in self.penalized_hotkeys:
+                    self.stats[uid]["score"] = 0
                 # Keep or override reliability_score if you want
                 if "reliability_score" not in self.stats[uid]:
                     self.stats[uid]["reliability_score"] = 0
