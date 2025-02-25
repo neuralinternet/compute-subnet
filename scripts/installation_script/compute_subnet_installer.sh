@@ -69,9 +69,6 @@ else
   HOME_DIR="$(eval echo "~$REAL_USER")"
 fi
 
-info "This script will install Docker, NVIDIA drivers, NVIDIA Docker, CUDA 12.8, and Bittensor if they are not present. It will then optionally set up the compute-subnet miner."
-pause_for_user
-
 ##############################################################################
 #                      2) Check / Install Docker
 ##############################################################################
@@ -81,37 +78,6 @@ docker_installed() {
   fi
   return 1
 }
-
-if docker_installed; then
-  info "Docker is already installed. Skipping Docker installation."
-else
-  info "Installing Docker..."
-
-  sudo apt-get update || abort "Failed to update package lists."
-  sudo apt-get install --no-install-recommends --no-install-suggests -y apt-utils curl git cmake build-essential ca-certificates || abort "Failed to install basic prerequisites."
-
-  # Set up Docker repository
-  info "Setting up Docker repository..."
-  sudo install -m 0755 -d /etc/apt/keyrings
-  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc || abort "Failed to download Docker GPG key."
-  sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-  . /etc/os-release || abort "Cannot determine OS version."
-  DOCKER_REPO="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable"
-  echo "$DOCKER_REPO" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-  sudo apt-get update || abort "Failed to update package lists for Docker."
-  sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || abort "Failed to install Docker packages."
-
-  info "Adding user ${USER_NAME} to 'docker' group..."
-  sudo usermod -aG docker "$USER_NAME" || abort "Failed to add user to docker group."
-
-  info "Docker installed successfully."
-  NEED_REBOOT=1
-fi
-
-# 'at' package might be used for scheduled reboots if needed
-sudo apt-get install -y at || abort "Failed to install package 'at'."
 
 ##############################################################################
 #                      3) Check / Install NVIDIA Docker
@@ -123,29 +89,6 @@ nvidia_docker_installed() {
   fi
   return 1
 }
-
-if nvidia_docker_installed; then
-  info "NVIDIA Docker support (nvidia-container-toolkit) is already installed. Skipping."
-else
-  info "Installing NVIDIA Docker support..."
-
-  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-    | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-      || abort "Failed to download libnvidia-container gpg key."
-
-  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-    | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-  sudo apt-get update || abort "Failed to update apt after adding NVIDIA repository."
-  sudo apt-get install -y nvidia-container-toolkit || abort "Failed to install nvidia-container-toolkit."
-
-  info "Configuring Docker to use NVIDIA Container Runtime..."
-  sudo nvidia-ctk runtime configure --runtime=docker || abort "Failed to configure NVIDIA Container Runtime."
-  sudo systemctl restart docker || abort "Failed to restart Docker."
-
-  info "NVIDIA Docker support installed."
-fi
 
 ##############################################################################
 #                      4) Check / Install CUDA 12.8
@@ -176,63 +119,6 @@ cuda_version_installed() {
 }
 
 CURRENT_CUDA=$(cuda_version_installed)
-if [[ -n "$CURRENT_CUDA" ]]; then
-  info "Detected CUDA version: $CURRENT_CUDA"
-fi
-
-if [[ "$CURRENT_CUDA" == "12.8" ]]; then
-  info "CUDA 12.8 is already installed. Skipping CUDA installation."
-elif [[ -n "$CURRENT_CUDA" ]]; then
-  info "WARNING: CUDA version $CURRENT_CUDA detected, different from 12.8."
-  info "Skipping installation of 12.8 to avoid conflicts."
-else
-  info "No CUDA found. Installing CUDA 12.8..."
-
-  . /etc/os-release || abort "Cannot determine Ubuntu version."
-  if [[ "$VERSION_CODENAME" == "jammy" ]]; then
-    # Ubuntu 22.04
-    sudo apt-get update
-    sudo apt-get install -y build-essential dkms linux-headers-$(uname -r) || abort "Failed to install build essentials."
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin -O /tmp/cuda.pin || abort "Failed to download cuda pin file."
-    sudo mv /tmp/cuda.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb -O /tmp/cuda-repo.deb || abort "Failed to download cuda repo .deb."
-    sudo dpkg -i /tmp/cuda-repo.deb || abort "dpkg install of cuda repo failed."
-    sudo cp /var/cuda-repo-ubuntu2204-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/ || abort "Failed to copy cuda keyring."
-    sudo apt-get update
-    sudo apt-get -y install cuda-toolkit-12-8 cuda-drivers || abort "Failed to install CUDA Toolkit and drivers."
-  elif [[ "$VERSION_CODENAME" == "lunar" ]]; then
-    # For Ubuntu 23.04/24.04 if they use codename "lunar"
-    sudo apt-get update
-    sudo apt-get install -y build-essential dkms linux-headers-$(uname -r) || abort "Failed to install build essentials."
-    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin -O /tmp/cuda.pin || abort "Failed to download cuda pin file (24.04)."
-    sudo mv /tmp/cuda.pin /etc/apt/preferences.d/cuda-repository-pin-600
-    wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2404-12-8-local_12.8.0-570.86.10-1_amd64.deb -O /tmp/cuda-repo.deb || abort "Failed to download cuda repo .deb (24.04)."
-    sudo dpkg -i /tmp/cuda-repo.deb || abort "dpkg install of cuda repo failed (24.04)."
-    sudo cp /var/cuda-repo-ubuntu2404-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/ || abort "Failed to copy cuda keyring (24.04)."
-    sudo apt-get update
-    sudo apt-get -y install cuda-toolkit-12-8 cuda-drivers || abort "Failed to install CUDA Toolkit 12.8."
-  else
-    info "Automatic CUDA 12.8 installation is not supported for this Ubuntu version."
-    info "Please install CUDA manually from: https://developer.nvidia.com/cuda-downloads"
-    exit 1
-  fi
-
-  info "Configuring CUDA environment variables in ${HOME_DIR}/.bashrc..."
-  if ! grep -q "CUDA configuration added by" "${HOME_DIR}/.bashrc"; then
-    {
-      echo ""
-      echo "# CUDA configuration added by compute_subnet_installer.sh"
-      echo "export PATH=/usr/local/cuda-12.8/bin:\$PATH"
-      echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:\$LD_LIBRARY_PATH"
-    } | tee -a "${HOME_DIR}/.bashrc"
-    info "CUDA environment variables appended to ${HOME_DIR}/.bashrc"
-  else
-    info "CUDA environment variables already present in ${HOME_DIR}/.bashrc"
-  fi
-
-  info "CUDA 12.8 installation complete."
-  NEED_REBOOT=1
-fi
 
 ##############################################################################
 #                      5) Check / Install Bittensor
@@ -244,129 +130,245 @@ bittensor_installed() {
   fi
   return 1
 }
+if ! docker_installed || ! nvidia_docker_installed || ! [[ -n "$CURRENT_CUDA"]] || ! bittensor_installed; then
+  info "This script will install Docker, NVIDIA drivers, NVIDIA Docker, CUDA 12.8, and Bittensor if they are not present. It will then optionally set up the compute-subnet miner."
+  pause_for_user
 
-if bittensor_installed; then
-  info "Bittensor is already installed. Skipping re-installation."
-else
-  info "Bittensor is not installed."
-
-  if $AUTOMATED; then
-  info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
-
-  sudo apt-get update -y || abort "Failed to update apt."
-  sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
-
-  python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
-
-  python3 -m pip install --user bittensor-cli || abort "Failed to install Bittensor (user-level)."
-
-  if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-    info "Added '$HOME/.local/bin' to PATH in .bashrc"
-  fi
-
-  if [ -f "$HOME/.bashrc" ]; then
-    source "$HOME/.bashrc"
-    info "Sourced $HOME/.bashrc. PATH is now: $PATH"
-  fi
-
-  export PATH="$HOME/.local/bin:$PATH"
-  info "Manually exported ~/.local/bin to PATH for the current shell."
-
-  if ! command -v btcli >/dev/null 2>&1; then
-    echo "WARNING: btcli is still not recognized in this non-interactive shell."
-    echo "It will be recognized once you log in as $USER or start a new interactive session."
+  if docker_installed; then
+    info "Docker is already installed. Skipping Docker installation."
   else
-    info "btcli is recognized in the current environment now."
-  fi
+    info "Installing Docker..."
 
-  info "Bittensor installed successfully at user-level (no virtualenv)."
+    sudo apt-get update || abort "Failed to update package lists."
+    sudo apt-get install --no-install-recommends --no-install-suggests -y apt-utils curl git cmake build-essential ca-certificates || abort "Failed to install basic prerequisites."
 
-else
-    info "Interactive mode: Installing Bittensor using the official script."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
-      || abort "Bittensor installation failed."
-    info "Bittensor installed successfully."
+    # Set up Docker repository
+    info "Setting up Docker repository..."
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc || abort "Failed to download Docker GPG key."
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    . /etc/os-release || abort "Cannot determine OS version."
+    DOCKER_REPO="deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable"
+    echo "$DOCKER_REPO" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    sudo apt-get update || abort "Failed to update package lists for Docker."
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || abort "Failed to install Docker packages."
+
+    info "Adding user ${USER_NAME} to 'docker' group..."
+    sudo usermod -aG docker "$USER_NAME" || abort "Failed to add user to docker group."
+
+    info "Docker installed successfully."
     NEED_REBOOT=1
   fi
 
-  info "Bittensor installation process completed."
-fi
+  # 'at' package might be used for scheduled reboots if needed
+  sudo apt-get install -y at || abort "Failed to install package 'at'."
 
-##############################################################################
-# Ensure that the 'btcli' command is recognized without a reboot
-##############################################################################
-
-# 1. Force-add $HOME/.local/bin to PATH in .bashrc if not present
-if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
-  echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-  echo "Added '$HOME/.local/bin' to PATH in .bashrc"
-else
-  echo "'$HOME/.local/bin' is already in PATH in .bashrc"
-fi
-
-# 2. Source .bashrc so our *current* shell process updates its PATH
-#    Normally, you'd need to start a new shell, but let's force it now:
-if [ -f "$HOME/.bashrc" ]; then
-  # We use 'source' to load environment changes into the current session
-  source "$HOME/.bashrc"
-  echo "Sourced $HOME/.bashrc, PATH is now: $PATH"
-fi
-
-# 3. Test if btcli is found
-if command -v btcli >/dev/null 2>&1; then
-  echo "btcli is now recognized."
-else
-  echo "WARNING: btcli is still not recognized. Check your PATH or installation."
-fi
-
-##############################################################################
-# Define function to suggest reboot only if NEED_REBOOT=1
-##############################################################################
-maybe_reboot_suggestion() {
-  if [[ $NEED_REBOOT -eq 1 ]]; then
-    echo
-    echo "Some core components (Docker, CUDA, Bittensor) were installed or updated."
-    echo "A reboot is strongly recommended before creating/funding your wallet or proceeding."
-    read -rp "Press 'r' to reboot now, or any other key to skip: " reboot_choice
-    if [[ "$reboot_choice" =~ ^[Rr]$ ]]; then
-      info "Rebooting..."
-      sudo reboot
-    else
-      info "Skipping reboot. You may do it manually later if needed."
-    fi
+  if nvidia_docker_installed; then
+    info "NVIDIA Docker support (nvidia-container-toolkit) is already installed. Skipping."
   else
-    info "No new installations were performed, so no reboot needed."
+    info "Installing NVIDIA Docker support..."
+
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+      | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
+        || abort "Failed to download libnvidia-container gpg key."
+
+    curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+      | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+      | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+    sudo apt-get update || abort "Failed to update apt after adding NVIDIA repository."
+    sudo apt-get install -y nvidia-container-toolkit || abort "Failed to install nvidia-container-toolkit."
+
+    info "Configuring Docker to use NVIDIA Container Runtime..."
+    sudo nvidia-ctk runtime configure --runtime=docker || abort "Failed to configure NVIDIA Container Runtime."
+    sudo systemctl restart docker || abort "Failed to restart Docker."
+
+    info "NVIDIA Docker support installed."
   fi
-}
 
-##############################################################################
-# Prompt user if they want to set up the miner now
-##############################################################################
-AUTOMATED=${AUTOMATED:-false}
+  if [[ -n "$CURRENT_CUDA" ]]; then
+    info "Detected CUDA version: $CURRENT_CUDA"
+  fi
 
-if $AUTOMATED; then
-  SETUP_MINER="yes"
-else
-  echo
-  echo "All base installations (Docker, NVIDIA, CUDA, Bittensor) are complete."
-  echo "Would you like to set up the compute-subnet miner now?"
-  select yn in "Yes" "No"; do
-    case $yn in
-      Yes )
-        SETUP_MINER="yes"
-        break
-        ;;
-      No )
-        info "Skipping compute-subnet miner setup."
-        info "You can re-run this script later if you change your mind."
+  if [[ "$CURRENT_CUDA" == "12.8" ]]; then
+    info "CUDA 12.8 is already installed. Skipping CUDA installation."
+  elif [[ -n "$CURRENT_CUDA" ]]; then
+    info "WARNING: CUDA version $CURRENT_CUDA detected, different from 12.8."
+    info "Skipping installation of 12.8 to avoid conflicts."
+  else
+    info "No CUDA found. Installing CUDA 12.8..."
 
-        # Call our reboot suggestion function before exit
-        maybe_reboot_suggestion
-        exit 0
-        ;;
-    esac
-  done
+    . /etc/os-release || abort "Cannot determine Ubuntu version."
+    if [[ "$VERSION_CODENAME" == "jammy" ]]; then
+      # Ubuntu 22.04
+      sudo apt-get update
+      sudo apt-get install -y build-essential dkms linux-headers-$(uname -r) || abort "Failed to install build essentials."
+      wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin -O /tmp/cuda.pin || abort "Failed to download cuda pin file."
+      sudo mv /tmp/cuda.pin /etc/apt/preferences.d/cuda-repository-pin-600
+      wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2204-12-8-local_12.8.0-570.86.10-1_amd64.deb -O /tmp/cuda-repo.deb || abort "Failed to download cuda repo .deb."
+      sudo dpkg -i /tmp/cuda-repo.deb || abort "dpkg install of cuda repo failed."
+      sudo cp /var/cuda-repo-ubuntu2204-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/ || abort "Failed to copy cuda keyring."
+      sudo apt-get update
+      sudo apt-get -y install cuda-toolkit-12-8 cuda-drivers || abort "Failed to install CUDA Toolkit and drivers."
+    elif [[ "$VERSION_CODENAME" == "lunar" ]]; then
+      # For Ubuntu 23.04/24.04 if they use codename "lunar"
+      sudo apt-get update
+      sudo apt-get install -y build-essential dkms linux-headers-$(uname -r) || abort "Failed to install build essentials."
+      wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin -O /tmp/cuda.pin || abort "Failed to download cuda pin file (24.04)."
+      sudo mv /tmp/cuda.pin /etc/apt/preferences.d/cuda-repository-pin-600
+      wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2404-12-8-local_12.8.0-570.86.10-1_amd64.deb -O /tmp/cuda-repo.deb || abort "Failed to download cuda repo .deb (24.04)."
+      sudo dpkg -i /tmp/cuda-repo.deb || abort "dpkg install of cuda repo failed (24.04)."
+      sudo cp /var/cuda-repo-ubuntu2404-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/ || abort "Failed to copy cuda keyring (24.04)."
+      sudo apt-get update
+      sudo apt-get -y install cuda-toolkit-12-8 cuda-drivers || abort "Failed to install CUDA Toolkit 12.8."
+    else
+      info "Automatic CUDA 12.8 installation is not supported for this Ubuntu version."
+      info "Please install CUDA manually from: https://developer.nvidia.com/cuda-downloads"
+      exit 1
+    fi
+
+    info "Configuring CUDA environment variables in ${HOME_DIR}/.bashrc..."
+    if ! grep -q "CUDA configuration added by" "${HOME_DIR}/.bashrc"; then
+      {
+        echo ""
+        echo "# CUDA configuration added by compute_subnet_installer.sh"
+        echo "export PATH=/usr/local/cuda-12.8/bin:\$PATH"
+        echo "export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:\$LD_LIBRARY_PATH"
+      } | tee -a "${HOME_DIR}/.bashrc"
+      info "CUDA environment variables appended to ${HOME_DIR}/.bashrc"
+    else
+      info "CUDA environment variables already present in ${HOME_DIR}/.bashrc"
+    fi
+
+    info "CUDA 12.8 installation complete."
+    NEED_REBOOT=1
+  fi
+
+  if bittensor_installed; then
+    info "Bittensor is already installed. Skipping re-installation."
+  else
+    info "Bittensor is not installed."
+
+    if $AUTOMATED; then
+    info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
+
+    sudo apt-get update -y || abort "Failed to update apt."
+    sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
+
+    python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
+
+    python3 -m pip install --user bittensor-cli || abort "Failed to install Bittensor (user-level)."
+
+    if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+      info "Added '$HOME/.local/bin' to PATH in .bashrc"
+    fi
+
+    if [ -f "$HOME/.bashrc" ]; then
+      source "$HOME/.bashrc"
+      info "Sourced $HOME/.bashrc. PATH is now: $PATH"
+    fi
+
+    export PATH="$HOME/.local/bin:$PATH"
+    info "Manually exported ~/.local/bin to PATH for the current shell."
+
+    if ! command -v btcli >/dev/null 2>&1; then
+      echo "WARNING: btcli is still not recognized in this non-interactive shell."
+      echo "It will be recognized once you log in as $USER or start a new interactive session."
+    else
+      info "btcli is recognized in the current environment now."
+    fi
+
+    info "Bittensor installed successfully at user-level (no virtualenv)."
+
+  else
+      info "Interactive mode: Installing Bittensor using the official script."
+      /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
+        || abort "Bittensor installation failed."
+      info "Bittensor installed successfully."
+      NEED_REBOOT=1
+    fi
+
+    info "Bittensor installation process completed."
+  fi
+
+  ##############################################################################
+  # Ensure that the 'btcli' command is recognized without a reboot
+  ##############################################################################
+
+  # 1. Force-add $HOME/.local/bin to PATH in .bashrc if not present
+  if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+    echo "Added '$HOME/.local/bin' to PATH in .bashrc"
+  else
+    echo "'$HOME/.local/bin' is already in PATH in .bashrc"
+  fi
+
+  # 2. Source .bashrc so our *current* shell process updates its PATH
+  #    Normally, you'd need to start a new shell, but let's force it now:
+  if [ -f "$HOME/.bashrc" ]; then
+    # We use 'source' to load environment changes into the current session
+    source "$HOME/.bashrc"
+    echo "Sourced $HOME/.bashrc, PATH is now: $PATH"
+  fi
+
+  # 3. Test if btcli is found
+  if command -v btcli >/dev/null 2>&1; then
+    echo "btcli is now recognized."
+  else
+    echo "WARNING: btcli is still not recognized. Check your PATH or installation."
+  fi
+
+  ##############################################################################
+  # Define function to suggest reboot only if NEED_REBOOT=1
+  ##############################################################################
+  maybe_reboot_suggestion() {
+    if [[ $NEED_REBOOT -eq 1 ]]; then
+      echo
+      echo "Some core components (Docker, CUDA, Bittensor) were installed or updated."
+      echo "A reboot is strongly recommended before creating/funding your wallet or proceeding."
+      read -rp "Press 'r' to reboot now, or any other key to skip: " reboot_choice
+      if [[ "$reboot_choice" =~ ^[Rr]$ ]]; then
+        info "Rebooting..."
+        sudo reboot
+      else
+        info "Skipping reboot. You may do it manually later if needed."
+      fi
+    else
+      info "No new installations were performed, so no reboot needed."
+    fi
+  }
+
+  ##############################################################################
+  # Prompt user if they want to set up the miner now
+  ##############################################################################
+  AUTOMATED=${AUTOMATED:-false}
+
+  if $AUTOMATED; then
+    SETUP_MINER="yes"
+  else
+    echo
+    echo "All base installations (Docker, NVIDIA, CUDA, Bittensor) are complete."
+    echo "Would you like to set up the compute-subnet miner now?"
+    select yn in "Yes" "No"; do
+      case $yn in
+        Yes )
+          SETUP_MINER="yes"
+          break
+          ;;
+        No )
+          info "Skipping compute-subnet miner setup."
+          info "You can re-run this script later if you change your mind."
+
+          # Call our reboot suggestion function before exit
+          maybe_reboot_suggestion
+          exit 0
+          ;;
+      esac
+    done
+  fi
 fi
 
 ##############################################################################
@@ -411,7 +413,7 @@ fi
 ##############################################################################
 #      8) Install/Update compute-subnet environment and set up the miner
 ##############################################################################
-
+info "Components already installed, proceeding with miner creation..."
 ##############################################################################
 # Attempt to detect or clone the compute-subnet repository
 ##############################################################################
