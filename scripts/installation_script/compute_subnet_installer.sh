@@ -130,7 +130,8 @@ bittensor_installed() {
   fi
   return 1
 }
-if ! docker_installed || ! nvidia_docker_installed || ! [[ -n "$CURRENT_CUDA"]] || ! bittensor_installed; then
+
+if ! docker_installed || ! nvidia_docker_installed || ! [[ -n "$CURRENT_CUDA" ]] || ! bittensor_installed; then
   info "This script will install Docker, NVIDIA drivers, NVIDIA Docker, CUDA 12.8, and Bittensor if they are not present. It will then optionally set up the compute-subnet miner."
   pause_for_user
 
