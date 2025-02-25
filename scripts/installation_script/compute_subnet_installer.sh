@@ -258,7 +258,7 @@ else
 
   python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
 
-  python3 -m pip install --user bittensor || abort "Failed to install Bittensor (user-level)."
+  python3 -m pip install --user bittensor-cli || abort "Failed to install Bittensor (user-level)."
 
   if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
