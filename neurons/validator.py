@@ -98,9 +98,6 @@ class Validator:
     def subtensor(self) -> ComputeSubnetSubtensor:
         return self._subtensor
 
-    @property
-    def dendrite(self) -> bt.dendrite:
-        return self._dendrite
 
     @property
     def metagraph(self) -> bt.metagraph: # type: ignore
@@ -166,10 +163,6 @@ class Validator:
         self._subtensor = ComputeSubnetSubtensor(config=self.config)
         bt.logging.info(f"Subtensor: {self.subtensor}")
 
-        # Dendrite is the RPC client; it lets us send messages to other nodes (axons) in the network.
-        self._dendrite = bt.dendrite(wallet=self.wallet)
-        bt.logging.info(f"Dendrite: {self.dendrite}")
-
         # The metagraph holds the state of the network, letting us know about other miners.
         self._metagraph = self.subtensor.metagraph(self.config.netuid)
         bt.logging.info(f"Metagraph: {self.metagraph}")
@@ -214,6 +207,8 @@ class Validator:
         self.lock = threading.Lock()
         self.threads: List[threading.Thread] = []
 
+        self.dendrite = bt.dendrite(wallet=self.wallet)
+
     @staticmethod
     def init_config():
         """
@@ -241,7 +236,7 @@ class Validator:
         # Return the parsed config.
         return config
 
-    def init_prometheus(self, force_update: bool = False):
+    def init_prometheus(self):
         """
         Register the prometheus information on metagraph.
         :return: bool
@@ -249,14 +244,12 @@ class Validator:
         # extrinsic prometheus is removed at 8.2.1
 
         bt.logging.info("Extrinsic prometheus information on metagraph.")
-        success = True
-        # TODO : remove all the related code from the code base
-        # self._subtensor.serve_prometheus(
-        #     wallet=self.wallet,
-        #     port=bt.core.settings.DEFAULTS.axon.port,
-        #     netuid=self.config.netuid,
-        #     force_update=force_update,
-        # )
+
+        success = self._subtensor.serve_prometheus(
+            wallet=self.wallet,
+            port=bt.core.settings.DEFAULTS.axon.port,
+            netuid=self.config.netuid
+        )
         if success:
             bt.logging.success(
                 prefix="Prometheus served",
@@ -329,7 +322,7 @@ class Validator:
         # Fetch allocated hotkeys and stats
         self.allocated_hotkeys = self.wandb.get_allocated_hotkeys(valid_validator_hotkeys, True)
         self.stats_allocated = self.wandb.get_stats_allocated(valid_validator_hotkeys, True)
-
+        self.penalized_hotkeys = self.wandb.get_penalized_hotkeys_checklist_bak(valid_validator_hotkeys, True)
         self._queryable_uids = self.get_queryable()
 
         # Calculate score
@@ -362,10 +355,11 @@ class Validator:
                     else:
                         score = 0
                         self.stats[uid]["own_score"] = True  # or "no"
-
+                
+                if hotkey in self.penalized_hotkeys:
+                    score = 0
                 self.stats[uid]["score"] = score*100
                 self.stats[uid]["gpu_specs"] = gpu_specs
-
                 # Keep or override reliability_score if you want
                 if "reliability_score" not in self.stats[uid]:
                     self.stats[uid]["reliability_score"] = 0
@@ -448,7 +442,7 @@ class Validator:
         subnet_prometheus_version = self.metagraph.neurons[self.validator_subnet_uid].prometheus_info.version
         current_version = __version_as_int__
         if subnet_prometheus_version != current_version:
-            self.init_prometheus(force_update=True)
+            self.init_prometheus()
 
     def sync_miners_info(self, queryable_tuple_uids_axons: List[Tuple[int, bt.AxonInfo]]):
         if queryable_tuple_uids_axons:
@@ -701,7 +695,8 @@ class Validator:
                         # This is required because run_in_executor expects a synchronous callable.
                         def run_test_miner_gpu():
                             # Run the async test_miner_gpu function and wait for its result.
-                            return asyncio.run(self.test_miner_gpu(axon, self.config_data))
+                            future = asyncio.run_coroutine_threadsafe(self.test_miner_gpu(axon, self.config_data), self.loop)
+                            return future.result()
 
                         # Submit the run_test_miner_gpu function to a thread pool executor.
                         # The asyncio.wait_for is used to enforce a timeout for the overall operation.
@@ -935,7 +930,6 @@ class Validator:
         :return: Dictionary with miner details if successful, None otherwise.
         """
         try:
-            dendrite = bt.dendrite(wallet=self.wallet)
 
             # Define device requirements (customize as needed)
             device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
@@ -946,13 +940,13 @@ class Validator:
             }
 
             # Simulate an allocation query with Allocate
-            check_allocation = await dendrite(
+            check_allocation = await self.dendrite(
                 axon,
                 Allocate(timeline=1, device_requirement=device_requirement, checking=True),
                 timeout=30,
                 )
             if check_allocation  and check_allocation ["status"] is True:
-                response = await dendrite(
+                response = await self.dendrite(
                     axon,
                     Allocate(
                         timeline=1,
@@ -985,6 +979,9 @@ class Validator:
                 bt.logging.trace(f"{axon.hotkey}: Miner aready allocated or no response received.")
                 return None
 
+        except ConnectionRefusedError as e:
+            bt.logging.error(f"{axon.hotkey}: Connection refused during miner allocation: {e}")
+            return None
         except Exception as e:
             bt.logging.trace(f"{axon.hotkey}: Exception during miner allocation for: {e}")
             return None
@@ -1015,7 +1012,6 @@ class Validator:
                 bt.logging.trace(f"{axon.hotkey}: Missing public key: {e}")
 
         try:
-            dendrite = bt.dendrite(wallet=self.wallet)
             retry_count = 0
             max_retries = 3
             allocation_status = True
@@ -1023,7 +1019,7 @@ class Validator:
             while allocation_status and retry_count < max_retries:
                 try:
                     # Send deallocation query
-                    deregister_response = await dendrite(
+                    deregister_response = await self.dendrite(
                         axon,
                         Allocate(
                             timeline=0,
@@ -1072,8 +1068,8 @@ class Validator:
             weights=weights,  # Weights to set for the miners.
             version_key=__version_as_int__,
             wait_for_inclusion=False,
-        )
-        if isinstance(result[0], bool) and result or isinstance(result, tuple) and result[0]:
+        ) # return type: tuple[bool, str]
+        if isinstance(result, tuple) and result and isinstance(result[0], bool) and result[0]:
             bt.logging.info(result)
             bt.logging.success("✅ Successfully set weights.")
         else:

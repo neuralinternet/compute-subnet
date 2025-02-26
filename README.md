@@ -1,6 +1,12 @@
-# NI Compute Subnet (Subnet 27)
+# NI Compute (Subnet 27)
 
 Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a decentralized compute market, enabling **miners** to contribute GPU resources and earn rewards in return. **Validators** measure the performance of these miners and allocate GPU resources accordingly, ensuring an efficient, trustless, and permissionless compute market.
+
+---
+
+Welcome to the **Bittensor NI Compute Subnet** repository. This subnet powers a decentralized compute market, enabling **miners** to contribute GPU resources and earn rewards in return. **Validators** measure the performance of these miners and allocate GPU resources accordingly, ensuring an efficient, trustless, and permissionless compute market.
+
+**Bittensor:** [Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Research](https://bittensor.com/whitepaper)
 
 ---
 
@@ -182,8 +188,8 @@ See Bittensor’s documentation for alternative installation instructions.
 ### Clone and Install Compute Subnet
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/neuralinternet/compute-subnet.git
-   cd compute-subnet
+   git clone https://github.com/neuralinternet/nicompute.git
+   cd nicompute
    ```
 2. **Install dependencies**:
    ```bash
@@ -372,6 +378,17 @@ pm2 monit
 - **`pm2 logs`** shows rolling log output.
 - **`pm2 monit`** provides a live interface with CPU usage, memory, etc.
 
+> Run pm2 logs to debug any issues and view information on your miner. **Specifically find your wandb run to view more live information. In the wandb project you can view the scores you receive from validators.**
+
+![Successful Validator<>Miner PoG](docs/pm2_miner_logs_pog_container.png)
+Successful Validator<>Miner PoG
+![Check Miner Score Wandb 1](docs/wandb_logs_validator_run1.png)
+Check Miner Score Wandb Step 1: Find a Validator run
+![Check Miner Score Wandb 2](docs/wandb_logs_validator_run2.png)
+Check Miner Score Wandb Step 2: Search your miner UID or Hotkey
+![Check Miner Score Wandb 3](docs/wandb_logs_validator_run3.png)
+Check Miner Score Wandb Step 3: Check Stats/Score
+
 ---
 
 **Note**: Validators are required to operate on a local Subtensor instance (subvortex recommended), as using Finney may result in rate limitations.
@@ -457,10 +474,10 @@ pip show compute-subnet
 Example output:
 
 ```
-Name: Compute-Subnet
-Version: 1.8.2
-Summary: Compute-Subnet
-Home-page: https://github.com/neuralinternet/Compute-Subnet
+Name: nicompute
+Version: 1.8.3
+Summary: nicompute-subnet27
+Home-page: https://github.com/neuralinternet/nicompute
 License: MIT
 ```
 
@@ -496,5 +513,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-```
 ```
