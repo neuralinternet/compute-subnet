@@ -36,59 +36,16 @@ jobs:
           done
 
           if [ "$IS_VALID" = false ]; then
-            echo "Invalid branch name: $BRANCH_NAME"
+            echo "❌ ERROR: Branch name '$BRANCH_NAME' is invalid - Must include a JIRA ticket like 'CSN-xxxx' (e.g., CSN-1234, CSN-98765)"
+            echo "👉 Branch name should follow the format: '<prefix>/CSN-XXXX-description'"
             echo "::set-output name=invalid::true"
           else
             echo "Valid branch name"
             echo "::set-output name=invalid::false"
           fi
 
-      - name: Post comment if branch name is invalid
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.ACCESS_TOKEN }}
-          script: |
-            const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
-            const branch_name = "${{ github.head_ref }}";
-            const isInvalid = "${{steps.check_branch_name.outputs.invalid}}";
-            const commentBody = `Please follow the naming conventions for branch names. They should start with one of the following types: "feat", "hotfix", "fix", "chore", "refactor", "test", followed by "/CSN-" and then numbers. Current branch name: "${branch_name}"`;
-            const {data:comments} = await github.rest.issues.listComments({
-              owner,
-              repo,
-              issue_number: issue_number
-            });
-            for (const comment of comments) {
-              if(comment.body.startsWith("Please follow the naming conventions for branch names")) {
-                if(isInvalid === 'false') {
-                  await  github.rest.issues.deleteComment({
-                    owner,
-                    repo,
-                    comment_id: comment.id
-                  })
-                } else {
-                  await github.rest.issues.updateComment({
-                    owner,
-                    repo,
-                    comment_id: comment.id,
-                    body: commentBody
-                  })
-                }
-                return;
-              }
-            }
-            // Post the new comment if the branch name is invalid
-            if (isInvalid === 'true') {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issue_number,
-                body: commentBody
-              })
-            }
-
       - name: Fail the check for invalid branch name
         if: steps.check_branch_name.outputs.invalid == 'true'
         run: |
-          echo "Exiting with failure due to invalid branch name"
+          echo "❌ Exiting with failure due to invalid branch name"
           exit 1
