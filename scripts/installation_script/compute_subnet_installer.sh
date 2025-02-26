@@ -253,42 +253,46 @@ if ! docker_installed || ! nvidia_docker_installed || ! [[ -n "$CURRENT_CUDA" ]]
     info "Bittensor is not installed."
 
     if $AUTOMATED; then
-    info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
+      info "Automated mode: Installing Bittensor (user-level, no virtualenv) from PyPI."
 
-    sudo apt-get update -y || abort "Failed to update apt."
-    sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
+      sudo apt-get update -y || abort "Failed to update apt."
+      sudo apt-get install -y python3 python3-pip git || abort "Failed to install Python or Git."
 
-    python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
+      python3 -m pip install --upgrade pip || abort "Failed to upgrade pip."
 
-    python3 -m pip install --user bittensor-cli || abort "Failed to install Bittensor (user-level)."
+      python3 -m pip install --user bittensor-cli || abort "Failed to install Bittensor (user-level)."
 
-    if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
-      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-      info "Added '$HOME/.local/bin' to PATH in .bashrc"
-    fi
+      if ! grep -qF "$HOME/.local/bin" "$HOME/.bashrc"; then
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+        info "Added '$HOME/.local/bin' to PATH in .bashrc"
+      fi
 
-    if [ -f "$HOME/.bashrc" ]; then
-      source "$HOME/.bashrc"
-      info "Sourced $HOME/.bashrc. PATH is now: $PATH"
-    fi
+      if [ -f "$HOME/.bashrc" ]; then
+        source "$HOME/.bashrc"
+        info "Sourced $HOME/.bashrc. PATH is now: $PATH"
+      fi
 
-    export PATH="$HOME/.local/bin:$PATH"
-    info "Manually exported ~/.local/bin to PATH for the current shell."
+      export PATH="$HOME/.local/bin:$PATH"
+      info "Manually exported ~/.local/bin to PATH for the current shell."
 
-    if ! command -v btcli >/dev/null 2>&1; then
-      echo "WARNING: btcli is still not recognized in this non-interactive shell."
-      echo "It will be recognized once you log in as $USER or start a new interactive session."
+      if ! command -v btcli >/dev/null 2>&1; then
+        echo "WARNING: btcli is still not recognized in this non-interactive shell."
+        echo "It will be recognized once you log in as $USER or start a new interactive session."
+      else
+        info "btcli is recognized in the current environment now."
+      fi
+
+      info "Bittensor installed successfully at user-level (no virtualenv)."
+
     else
-      info "btcli is recognized in the current environment now."
-    fi
-
-    info "Bittensor installed successfully at user-level (no virtualenv)."
-
-  else
       info "Interactive mode: Installing Bittensor using the official script."
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/opentensor/bittensor/master/scripts/install.sh)" \
         || abort "Bittensor installation failed."
       info "Bittensor installed successfully."
+      info "Installing btcli"
+      mkdir -p ~/.btcli/btcli
+      git clone https://github.com/opentensor/btcli.git ~/.btcli/btcli/ 2> /dev/null || (cd ~/.btcli/btcli/ ; git fetch origin master ; git checkout master ; git pull --ff-only ; git reset --hard ; git clean -xdf)
+      python3 -m pip install -e ~/.btcli/btcli
       NEED_REBOOT=1
     fi
 
