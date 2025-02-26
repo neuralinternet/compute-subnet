@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from compute.utils.db import ComputeDb
 from neurons.Validator.database.pog import retrieve_stats, write_stats
 from neurons.Validator.script import get_perf_info
+from compute import __version_as_int__
 
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
@@ -93,7 +94,8 @@ class ComputeWandb:
             update_dict = {
                 "hotkey": self.hotkey,
                 "role": self.role,
-                "config": self.config
+                "config": self.config,
+                "version": __version_as_int__,
             }
             self.run.config.update(update_dict, allow_val_change=True)
             # wandb.log({"dummy_metric": 0})
