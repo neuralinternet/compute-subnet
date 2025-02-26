@@ -3017,7 +3017,7 @@ class RegisterAPI:
                             register_response = True # Handle timeout case appropriately
 
                         deallocated_at = datetime.now(timezone.utc)
-                        if register_response and register_response["status"] is False:
+                        if isinstance(register_response, dict) and "status" in register_response and register_response.get("status") is False:
                             response = await self._notify_allocation_status(
                                 event_time=deallocated_at,
                                 hotkey=hotkey,
