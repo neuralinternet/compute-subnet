@@ -15,6 +15,8 @@ RUN apt update && \
 RUN pip3 install --upgrade pip
 RUN pip3 install wandb pandas uvicorn fastapi bittensor
 
+EXPOSE 8316
+
 # create non root user
 RUN adduser opencompute
 

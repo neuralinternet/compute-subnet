@@ -1,4 +1,5 @@
 # Streamlit main script
+import os
 import streamlit as st
 import pandas as pd
 import requests
@@ -7,9 +8,9 @@ import requests
 st.set_page_config(page_title="Opencompute", layout="wide", page_icon="icon.ico")
 
 # Server details, insert the server IP and port
-SERVER_IP = "opencompute-backend"
+SERVER_IP = os.getenv("BACKEND_URL")
 SERVER_PORT = "8316"
-SERVER_URL = f"http://{SERVER_IP}:{SERVER_PORT}"
+SERVER_URL = f"https://{SERVER_IP}:{SERVER_PORT}"
 
 def get_data_from_server(endpoint):
     response = requests.get(f"{SERVER_URL}/{endpoint}")
