@@ -935,7 +935,7 @@ class Validator:
         :return: Dictionary with miner details if successful, None otherwise.
         """
         try:
-            dendrite = bt.dendrite(wallet=self.wallet)
+            dendrite = self._dendrite
 
             # Define device requirements (customize as needed)
             device_requirement = {"cpu": {"count": 1}, "gpu": {}, "hard_disk": {"capacity": 1073741824}, "ram": {"capacity": 1073741824}, "testing": True}
@@ -1015,7 +1015,7 @@ class Validator:
                 bt.logging.trace(f"{axon.hotkey}: Missing public key: {e}")
 
         try:
-            dendrite = bt.dendrite(wallet=self.wallet)
+            dendrite = self._dendrite
             retry_count = 0
             max_retries = 3
             allocation_status = True
