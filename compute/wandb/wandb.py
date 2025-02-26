@@ -493,10 +493,12 @@ class ComputeWandb:
         """
         # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
+        valid_validator_hotkeys = ["5GmvyePN9aYErXBBhBnxZKGoGk4LKZApE4NkaSzW62CYCYNA"]
         validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                                        filters={"$and": [{"config.role": "validator"},
                                                          {"config.config.netuid": self.config.netuid},
-                                                         {"config.penalized_hotkeys_checklist": {"$exists": True}},]
+                                                         {"config.penalized_hotkeys_checklist": {"$exists": True}},
+                                                         {"config.hotkey": {"$in": valid_validator_hotkeys}},]
                                                 })
 
          # Check if the runs list is empty
