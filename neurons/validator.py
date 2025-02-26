@@ -362,11 +362,11 @@ class Validator:
                     else:
                         score = 0
                         self.stats[uid]["own_score"] = True  # or "no"
-
+                
+                if hotkey in self.penalized_hotkeys:
+                    score = 0
                 self.stats[uid]["score"] = score*100
                 self.stats[uid]["gpu_specs"] = gpu_specs
-                if hotkey in self.penalized_hotkeys:
-                    self.stats[uid]["score"] = 0
                 # Keep or override reliability_score if you want
                 if "reliability_score" not in self.stats[uid]:
                     self.stats[uid]["reliability_score"] = 0
