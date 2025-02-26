@@ -1,0 +1,94 @@
+name: Branch Name Check
+
+on:
+  pull_request:
+    types: [opened, edited]
+    branches: [ "dev" ]
+
+jobs:
+  check-branch-name:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check branch name
+        id: check_branch_name
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          EXEMPT_BRANCH="release"
+          VALID_TYPES=("feat" "hotfix" "fix" "chore" "refactor" "test")
+          IS_VALID=false
+
+          # Check if the branch is exempt
+          if [[ "$BRANCH_NAME" == "$EXEMPT_BRANCH/"* ]]; then
+            echo "Branch is exempt from naming rules."
+            echo "::set-output name=invalid::false"
+            exit 0
+          fi
+
+          # Check if the branch name matches the required pattern
+          for type in "${VALID_TYPES[@]}"; do
+            if [[ "$BRANCH_NAME" =~ ^$type/CSN-[0-9]+- ]]; then
+              IS_VALID=true
+              break
+            fi
+          done
+
+          if [ "$IS_VALID" = false ]; then
+            echo "Invalid branch name: $BRANCH_NAME"
+            echo "::set-output name=invalid::true"
+          else
+            echo "Valid branch name"
+            echo "::set-output name=invalid::false"
+          fi
+
+      - name: Post comment if branch name is invalid
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ACCESS_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const branch_name = "${{ github.head_ref }}";
+            const isInvalid = "${{steps.check_branch_name.outputs.invalid}}";
+            const commentBody = `Please follow the naming conventions for branch names. They should start with one of the following types: "feat", "hotfix", "fix", "chore", "refactor", "test", followed by "/CSN-" and then numbers. Current branch name: "${branch_name}"`;
+            const {data:comments} = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: issue_number
+            });
+            for (const comment of comments) {
+              if(comment.body.startsWith("Please follow the naming conventions for branch names")) {
+                if(isInvalid === 'false') {
+                  await  github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id
+                  })
+                } else {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id,
+                    body: commentBody
+                  })
+                }
+                return;
+              }
+            }
+            // Post the new comment if the branch name is invalid
+            if (isInvalid === 'true') {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue_number,
+                body: commentBody
+              })
+            }
+
+      - name: Fail the check for invalid branch name
+        if: steps.check_branch_name.outputs.invalid == 'true'
+        run: |
+          echo "Exiting with failure due to invalid branch name"
+          exit 1
