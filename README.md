@@ -379,6 +379,17 @@ pm2 monit
 - **`pm2 logs`** shows rolling log output.
 - **`pm2 monit`** provides a live interface with CPU usage, memory, etc.
 
+> Run pm2 logs to debug any issues and view information on your miner. **Specifically find your wandb run to view more live information. In the wandb project you can view the scores you receive from validators.**
+
+![Successful Validator<>Miner PoG](docs/pm2_miner_logs_pog_container.png)
+Successful Validator<>Miner PoG
+![Check Miner Score Wandb 1](docs/wandb_logs_validator_run1.png)
+Check Miner Score Wandb Step 1: Find a Validator run
+![Check Miner Score Wandb 2](docs/wandb_logs_validator_run2.png)
+Check Miner Score Wandb Step 2: Search your miner UID or Hotkey
+![Check Miner Score Wandb 3](docs/wandb_logs_validator_run3.png)
+Check Miner Score Wandb Step 3: Check Stats/Score
+
 ---
 
 **Note**: Validators are required to operate on a local Subtensor instance (subvortex recommended), as using Finney may result in rate limitations.
