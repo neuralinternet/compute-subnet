@@ -42,7 +42,7 @@ class ComputeWandb:
 
         if not wandb_api_key and not netrc_path.exists():
             raise ValueError("Please log in to wandb using `wandb login` or set the WANDB_API_KEY environment variable.")
-        
+
         self.api = wandb.Api()
         self.project = self.api.project(PUBLIC_WANDB_NAME, entity=PUBLIC_WANDB_ENTITY)
         self.project_run_id = f"{self.entity}/{self.project.name}"
@@ -150,7 +150,7 @@ class ComputeWandb:
                 "specs": get_perf_info(encrypted=False),
             }
             self.run.config.update(update_dict, allow_val_change=True)
-            
+
             # Sign the run
             self.sign_run()
 
@@ -266,7 +266,7 @@ class ComputeWandb:
 
         # Sign the run
         self.sign_run()
-        
+
     def update_miner_port_open(self, is_port_open):
         """
         This function updates the port on miner side.
@@ -280,7 +280,7 @@ class ComputeWandb:
 
             # Track is_port_open
             self.run.log({"is_port_open": self.run.config["is_port_open"]})
-            
+
             # Sign the run
             self.sign_run()
 
@@ -318,7 +318,7 @@ class ComputeWandb:
                 allocated_keys = run_config.get('allocated_hotkeys')
 
                 valid_validator_hotkey = hotkey in valid_validator_hotkeys
-                
+
                 # Allow all validator hotkeys for data retrieval only if flag == false
                 if not flag:
                     valid_validator_hotkey = True
@@ -485,7 +485,7 @@ class ComputeWandb:
                 bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
 
         return penalized_keys_list
-    
+
     def get_penalized_hotkeys_checklist_bak(self, valid_validator_hotkeys, flag):
         """
         This function gets all penalized hotkeys checklist from all validators.
@@ -552,21 +552,21 @@ class ComputeWandb:
                 run_config = run.config
                 hotkey = run_config.get('hotkey')
                 specs = run_config.get('specs')
-                
+
                 # check the signature
                 if self.verify_run(run) and specs:
                     # Add the index and (hotkey, specs) tuple to the db_specs_dict if hotkey is valid
                     valid_hotkeys = [axon.hotkey for axon in queryable_uids.values() if axon.hotkey]
                     if hotkey in valid_hotkeys:
                         db_specs_dict[index] = (hotkey, specs)
-                        
+
         except Exception as e:
             # Handle the exception by logging an error message
             bt.logging.error(f"An error occurred while getting specs from wandb: {e}")
-        
+
         # Return the db_specs_dict for further use or inspection
         return db_specs_dict
-    
+
     def sign_run(self):
         # Include the run ID in the data to be signed
         data_to_sign = self.run_id
@@ -621,21 +621,21 @@ class ComputeWandb:
         else:
             return False
 
-    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag): 
+    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
         """ This function gets penalized hotkeys checklist from a specific hardcoded validator. """
         # Hardcoded run ID
         run_id = "neuralinternet/opencompute/0djlnjjs"
         # Fetch the specific run by its ID
         self.api.flush()
-        run = self.api.run(run_id) 
-        if not run: 
-            bt.logging.info(f"No run info found for ID {run_id}.") 
+        run = self.api.run(run_id)
+        if not run:
+            bt.logging.info(f"No run info found for ID {run_id}.")
             return []
         # Access the run's configuration
-        try: 
-            run_config = run.config  
+        try:
+            run_config = run.config
             penalized_hotkeys_checklist = run_config.get('penalized_hotkeys_checklist')
-            return penalized_hotkeys_checklist 
-        except Exception as e: 
-            bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}") 
+            return penalized_hotkeys_checklist
+        except Exception as e:
+            bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
             return []

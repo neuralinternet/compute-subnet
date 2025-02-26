@@ -34,7 +34,7 @@ jobs:
         include:
           - language: python
             build-mode: none
-        # CodeQL supports the following values for 'language': 
+        # CodeQL supports the following values for 'language':
         # 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'swift'
         # Use `c-cpp` to analyze code written in C, C++ or both
         # Use 'java-kotlin' to analyze code written in Java, Kotlin or both
@@ -51,7 +51,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-  
+
       - name: Cache Python dependencies
         uses: actions/cache@v3
         with:

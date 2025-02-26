@@ -192,7 +192,7 @@ def run_container(cpu_usage, ram_usage, hard_disk_usage, gpu_usage, public_key, 
             # Open the file in write mode ('w') and write the data
             with open(file_path, 'w') as file:
                 file.write(allocation_key)
-    
+
             return {"status": True, "info": encrypted_info}
         else:
             bt.logging.info(f"Container falied with status : {container.status}")
@@ -363,98 +363,153 @@ def build_sample_container():
         bt.logging.info(f"Error build sample container {e}")
         return {"status": False}
 
-
-def restart_container():
+def retrieve_allocation_key():
     try:
-        client, containers = get_docker()
-        running_container = None
-        for container in containers:
-            if container_name in container.name:
-                running_container = container
-                break
-        if running_container:
-            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
-            if running_container.status == "running":
-                running_container.exec_run(cmd="kill -15 1")
-                running_container.wait()
-                running_container.restart()
-            return {"status": True}
-        else:
-            bt.logging.info("No running container.")
+        file_path = 'allocation_key'
+         # Open the file in read mode ('r') and read the data
+        with open(file_path, 'r') as file:
+            allocation_key_encoded = file.read()
+
+        # Decode the base64-encoded public key from the file
+        allocation_key = base64.b64decode(allocation_key_encoded).decode('utf-8')
+        return allocation_key
+    except Exception as e:
+        bt.logging.info(f"Error retrieving allocation key.")
+        return None
+
+def restart_container(public_key:str):
+    try:
+        allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
             return {"status": False}
+        # compare public_key to the local saved allocation key for security
+        if allocation_key.strip() == public_key.strip():
+            client, containers = get_docker()
+            ssh_container = None
+            for container in containers:
+                if container_name in container.name:
+                    ssh_container = container
+                    break
+            if ssh_container:
+                # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+                if ssh_container.status == "running":
+                    ssh_container.exec_run(cmd="kill -15 1")
+                    ssh_container.wait()
+                # Restart container
+                ssh_container.restart()
+                # Reload the container to get updated information
+                ssh_container.reload()
+                if ssh_container.status == "running":
+                    return {"status": True}
+                else:
+                    return {"status": False}
+            else:
+                bt.logging.info("No running container.")
+                return {"status": False}
+        else:
+            bt.logging.info(f"Permission denied.")
+            return {"status":False}
     except Exception as e:
         bt.logging.info(f"Error restart container: {e}")
         return {"status": False}
 
-def pause_container():
+def pause_container(public_key:str):
     try:
-        client, containers = get_docker()
-        running_container = None
-        for container in containers:
-            if container_name in container.name:
-                running_container = container
-                break
-        if running_container:
-            running_container.pause()
-            return {"status": True}
-        else:
-            bt.logging.info("Unable to find container")
+        allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
             return {"status": False}
+        # compare public_key to the local saved allocation key for security
+        if allocation_key.strip() == public_key.strip():
+            client, containers = get_docker()
+            running_container = None
+            for container in containers:
+                if container_name in container.name:
+                    running_container = container
+                    break
+            if running_container:
+                running_container.pause()
+                return {"status": True}
+            else:
+                bt.logging.info("Unable to find container")
+                return {"status": False}
+        else:
+            bt.logging.info(f"Permission denied.")
+            return {"status:": False}
     except Exception as e:
         bt.logging.info(f"Error pausing container {e}")
         return {"status": False}
 
-def unpause_container():
+def unpause_container(public_key:str):
     try:
-        client, containers = get_docker()
-        running_container = None
-        for container in containers:
-            if container_name in container.name:
-                running_container = container
-                break
-        if running_container:
-            running_container.unpause()
-            return {"status": True}
+        allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
+        # compare public_key to the local saved allocation key for security
+        if allocation_key.strip() == public_key.strip():
+            client, containers = get_docker()
+            running_container = None
+            for container in containers:
+                if container_name in container.name:
+                    running_container = container
+                    break
+            if running_container:
+                running_container.unpause()
+                return {"status": True}
+            else:
+                bt.logging.info("Unable to find container")
+                return {"status": False}
         else:
-            bt.logging.info("Unable to find container")
+            bt.logging.info(f"Permission denied.")
             return {"status": False}
     except Exception as e:
         bt.logging.info(f"Error unpausing container {e}")
         return {"status": False}
 
-def exchange_key_container(new_ssh_key: str, key_type: str = "user"):
+def exchange_key_container(new_ssh_key: str, public_key: str, key_type: str = "user" ):
     try:
-        client, containers = get_docker()
-        running_container = None
-        for container in containers:
-            if container_name in container.name:
-                running_container = container
-                break
-        if running_container:
-            # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
-            if running_container.status == "running":
-                exist_key = running_container.exec_run(cmd="cat /root/.ssh/authorized_keys")
-                exist_key = exist_key.output.decode("utf-8").split("\n")
-                user_key = exist_key[0]
-                terminal_key = ""
-                if len(exist_key) > 1:
-                    terminal_key = exist_key[1]
-                if key_type == "terminal":
-                    terminal_key = new_ssh_key
-                elif key_type == "user":
-                    user_key = new_ssh_key
-                else:
-                    bt.logging.debug("Invalid key type to swap the SSH key")
-                    return {"status": False}
-                key_list = user_key + "\n" + terminal_key
-                # bt.logging.debug(f"New SSH key: {key_list}")
-                running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
-                running_container.exec_run(cmd="kill -15 1")
-                running_container.wait()
-                running_container.restart()
-            return {"status": True}
+        allocation_key = retrieve_allocation_key()
+        if allocation_key is None:
+            bt.logging.info("Failed to retrieve allocation key.")
+            return {"status": False}
+        # compare public_key to the local saved allocation key for security
+        if allocation_key.strip() == public_key.strip():
+            client, containers = get_docker()
+            running_container = None
+            for container in containers:
+                if container_name in container.name:
+                    running_container = container
+                    break
+            if running_container:
+                # stop and remove the container by using the SIGTERM signal to PID 1 (init) process in the container
+                if running_container.status == "running":
+                    exist_key = running_container.exec_run(cmd="cat /root/.ssh/authorized_keys")
+                    exist_key = exist_key.output.decode("utf-8").split("\n")
+                    user_key = exist_key[0]
+                    terminal_key = ""
+                    if len(exist_key) > 1:
+                        terminal_key = exist_key[1]
+                    if key_type == "terminal":
+                        terminal_key = new_ssh_key
+                    elif key_type == "user":
+                        user_key = new_ssh_key
+                    else:
+                        bt.logging.debug("Invalid key type to swap the SSH key")
+                        return {"status": False}
+                    key_list = user_key + "\n" + terminal_key
+                    # bt.logging.debug(f"New SSH key: {key_list}")
+                    running_container.exec_run(cmd=f"bash -c \"echo '{key_list}' > /root/.ssh/authorized_keys & sync & sleep 1\"")
+                    running_container.exec_run(cmd="kill -15 1")
+                    running_container.wait()
+                    running_container.restart()
+                return {"status": True}
+            else:
+                bt.logging.info("Unable to find container")
+                return {"status": False}
         else:
-            bt.logging.info("Unable to find container")
+            bt.logging.info(f"Permission denied.")
             return {"status": False}
     except Exception as e:
         bt.logging.info(f"Error changing SSH key on container {e}")

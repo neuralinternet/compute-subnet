@@ -189,7 +189,7 @@ def main():
     while True:
         miner_checker.sync_checklist()
         bt.logging.info("Sleeping before next loop...")
-        time.sleep(900) # Sleep for 10 minutes before re-checking miners
+        time.sleep(900) # Sleep for 15 minutes before re-checking miners
 
 if __name__ == "__main__":
     main()
