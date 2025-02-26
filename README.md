@@ -189,8 +189,8 @@ See Bittensor’s documentation for alternative installation instructions.
 ### Clone and Install Compute Subnet
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/neuralinternet/compute-subnet.git
-   cd compute-subnet
+   git clone https://github.com/neuralinternet/nicompute.git
+   cd nicompute
    ```
 2. **Install dependencies**:
    ```bash
@@ -475,10 +475,10 @@ pip show compute-subnet
 Example output:
 
 ```
-Name: Compute-Subnet
-Version: 1.8.2
-Summary: Compute-Subnet
-Home-page: https://github.com/neuralinternet/Compute-Subnet
+Name: nicompute
+Version: 1.8.3
+Summary: nicompute-subnet27
+Home-page: https://github.com/neuralinternet/nicompute
 License: MIT
 ```
 
@@ -514,5 +514,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-```
 ```
