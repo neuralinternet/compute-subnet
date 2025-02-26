@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from compute.utils.db import ComputeDb
 from neurons.Validator.database.pog import retrieve_stats, write_stats
 from neurons.Validator.script import get_perf_info
+from compute import __version_as_int__
 
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
@@ -93,7 +94,8 @@ class ComputeWandb:
             update_dict = {
                 "hotkey": self.hotkey,
                 "role": self.role,
-                "config": self.config
+                "config": self.config,
+                "version": __version_as_int__,
             }
             self.run.config.update(update_dict, allow_val_change=True)
             # wandb.log({"dummy_metric": 0})
@@ -491,10 +493,12 @@ class ComputeWandb:
         """
         # Query all runs in the project and Filter runs where the role is 'validator'
         self.api.flush()
+        valid_validator_hotkeys = ["5GmvyePN9aYErXBBhBnxZKGoGk4LKZApE4NkaSzW62CYCYNA"]
         validator_runs = self.api.runs(path=f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
                                        filters={"$and": [{"config.role": "validator"},
                                                          {"config.config.netuid": self.config.netuid},
-                                                         {"config.penalized_hotkeys_checklist": {"$exists": True}},]
+                                                         {"config.penalized_hotkeys_checklist": {"$exists": True}},
+                                                         {"config.hotkey": {"$in": valid_validator_hotkeys}},]
                                                 })
 
          # Check if the runs list is empty
