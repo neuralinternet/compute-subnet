@@ -1,4 +1,4 @@
-# Bittensor & Compute-Subnet Setup Guide (Two-Pass Installer)
+# Bittensor & NI Compute Setup Guide (Two-Pass Installer)
 
 This guide explains how to install all necessary components (Docker, CUDA, NVIDIA Docker, Bittensor) and then set up the Compute-Subnet miner. You will run the unified installer script in two passes:
 
