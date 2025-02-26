@@ -354,6 +354,7 @@ pm2 start ./neurons/miner.py --name <MINER_NAME> --interpreter python3 -- \
 - **`--wallet.name`** & **`--wallet.hotkey`**: The coldkey/hotkey names you created [above](#create-or-regenerate-keys) and used in registration (btcli's defaults are `default` and `default` but both can be freely customized)
 - **`--axon.port`**: default 8091 can be replaced with any port number allowed by ufw as instructed [above](#networking-and-firewall) to serve your axon. Important for proper functionality and miner<->validator communication.
 - **`--ssh.port`**: A port opened with UFW as instructed [above](#networking-and-firewall) (e.g., 4444) used for allocating your miner via ssh.
+- **`--auto-update`**: Enables automatic updating of the miner. When enabled, the miner will internally perform the update process (e.g., running `git pull`, installing dependencies, and restarting via PM2) so that no manual action is required.
 
 
 ### Miner Options
@@ -394,6 +395,7 @@ pm2 start ./neurons/validator.py --name <VALIDATOR_NAME> --interpreter python3 -
 - `--validator.specs.batch.size`: Batch size for specs queries (default: 64).
 - `--validator.force.update.prometheus`: Force upgrade of Prometheus if needed (default: False).
 - `--validator.whitelist.updated.threshold`: Quorum threshold (%) before starting the whitelist (default: 60).
+- `--auto-update`: Enables automatic updating of the validator. When enabled, the validator will internally perform the update process (e.g., running `git pull`, installing dependencies, and restarting via PM2) so that no manual action is required.
 
 ---
 
@@ -442,6 +444,24 @@ git pull
 python -m pip install -r requirements.txt
 python -m pip install -e .
 pm2 restart <id>
+```
+
+## Verify Installation
+
+You can verify the installation and check the version by running:
+
+```sh
+pip show compute-subnet
+```
+
+Example output:
+
+```
+Name: Compute-Subnet
+Version: 1.8.2
+Summary: Compute-Subnet
+Home-page: https://github.com/neuralinternet/Compute-Subnet
+License: MIT
 ```
 
 ---
