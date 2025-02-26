@@ -24,7 +24,7 @@ import time
 import uuid
 from inspect import Signature
 from typing import TYPE_CHECKING, Callable, Optional
-
+from retry import retry
 # Third-party
 import uvicorn
 from fastapi import FastAPI, APIRouter
@@ -46,7 +46,7 @@ from bittensor.core.types import AxonServeCallParams
 # Local
 from compute import __version_as_int__
 from compute.utils.version import get_local_version
-
+from compute.prometheus import prometheus_extrinsic
 if TYPE_CHECKING:
     from bittensor.core.axon import Axon
     from bittensor.core.subtensor import Subtensor
@@ -163,7 +163,124 @@ class ComputeSubnetSubtensor(subtensor):
             _mock=_mock,
             log_verbose=log_verbose,
         )
+    def serve_prometheus(
+        self,
+        wallet: "Wallet",
+        port: int,
+        netuid: int,
+        wait_for_inclusion: bool = False,
+        wait_for_finalization: bool = True,
+    ) -> bool:
+        """
+        Serves Prometheus metrics by submitting an extrinsic to a blockchain network via the specified wallet.
+        Waits optionally for transaction inclusion and finalization.
 
+        Args:
+            wallet (bittensor_wallet.Wallet): Bittensor wallet instance for extrinsic submission.
+            port (int): Port for serving Prometheus metrics.
+            netuid (int): Unique identifier of the subnetwork.
+            wait_for_inclusion (bool): Wait for the transaction to be included in a block. Defaults to False.
+            wait_for_finalization (bool): Wait for the transaction to be finalized. Defaults to True.
+
+        Returns:
+            bool: True if the Prometheus extrinsic is successfully processed, False otherwise.
+        """
+        try:
+            result = prometheus_extrinsic(
+                self,
+                wallet=wallet,
+                port=port,
+                netuid=netuid,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+            )
+            logging.debug(f"Prometheus extrinsic processed with result: {result}")
+            return result
+        except Exception as e:
+            logging.error(f"Error serving Prometheus extrinsic: {e}", exc_info=True)
+            return False
+
+    def do_serve_prometheus(
+        self: "Subtensor",
+        wallet: "Wallet",
+        call_params: "PrometheusServeCallParams",
+        wait_for_inclusion: bool = False,
+        wait_for_finalization: bool = True,
+    ) -> tuple[bool, Optional[dict]]:
+        """
+        Sends a serve prometheus extrinsic to the chain.
+
+        Args:
+            self (bittensor.core.subtensor.Subtensor): Bittensor subtensor object.
+            wallet (bittensor_wallet.Wallet): Wallet object.
+            call_params (bittensor.core.types.PrometheusServeCallParams): Prometheus serve call parameters.
+            wait_for_inclusion (bool): If True, waits for inclusion.
+            wait_for_finalization (bool): If True, waits for finalization.
+
+        Returns:
+            tuple[bool, Optional[dict]]:
+                success (bool): True if serve prometheus was successful.
+                error (Optional[dict]): Error message or details if serve prometheus failed, None otherwise.
+        """
+
+        def submit_extrinsic(
+            substrate: "SubstrateInterface",
+            extrinsic: "GenericExtrinsic",
+            wait_for_inclusion: bool,
+            wait_for_finalization: bool,
+        ):
+            """
+            Submits an extrinsic to the substrate blockchain while handling exceptions.
+
+            Args:
+                substrate (substrateinterface.SubstrateInterface): The substrate interface instance.
+                extrinsic (scalecodec.types.GenericExtrinsic): The extrinsic to be submitted.
+                wait_for_inclusion (bool): Whether to wait for inclusion.
+                wait_for_finalization (bool): Whether to wait for finalization.
+
+            Returns:
+                The response from the substrate.
+            """
+            try:
+                response = substrate.submit_extrinsic(
+                    extrinsic,
+                    wait_for_inclusion=wait_for_inclusion,
+                    wait_for_finalization=wait_for_finalization,
+                )
+                return response
+            except SubstrateRequestException as e:
+                logging.error(f"Error submitting extrinsic: {format_error_message(e.args[0], substrate=substrate)}", exc_info=True)
+                raise
+            except Exception as e:
+                logging.error(f"Unexpected error while submitting extrinsic: {e}", exc_info=True)
+                raise
+
+        @retry(delay=1, tries=3, backoff=2, max_delay=4)
+        def make_substrate_call_with_retry() -> tuple[bool, Optional[dict]]:
+            call = self.substrate.compose_call(
+                call_module="SubtensorModule",
+                call_function="serve_prometheus",
+                call_params=call_params,
+            )
+            extrinsic = self.substrate.create_signed_extrinsic(
+                call=call, keypair=wallet.hotkey
+            )
+            response = submit_extrinsic(
+                substrate=self.substrate,
+                extrinsic=extrinsic,
+                wait_for_inclusion=wait_for_inclusion,
+                wait_for_finalization=wait_for_finalization,
+            )
+            if wait_for_inclusion or wait_for_finalization:
+                response.process_events()
+                if response.is_success:
+                    return True, None
+                else:
+                    logging.error(f"Extrinsic failed with error: {response.error_message}")
+                    return False, response.error_message
+            return True, None
+
+        return make_substrate_call_with_retry()
 
 class ComputeSubnetAxon(axon):
     def __init__(
