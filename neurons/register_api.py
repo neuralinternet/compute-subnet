@@ -1862,7 +1862,8 @@ class RegisterAPI:
             allocated_hotkeys = await run_in_threadpool(self.wandb.get_allocated_hotkeys, VALID_VALIDATOR_HOTKEYS, True)
             # print(f"Allocated hotkeys: {allocated_hotkeys}")
             bt.logging.info(f"API: Number of allocated hotkeys: {len(allocated_hotkeys)}")
-
+            # get get_penalized_hotkeys_checklist 
+            penalized_hotkeys = self.wandb.get_penalized_hotkeys_checklist_bak([],True) # get_penalized_hotkeys_checklist_bak will have NI validator hotkey hardcoded
             db = ComputeDb()
 
             if specs_details:
@@ -1872,7 +1873,7 @@ class RegisterAPI:
                     miner_older_than = self.miner_is_older_than(db, 48, hotkey)
                     miner_pog_ok = self.miner_pog_ok(db, 2.5, hotkey)
 
-                    if hotkey in running_hotkey and miner_pog_ok:
+                    if hotkey in running_hotkey and miner_pog_ok and hotkey not in penalized_hotkeys:
                         if details:  # Check if details are not empty
                             resource = Resource()
                             try:
