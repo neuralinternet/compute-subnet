@@ -1,0 +1,3 @@
+# terraform.auto.tfvars.example
+
+wandb_key = ""

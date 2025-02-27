@@ -259,3 +259,9 @@ wandb/
 
 # neural internet register api
 neurons/register-api/
+
+.terraform
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+terraform.auto.tfvars
