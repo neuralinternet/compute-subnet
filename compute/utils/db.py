@@ -81,7 +81,7 @@ class ComputeDb:
                     failed_14d INTEGER,
                     aborted INTEGER,
                     rental_best INTEGER,
-                    blackllisted BOOLEAN
+                    blacklisted BOOLEAN
                 )
             """
             )
