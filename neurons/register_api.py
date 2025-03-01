@@ -188,10 +188,10 @@ class Resource(BaseModel):
     hotkey: str = ""
     cpu_count: int = 1
     gpu_name: str = ""
-    gpu_capacity: str = ""
+    gpu_capacity: Union[str, float] = ""
     gpu_count: int = 1
-    ram: str = "0"
-    hard_disk: str = "0"
+    ram: Union[str, float] = "0"
+    hard_disk: Union[str, float] = "0"
     allocate_status: str = ""  # "Avail." or "Res."
 
 
@@ -457,7 +457,7 @@ class RegisterAPI:
                 private_key, public_key = rsa.generate_key_pair()
                 run_start = time.time()
                 result = await self._allocate_container( device_requirement,
-                                                 timeline, public_key, docker_requirement.dict())
+                                                 timeline, public_key, docker_requirement.model_dump())
 
                 if result["status"] is False:
                     bt.logging.info(f"API: Allocation Failed : {result['msg']}")
@@ -611,7 +611,7 @@ class RegisterAPI:
 
                 run_start = time.time()
 
-                result = await self._allocate_container_hotkey(requirements, hotkey,requirements.timeline, public_key, docker_requirement.dict())
+                result = await self._allocate_container_hotkey(requirements, hotkey,requirements.timeline, public_key, docker_requirement.model_dump())
 
                 if result["status"] is False:
                     bt.logging.error(f"API: Allocation {hotkey} Failed : {result['msg']}")
