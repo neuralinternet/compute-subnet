@@ -1620,7 +1620,7 @@ class RegisterAPI:
                             "next_page_number": None,
                         }
 
-                    bt.logging.info(f"API: List resources successfully")
+                    bt.logging.info("API: List resources successfully")
                     return JSONResponse(
                         status_code=status.HTTP_200_OK,
                         content={
@@ -1631,7 +1631,7 @@ class RegisterAPI:
                     )
 
             else:
-                bt.logging.info(f"API: There is no resource available")
+                bt.logging.info("API: There is no resource available")
                 return JSONResponse(
                     status_code=status.HTTP_404_NOT_FOUND,
                     content={
@@ -1645,31 +1645,16 @@ class RegisterAPI:
             """
             Get the running miners from wandb
             """
-
-            filter_rule = {
-                "$and": [
-                    {"config.config.netuid": self.config.netuid},
-                    {"config.role": "miner"},
-                    {"state": "running"},
-                ]
-            }
             try:
                 specs_details = {}
-                running_hotkey = []
-                runs =  await run_in_threadpool(
-                    self.wandb.api.runs,
-                    f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
-                    filter_rule,
-                )
-                penalized_hotkeys = await run_in_threadpool(
-                    self.wandb.get_penalized_hotkeys_checklist, [], False
-                )
+                running_hotkeys = []
+                runs_configs = await self.wandb.get_running_miners(self.config.netuid)
+                penalized_hotkeys = await self.wandb.get_penalized_hotkeys_checklist()
 
                 bt.logging.info(penalized_hotkeys)
 
 
-                for run in runs:
-                    run_config = run.config
+                for run_config in runs_configs:
                     run_hotkey = run_config.get("hotkey")
                     specs = run_config.get("specs")
                     configs = run_config.get("config")
@@ -1687,12 +1672,9 @@ class RegisterAPI:
                         and is_active
                     ):
                         #bt.logging.info(f"DEBUG - This hotkey is OK - {run_hotkey}")
-                        running_hotkey.append(run_hotkey)
-                        if specs:
-                            specs_details[run_hotkey] = specs
-                        else:
-                            specs_details[run_hotkey] = {}
-                return specs_details , running_hotkey
+                        running_hotkeys.append(run_hotkey)
+                        specs_details[run_hotkey] = specs or {}
+                return specs_details , running_hotkeys
             except Exception as e:
                 bt.logging.error(
                     f"API: An error occurred while retrieving runs from wandb: {e}"
@@ -1723,7 +1705,7 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus(wandb) on compute subnet")
+            bt.logging.info("API: Count Gpus(wandb) on compute subnet")
             GPU_COUNTS = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
@@ -1734,7 +1716,7 @@ class RegisterAPI:
                             gpu_miner = details.get("gpu", "")
                             gpu_count = gpu_miner.get("count", 0)
                             GPU_COUNTS += gpu_count
-                    bt.logging.info(f"API: List resources successfully")
+                    bt.logging.info("API: List resources successfully")
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
@@ -1775,7 +1757,7 @@ class RegisterAPI:
             """
             Count all GPUs on the compute subnet
             """
-            bt.logging.info(f"API: Count Gpus by model(wandb) on compute subnet")
+            bt.logging.info("API: Count Gpus by model(wandb) on compute subnet")
             counter = 0
             specs_details , running_hotkey = await get_wandb_running_miners()
             try:
@@ -1804,7 +1786,7 @@ class RegisterAPI:
                                     flag += 1
                             if flag:
                                 counter+=1
-                    bt.logging.info(f"API: List resources successfully")
+                    bt.logging.info("API: List resources successfully")
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
                     content={
@@ -1852,7 +1834,7 @@ class RegisterAPI:
             query: The query parameter to filter the resources. <br>
             """
 
-            bt.logging.info(f"API: List resources(wandb) on compute subnet")
+            bt.logging.info("API: List resources(wandb) on compute subnet")
             self.wandb.api.flush()
 
             specs_details,running_hotkey = await get_wandb_running_miners()

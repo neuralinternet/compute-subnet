@@ -1,9 +1,10 @@
 import bittensor as bt
+from fastapi.concurrency import run_in_threadpool
 import wandb
 import pathlib
 import os
 import hashlib
-import json
+from async_lru import alru_cache
 from collections import Counter
 
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from compute import __version_as_int__
 
 PUBLIC_WANDB_NAME = "opencompute"
 PUBLIC_WANDB_ENTITY = "neuralinternet"
+LRU_CACHE_TTL = 2 # cache selected wandb request results up to 2 seconds
 
 
 class ComputeWandb:
@@ -621,13 +623,19 @@ class ComputeWandb:
         else:
             return False
 
-    def get_penalized_hotkeys_checklist(self, valid_validator_hotkeys, flag):
+    # cache result
+    @alru_cache(ttl=LRU_CACHE_TTL)
+    async def get_penalized_hotkeys_checklist(self):
         """ This function gets penalized hotkeys checklist from a specific hardcoded validator. """
         # Hardcoded run ID
         run_id = "neuralinternet/opencompute/0djlnjjs"
         # Fetch the specific run by its ID
         self.api.flush()
-        run = self.api.run(run_id)
+
+        run = await run_in_threadpool(
+            self.api.run,
+            run_id
+        )
         if not run:
             bt.logging.info(f"No run info found for ID {run_id}.")
             return []
@@ -638,4 +646,27 @@ class ComputeWandb:
             return penalized_hotkeys_checklist
         except Exception as e:
             bt.logging.info(f"Run ID: {run.id}, Name: {run.name}, Error: {e}")
+            return []
+
+    # cache result, up to 16 calls
+    @alru_cache(ttl=LRU_CACHE_TTL, maxsize=16)
+    async def get_running_miners(self, netuid):
+        """ This function gets penalized hotkeys checklist from a specific hardcoded validator. """
+        filter_rule = {
+            "$and": [
+                {"config.config.netuid": netuid},
+                {"config.role": "miner"},
+                {"state": "running"},
+            ]
+        }
+
+        try:
+            runs = await run_in_threadpool(
+                self.api.runs,
+                f"{PUBLIC_WANDB_ENTITY}/{PUBLIC_WANDB_NAME}",
+                    filter_rule,
+            )
+            return [run.config for run in runs]
+        except Exception as e:
+            bt.logging.warning(f"Failed to get running miners NetUID: {netuid}, Error: {e}")
             return []
