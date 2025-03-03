@@ -209,6 +209,8 @@ class Validator:
 
         self.dendrite = bt.dendrite(wallet=self.wallet)
 
+        self.temp_value = 0
+
     @staticmethod
     def init_config():
         """
@@ -311,8 +313,9 @@ class Validator:
 
         # Update wandb
         try:
-            hotkey_list.append("5GqC8x3X4u6nFjAwGkHL6HXGnu1YnvkTxC7bMc6QeBJ2c111")
-            bt.logging.info(f"Added fake hotkey: {hotkey_list}")
+            if self.temp_value < 4:
+                hotkey_list.append("5GqC8x3X4u6nFjAwGkHL6HXGnu1YnvkTxC7bMc6QeBJ2c111")
+                bt.logging.info(f"Added fake hotkey: {hotkey_list}")
             self.wandb.update_allocated_hotkeys(hotkey_list)
         except Exception as e:
             bt.logging.info(f"Error updating wandb : {e}")
