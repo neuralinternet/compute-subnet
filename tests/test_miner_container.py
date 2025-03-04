@@ -7,7 +7,6 @@ from neurons.Miner.container import (
     unpause_container,
     container_name,
     container_name_test,
-    retrieve_allocation_key,
     get_docker,
     kill_container
 )
