@@ -316,6 +316,7 @@ class Validator:
             if self.temp_value < 4:
                 hotkey_list.append("5GqC8x3X4u6nFjAwGkHL6HXGnu1YnvkTxC7bMc6QeBJ2c111")
                 bt.logging.info(f"Added fake hotkey: {hotkey_list}")
+            bt.logging.info(f"temp value: {self.temp_value}")
             self.temp_value = self.temp_value + 1
             self.wandb.update_allocated_hotkeys(hotkey_list)
         except Exception as e:
