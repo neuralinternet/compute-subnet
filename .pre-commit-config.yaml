@@ -33,3 +33,12 @@ repos:
         language: system
         always_run: true
         verbose: true
+  - repo: local
+    hooks:
+      - id: run-pytest
+        name: 'Run Pytest'
+        entry: pytest
+        language: system
+        stages: [pre-commit]
+        verbose: true
+        pass_filenames: false
