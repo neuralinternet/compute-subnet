@@ -320,7 +320,7 @@ class Validator:
         for neuron in neurons:
             if neuron.hotkey == hotkey:
                 return neuron
-            return None
+        return None
         
     def sync_scores(self):
         # Fetch scoring stats
