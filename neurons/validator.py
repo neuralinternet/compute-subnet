@@ -299,7 +299,11 @@ class Validator:
             rows = cursor.fetchall()
             for row in rows:
                 id, hotkey, details = row
-                hotkey_list.append(hotkey)
+                neuron_data = self.find_neuron_by_hotkey(hotkey)
+                if neuron_data:
+                    hotkey_list.append(hotkey)
+                else :
+                    bt.logging.info(f"{hotkey} is not exist in metagraph")
         except Exception as e:
             bt.logging.info(f"An error occurred while retrieving allocation details: {e}")
         finally:
@@ -311,6 +315,13 @@ class Validator:
         except Exception as e:
             bt.logging.info(f"Error updating wandb : {e}")
 
+    def find_neuron_by_hotkey(self, hotkey):
+        neurons = self._metagraph.neurons
+        for neuron in neurons:
+            if neuron.hotkey == hotkey:
+                return neuron
+        return None
+        
     def sync_scores(self):
         # Fetch scoring stats
         self.stats = retrieve_stats(self.db)
@@ -324,7 +335,6 @@ class Validator:
         self.stats_allocated = self.wandb.get_stats_allocated(valid_validator_hotkeys, True)
         self.penalized_hotkeys = self.wandb.get_penalized_hotkeys_checklist_bak(valid_validator_hotkeys, True)
         self._queryable_uids = self.get_queryable()
-
         # Calculate score
         for uid in self.uids:
             try:
