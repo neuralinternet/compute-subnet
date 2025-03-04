@@ -90,7 +90,7 @@ class Validator:
 
     loop: AbstractEventLoop
 
-    temp_value : int
+    temp_value : int = 0
 
     @property
     def wallet(self) -> bt.wallet:
@@ -210,8 +210,6 @@ class Validator:
         self.threads: List[threading.Thread] = []
 
         self.dendrite = bt.dendrite(wallet=self.wallet)
-
-        self.temp_value = 0
 
     @staticmethod
     def init_config():
