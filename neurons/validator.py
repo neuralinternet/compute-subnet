@@ -90,6 +90,8 @@ class Validator:
 
     loop: AbstractEventLoop
 
+    temp_value : int
+
     @property
     def wallet(self) -> bt.wallet:
         return self._wallet
