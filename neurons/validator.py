@@ -90,8 +90,6 @@ class Validator:
 
     loop: AbstractEventLoop
 
-    temp_value : int = 0
-
     @property
     def wallet(self) -> bt.wallet:
         return self._wallet
@@ -313,11 +311,6 @@ class Validator:
 
         # Update wandb
         try:
-            if self.temp_value < 3:
-                hotkey_list.append("5GqC8x3X4u6nFjAwGkHL6HXGnu1YnvkTxC7bMc6QeBJ2c111")
-                bt.logging.info(f"Added fake hotkey: {hotkey_list}")
-            bt.logging.info(f"temp value: {self.temp_value}, hotkey list {hotkey_list}")
-            self.temp_value = self.temp_value + 1
             self.wandb.update_allocated_hotkeys(hotkey_list)
         except Exception as e:
             bt.logging.info(f"Error updating wandb : {e}")
